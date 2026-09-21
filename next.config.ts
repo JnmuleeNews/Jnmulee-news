@@ -1,1 +1,5 @@
-aW1wb3J0IHR5cGUgeyBOZXh0Q29uZmlnIH0gZnJvbSAibmV4dCI7IGNvbnN0IG5leHRDb25maWc6IE5leHRDb25maWcgPSB7IHJlYWN0U3RyaWN0TW9kZTogdHJ1ZSB9OyBleHBvcnQgZGVmYXVsdCBuZXh0Q29uZmlnOw==
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {};
+
+export default nextConfig;
