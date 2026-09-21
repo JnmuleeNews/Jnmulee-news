@@ -55,6 +55,7 @@ export async function GET() {
       }
 
       const xml = await response.text();
+
       const items = [...xml.matchAll(/<item[\s\S]*?<\/item>/gi)];
 
       for (const match of items.slice(0, 10)) {
@@ -90,7 +91,7 @@ export async function GET() {
         const { data: existing, error: duplicateError } =
           await supabase
             .from("news")
-            .select("id")
+            .select("source_url")
             .eq("source_url", link)
             .maybeSingle();
 
