@@ -1,1 +1,40 @@
-dHlwZSBQcm9wcz17cGFyYW1zOlByb21pc2U8e3NsdWc6c3RyaW5nfT59OyBleHBvcnQgZGVmYXVsdCBhc3luYyBmdW5jdGlvbiBBcnRpY2xlKHtwYXJhbXN9OlByb3BzKXtjb25zdCB7c2x1Z309YXdhaXQgcGFyYW1zO3JldHVybiA8bWFpbj48aGVhZGVyIGNsYXNzTmFtZT0iaGVhZGVyIj48ZGl2IGNsYXNzTmFtZT0iY29udGFpbmVyIG5hdiI+PGEgY2xhc3NOYW1lPSJicmFuZCIgaHJlZj0iLyI+Sk5NdWxlZSA8c3Bhbj5OZXdzPC9zcGFuPjwvYT48YSBocmVmPSIvIj7ihpAgSG9tZTwvYT48L2Rpdj48L2hlYWRlcj48YXJ0aWNsZSBjbGFzc05hbWU9ImNvbnRhaW5lciBhcnRpY2xlIj48cCBjbGFzc05hbWU9ImNhdGVnb3J5Ij5KTk11bGVlIE5ld3M8L3A+PGgxPlN0b3J5IHtzbHVnfTwvaDE+PHAgY2xhc3NOYW1lPSJtZXRhIj5QdWJsaXNoZWQgYnkgSk5NdWxlZSBOZXdzPC9wPjxkaXYgY2xhc3NOYW1lPSJhcnRpY2xlQm9keSI+PHA+VGhpcyBhcnRpY2xlIHBhZ2UgaXMgcmVhZHkgdG8gY29ubmVjdCB0byB0aGUgU3VwYWJhc2UgbmV3cyBkYXRhYmFzZS48L3A+PHA+VGhlIHByb2R1Y3Rpb24gdmVyc2lvbiBjYW4gZGlzcGxheSB0aGUgaGVhZGxpbmUsIHN1bW1hcnksIHNvdXJjZSBhdHRyaWJ1dGlvbiBhbmQgZnVsbCBvcmlnaW5hbCBKTk11bGVlIE5ld3Mgc3VtbWFyeSBoZXJlLjwvcD48L2Rpdj48L2FydGljbGU+PC9tYWluPn0=
+type Props = {
+  params: Promise<{ slug: string }>;
+};
+
+export default async function Article({ params }: Props) {
+  const { slug } = await params;
+
+  return (
+    <main>
+      <header className="header">
+        <div className="container nav">
+          <a className="brand" href="/">
+            JNMulee <span>News</span>
+          </a>
+          <a href="/">⌂ Home</a>
+        </div>
+      </header>
+
+      <article className="container article">
+        <p className="category">JNMulee News</p>
+
+        <h1>Story {slug}</h1>
+
+        <p className="meta">Published by JNMulee News</p>
+
+        <div className="articleBody">
+          <p>
+            This article page is ready to connect to the Supabase news
+            database.
+          </p>
+
+          <p>
+            The production version can display the headline, summary,
+            source attribution, and full original JNMulee News summary here.
+          </p>
+        </div>
+      </article>
+    </main>
+  );
+}
