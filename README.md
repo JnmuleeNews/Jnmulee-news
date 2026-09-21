@@ -1,1 +1,12 @@
-IyBKTk11bGVlIE5ld3MKCkNsZWFuIE5leHQuanMgc3RhcnRlci4gS2VlcCB0aGUgZm9sZGVycyBleGFjdGx5IGFzIHByb3ZpZGVkLgoKUnVuOiBgbnBtIGluc3RhbGxgIHRoZW4gYG5wbSBydW4gZGV2YC4KCkRlcGxveSBieSBwdXNoaW5nIHRoaXMgcmVwb3NpdG9yeSB0byBHaXRIdWIgYW5kIGltcG9ydGluZyBpdCBpbnRvIFZlcmNlbC4=
+# JNMulee News
+
+JNMulee News website built with Next.js.
+
+## Run locally
+
+npm install
+npm run dev
+
+## Deploy
+
+This project can be deployed with Vercel.
