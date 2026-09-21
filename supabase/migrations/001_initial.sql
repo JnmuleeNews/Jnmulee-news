@@ -1,1 +1,41 @@
-Y3JlYXRlIHRhYmxlIGlmIG5vdCBleGlzdHMgcHVibGljLmFydGljbGVzKGlkIHV1aWQgcHJpbWFyeSBrZXkgZGVmYXVsdCBnZW5fcmFuZG9tX3V1aWQoKSx0aXRsZSB0ZXh0IG5vdCBudWxsLHNsdWcgdGV4dCB1bmlxdWUgbm90IG51bGwsc3VtbWFyeSB0ZXh0LGNvbnRlbnQgdGV4dCxjYXRlZ29yeSB0ZXh0IG5vdCBudWxsIGRlZmF1bHQgJ0dlbmVyYWwnLHNvdXJjZV9uYW1lIHRleHQsc291cmNlX3VybCB0ZXh0LHB1Ymxpc2hlZF9hdCB0aW1lc3RhbXB0eiBkZWZhdWx0IG5vdygpLGNyZWF0ZWRfYXQgdGltZXN0YW1wdHogZGVmYXVsdCBub3coKSk7IGNyZWF0ZSB0YWJsZSBpZiBub3QgZXhpc3RzIHB1YmxpYy5zb3VyY2VzKGlkIHV1aWQgcHJpbWFyeSBrZXkgZGVmYXVsdCBnZW5fcmFuZG9tX3V1aWQoKSxuYW1lIHRleHQgbm90IG51bGwsZmVlZF91cmwgdGV4dCBub3QgbnVsbCB1bmlxdWUsY2F0ZWdvcnkgdGV4dCBkZWZhdWx0ICdHZW5lcmFsJyxhY3RpdmUgYm9vbGVhbiBkZWZhdWx0IHRydWUsY3JlYXRlZF9hdCB0aW1lc3RhbXB0eiBkZWZhdWx0IG5vdygpKTsgYWx0ZXIgdGFibGUgcHVibGljLmFydGljbGVzIGVuYWJsZSByb3cgbGV2ZWwgc2VjdXJpdHk7IGFsdGVyIHRhYmxlIHB1YmxpYy5zb3VyY2VzIGVuYWJsZSByb3cgbGV2ZWwgc2VjdXJpdHk7IGNyZWF0ZSBwb2xpY3kgInB1YmxpYyBjYW4gcmVhZCBhcnRpY2xlcyIgb24gcHVibGljLmFydGljbGVzIGZvciBzZWxlY3QgdXNpbmcodHJ1ZSk7IGNyZWF0ZSBwb2xpY3kgImF1dGhlbnRpY2F0ZWQgbWFuYWdlIGFydGljbGVzIiBvbiBwdWJsaWMuYXJ0aWNsZXMgZm9yIGFsbCB1c2luZyhhdXRoLnJvbGUoKT0nYXV0aGVudGljYXRlZCcpIHdpdGggY2hlY2soYXV0aC5yb2xlKCk9J2F1dGhlbnRpY2F0ZWQnKTsgY3JlYXRlIHBvbGljeSAiYXV0aGVudGljYXRlZCBtYW5hZ2Ugc291cmNlcyIgb24gcHVibGljLnNvdXJjZXMgZm9yIGFsbCB1c2luZyhhdXRoLnJvbGUoKT0nYXV0aGVudGljYXRlZCcpIHdpdGggY2hlY2soYXV0aC5yb2xlKCk9J2F1dGhlbnRpY2F0ZWQnKTs=
+create table if not exists public.articles (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  slug text unique not null,
+  summary text,
+  content text,
+  category text not null default 'General',
+  source_name text,
+  source_url text,
+  published_at timestamptz default now(),
+  created_at timestamptz default now()
+);
+
+create table if not exists public.sources (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  feed_url text not null unique,
+  category text default 'General',
+  active boolean default true,
+  created_at timestamptz default now()
+);
+
+alter table public.articles enable row level security;
+alter table public.sources enable row level security;
+
+create policy "public can read articles"
+on public.articles
+for select
+using (true);
+
+create policy "authenticated manage articles"
+on public.articles
+for all
+using (auth.role() = 'authenticated')
+with check (auth.role() = 'authenticated');
+
+create policy "authenticated manage sources"
+on public.sources
+for all
+using (auth.role() = 'authenticated')
+with check (auth.role() = 'authenticated');
