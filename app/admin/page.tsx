@@ -1,1 +1,36 @@
-ZXhwb3J0IGRlZmF1bHQgZnVuY3Rpb24gQWRtaW4oKXtyZXR1cm4gPG1haW4+PGhlYWRlciBjbGFzc05hbWU9ImhlYWRlciI+PGRpdiBjbGFzc05hbWU9ImNvbnRhaW5lciBuYXYiPjxhIGNsYXNzTmFtZT0iYnJhbmQiIGhyZWY9Ii8iPkpOTXVsZWUgPHNwYW4+TmV3czwvc3Bhbj48L2E+PGEgaHJlZj0iLyI+VmlldyBzaXRlPC9hPjwvZGl2PjwvaGVhZGVyPjxzZWN0aW9uIGNsYXNzTmFtZT0iY29udGFpbmVyIHNlY3Rpb24iPjxwIGNsYXNzTmFtZT0iZXllYnJvdyI+QWRtaW5pc3RyYXRpb248L3A+PGgxPk5ld3MgZGFzaGJvYXJkPC9oMT48ZGl2IGNsYXNzTmFtZT0iZGFzaGJvYXJkIj48ZGl2PjxzdHJvbmc+MDwvc3Ryb25nPjxzcGFuPlB1Ymxpc2hlZCBzdG9yaWVzPC9zcGFuPjwvZGl2PjxkaXY+PHN0cm9uZz4wPC9zdHJvbmc+PHNwYW4+U291cmNlczwvc3Bhbj48L2Rpdj48ZGl2PjxzdHJvbmc+UmVhZHk8L3N0cm9uZz48c3Bhbj5QbGF0Zm9ybSBzdGF0dXM8L3NwYW4+PC9kaXY+PC9kaXY+PC9zZWN0aW9uPjwvbWFpbj59
+export default function Admin() {
+  return (
+    <main>
+      <header className="header">
+        <div className="container nav">
+          <a className="brand" href="/">
+            JNMulee <span>News</span>
+          </a>
+          <a href="/">View site</a>
+        </div>
+      </header>
+
+      <section className="container section">
+        <p className="eyebrow">Administration</p>
+        <h1>News Dashboard</h1>
+
+        <div className="dashboard">
+          <div>
+            <strong>0</strong>
+            <span>Published stories</span>
+          </div>
+
+          <div>
+            <strong>0</strong>
+            <span>Sources</span>
+          </div>
+
+          <div>
+            <strong>Ready</strong>
+            <span>Platform status</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
