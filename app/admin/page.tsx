@@ -127,4 +127,8 @@ export default function AdminPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Example News"
-            required
+           
+</main>
+);
+}
+/>
