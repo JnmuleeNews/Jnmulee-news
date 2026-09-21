@@ -1,1 +1,29 @@
-dHlwZSBQcm9wcz17cGFyYW1zOlByb21pc2U8e3NsdWc6c3RyaW5nfT59OyBleHBvcnQgZGVmYXVsdCBhc3luYyBmdW5jdGlvbiBDYXRlZ29yeSh7cGFyYW1zfTpQcm9wcyl7Y29uc3Qge3NsdWd9PWF3YWl0IHBhcmFtcztjb25zdCBuYW1lPXNsdWcuY2hhckF0KDApLnRvVXBwZXJDYXNlKCkrc2x1Zy5zbGljZSgxKTtyZXR1cm4gPG1haW4+PGhlYWRlciBjbGFzc05hbWU9ImhlYWRlciI+PGRpdiBjbGFzc05hbWU9ImNvbnRhaW5lciBuYXYiPjxhIGNsYXNzTmFtZT0iYnJhbmQiIGhyZWY9Ii8iPkpOTXVsZWUgPHNwYW4+TmV3czwvc3Bhbj48L2E+PGEgaHJlZj0iLyI+4oaQIEhvbWU8L2E+PC9kaXY+PC9oZWFkZXI+PHNlY3Rpb24gY2xhc3NOYW1lPSJjb250YWluZXIgc2VjdGlvbiI+PHAgY2xhc3NOYW1lPSJleWVicm93Ij5DYXRlZ29yeTwvcD48aDE+e25hbWV9IE5ld3M8L2gxPjxwIGNsYXNzTmFtZT0ibGVhZCI+U3RvcmllcyBpbiB0aGlzIGNhdGVnb3J5IHdpbGwgYXBwZWFyIGhlcmUuPC9wPjwvc2VjdGlvbj48L21haW4+fQ==
+type Props = {
+  params: Promise<{ slug: string }>;
+};
+
+export default async function Category({ params }: Props) {
+  const { slug } = await params;
+  const name = slug.charAt(0).toUpperCase() + slug.slice(1);
+
+  return (
+    <main>
+      <header className="header">
+        <div className="container nav">
+          <a className="brand" href="/">
+            JNMulee <span>News</span>
+          </a>
+          <a href="/">⌂ Home</a>
+        </div>
+      </header>
+
+      <section className="container section">
+        <p className="eyebrow">Category</p>
+        <h1>{name} News</h1>
+        <p className="lead">
+          Stories in this category will appear here.
+        </p>
+      </section>
+    </main>
+  );
+}
