@@ -1,1 +1,80 @@
-Y29uc3Qgc3Rvcmllcz1bWyJUb3AgU3RvcmllcyIsIkpOTXVsZWUgTmV3cyBsYXVuY2hlcyBhIG5ldyB3YXkgdG8gZm9sbG93IHRoZSBzdG9yaWVzIHRoYXQgbWF0dGVyIl0sWyJXb3JsZCIsIkdsb2JhbCBkZXZlbG9wbWVudHMgdG8gd2F0Y2ggdG9kYXkiXSxbIkJ1c2luZXNzIiwiTWFya2V0cyBhbmQgYnVzaW5lc3NlcyBpbiBmb2N1cyJdLFsiVGVjaG5vbG9neSIsIlRlY2hub2xvZ3kgaXMgY2hhbmdpbmcgaG93IHBlb3BsZSBnZXQgaW5mb3JtYXRpb24iXV07CmV4cG9ydCBkZWZhdWx0IGZ1bmN0aW9uIEhvbWUoKXtyZXR1cm4gPG1haW4+PGhlYWRlciBjbGFzc05hbWU9ImhlYWRlciI+PGRpdiBjbGFzc05hbWU9ImNvbnRhaW5lciBuYXYiPjxhIGNsYXNzTmFtZT0iYnJhbmQiIGhyZWY9Ii8iPkpOTXVsZWUgPHNwYW4+TmV3czwvc3Bhbj48L2E+PG5hdj48YSBocmVmPSIvIj5Ib21lPC9hPjxhIGhyZWY9Ii9jYXRlZ29yeS93b3JsZCI+V29ybGQ8L2E+PGEgaHJlZj0iL2NhdGVnb3J5L2J1c2luZXNzIj5CdXNpbmVzczwvYT48YSBocmVmPSIvY2F0ZWdvcnkvdGVjaG5vbG9neSI+VGVjaG5vbG9neTwvYT48YSBocmVmPSIvYWRtaW4vbG9naW4iPkFkbWluPC9hPjwvbmF2PjwvZGl2PjwvaGVhZGVyPjxzZWN0aW9uIGNsYXNzTmFtZT0iaGVybyI+PGRpdiBjbGFzc05hbWU9ImNvbnRhaW5lciI+PHAgY2xhc3NOYW1lPSJleWVicm93Ij5KTk11bGVlIE5ld3M8L3A+PGgxPk5ld3MgdGhhdCBrZWVwcyB5b3UgaW5mb3JtZWQuPC9oMT48cCBjbGFzc05hbWU9ImxlYWQiPkZhc3QsIHJlYWRhYmxlIGNvdmVyYWdlIGFjcm9zcyB3b3JsZCBuZXdzLCBidXNpbmVzcywgdGVjaG5vbG9neSBhbmQgbW9yZS48L3A+PGRpdiBjbGFzc05hbWU9InNlYXJjaCI+PGlucHV0IHBsYWNlaG9sZGVyPSJTZWFyY2ggSk5NdWxlZSBOZXdzLi4uIi8+PGJ1dHRvbj5TZWFyY2g8L2J1dHRvbj48L2Rpdj48L2Rpdj48L3NlY3Rpb24+PHNlY3Rpb24gY2xhc3NOYW1lPSJjb250YWluZXIgc2VjdGlvbiI+PGRpdiBjbGFzc05hbWU9InNlY3Rpb25UaXRsZSI+PGgyPkxhdGVzdCBzdG9yaWVzPC9oMj48c3Bhbj5VcGRhdGVkIHJlZ3VsYXJseTwvc3Bhbj48L2Rpdj48ZGl2IGNsYXNzTmFtZT0iZ3JpZCI+e3N0b3JpZXMubWFwKChzLGkpPT48YXJ0aWNsZSBjbGFzc05hbWU9e2k9PT0wPyJjYXJkIGZlYXR1cmVkIjoiY2FyZCJ9IGtleT17c1sxXX0+PGRpdiBjbGFzc05hbWU9InBsYWNlaG9sZGVyIj5KTk11bGVlIE5ld3M8L2Rpdj48cCBjbGFzc05hbWU9ImNhdGVnb3J5Ij57c1swXX08L3A+PGgzPjxhIGhyZWY9e2AvbmV3cy8ke2krMX1gfT57c1sxXX08L2E+PC9oMz48cD5DbGVhciwgY29uY2lzZSBjb3ZlcmFnZSBwcmVwYXJlZCBmb3IgSk5NdWxlZSBOZXdzIHJlYWRlcnMuPC9wPjxzbWFsbD5SZWFkIG1vcmUg4oaSPC9zbWFsbD48L2FydGljbGU+KX08L2Rpdj48L3NlY3Rpb24+PGZvb3Rlcj48ZGl2IGNsYXNzTmFtZT0iY29udGFpbmVyIj7CqSB7bmV3IERhdGUoKS5nZXRGdWxsWWVhcigpfSBKTk11bGVlIE5ld3MuIEFsbCByaWdodHMgcmVzZXJ2ZWQuPC9kaXY+PC9mb290ZXI+PC9tYWluPn0=
+const stories = [
+  ["Top Stories", "JNMulee News launches a new way to follow the stories that matter"],
+  ["World", "Global developments to watch today"],
+  ["Business", "Markets and businesses in focus"],
+  ["Technology", "Technology is changing how people get information"],
+];
+
+export default function Home() {
+  return (
+    <main>
+      <header className="header">
+        <div className="container nav">
+          <a className="brand" href="/">
+            JNMulee <span>News</span>
+          </a>
+
+          <nav>
+            <a href="/">Home</a>
+            <a href="/category/world">World</a>
+            <a href="/category/business">Business</a>
+            <a href="/category/technology">Technology</a>
+            <a href="/admin/login">Admin</a>
+          </nav>
+        </div>
+      </header>
+
+      <section className="hero">
+        <div className="container">
+          <p className="eyebrow">JNMulee News</p>
+          <h1>News that keeps you informed.</h1>
+          <p className="lead">
+            Fast, readable coverage across world news, business,
+            technology and more.
+          </p>
+
+          <div className="search">
+            <input placeholder="Search JNMulee News..." />
+            <button type="button">Search</button>
+          </div>
+        </div>
+      </section>
+
+      <section className="container section">
+        <div className="sectionTitle">
+          <h2>Latest stories</h2>
+          <span>Updated regularly</span>
+        </div>
+
+        <div className="grid">
+          {stories.map((story, i) => (
+            <article
+              className={i === 0 ? "card featured" : "card"}
+              key={story[1]}
+            >
+              <div className="placeholder">JNMulee News</div>
+
+              <p className="category">{story[0]}</p>
+
+              <h3>
+                <a href={`/news/${i + 1}`}>{story[1]}</a>
+              </h3>
+
+              <p>
+                Clear, concise coverage prepared for JNMulee News readers.
+              </p>
+
+              <small>Read more →</small>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <footer>
+        <div className="container">
+          © {new Date().getFullYear()} JNMulee News. All rights reserved.
+        </div>
+      </footer>
+    </main>
+  );
+}
