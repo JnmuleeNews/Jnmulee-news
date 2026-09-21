@@ -5,20 +5,25 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-type NewsRow = {
-  id: string;
-  title: string;
+type Source = {
+  id: number;
+  name: string;
+  url: string;
   category: string;
-  Published: boolean;
-  created_at: string;
+  active: boolean;
 };
 
 export default function AdminPage() {
   const router = useRouter();
-  const [stories, setStories] = useState<NewsRow[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  async function loadStories() {
+  const [sources, setSources] = useState<Source[]>([]);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [category, setCategory] = useState("Top Stories");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  async function loadSources() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -26,30 +31,51 @@ export default function AdminPage() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("news")
-      .select("id,title,category,Published,created_at")
-      .order("created_at", { ascending: false });
+    const { data } = await supabase
+      .from("sources")
+      .select("id,name,url,category,active")
+      .order("id", { ascending: false });
 
-    if (!error) {
-      setStories(data ?? []);
-    }
-
+    setSources(data ?? []);
     setLoading(false);
   }
 
   useEffect(() => {
-    loadStories();
+    loadSources();
   }, []);
+
+  async function addSource(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+
+    const { error } = await supabase.from("sources").insert({
+      name: name.trim(),
+      url: url.trim(),
+      category,
+      active: true
+    });
+
+    setSaving(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setName("");
+    setUrl("");
+    await loadSources();
+  }
+
+  async function deleteSource(id: number) {
+    await supabase.from("sources").delete().eq("id", id);
+    await loadSources();
+  }
 
   async function signOut() {
     await supabase.auth.signOut();
     router.replace("/admin/login");
   }
-
-  const publishedCount = stories.filter(
-    (story) => story.Published
-  ).length;
 
   return (
     <main className="dashboardPage">
@@ -66,23 +92,6 @@ export default function AdminPage() {
       <section className="container section">
         <h1>News Dashboard</h1>
 
-        <div className="dashboard">
-          <div>
-            <strong>{publishedCount}</strong>
-            <span>Published stories</span>
-          </div>
-
-          <div>
-            <strong>{stories.length}</strong>
-            <span>Total stories</span>
-          </div>
-
-          <div>
-            <strong>Ready</strong>
-            <span>Platform status</span>
-          </div>
-        </div>
-
         <div className="adminActions">
           <Link href="/admin/news/new">
             <button type="button">+ Create News</button>
@@ -93,19 +102,60 @@ export default function AdminPage() {
           </Link>
         </div>
 
+        <h2>News Sources</h2>
+
+        <form className="form" onSubmit={addSource}>
+          <label>Source name</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Example News"
+            required
+          />
+
+          <label>RSS / Feed URL</label>
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://example.com/feed"
+            required
+          />
+
+          <label>Category</label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            <option>Top Stories</option>
+            <option>Nigeria</option>
+            <option>World</option>
+            <option>Business</option>
+            <option>Technology</option>
+            <option>Sports</option>
+            <option>Entertainment</option>
+          </select>
+
+          <button type="submit" disabled={saving}>
+            {saving ? "Saving..." : "Add Source"}
+          </button>
+        </form>
+
+        <h2>Connected Sources</h2>
+
         {loading ? (
-          <p>Loading stories...</p>
-        ) : stories.length === 0 ? (
-          <p>No stories yet. Create your first news article.</p>
+          <p>Loading sources...</p>
+        ) : sources.length === 0 ? (
+          <p>No sources connected yet.</p>
         ) : (
           <div className="form">
-            {stories.map((story) => (
-              <div key={story.id}>
-                <strong>{story.title}</strong>
-                <p>
-                  {story.category} ·{" "}
-                  {story.Published ? "Published" : "Draft"}
-                </p>
+            {sources.map((source) => (
+              <div key={source.id}>
+                <strong>{source.name}</strong>
+                <p>{source.url}</p>
+                <p>{source.category}</p>
+                <button onClick={() => deleteSource(source.id)}>
+                  Delete
+                </button>
               </div>
             ))}
           </div>
