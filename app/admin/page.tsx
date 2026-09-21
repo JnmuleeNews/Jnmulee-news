@@ -70,6 +70,7 @@ export default function AdminPage() {
 
     setName("");
     setFeedUrl("");
+
     await loadSources();
   }
 
@@ -119,4 +120,11 @@ export default function AdminPage() {
 
         <h2>News Sources</h2>
 
-        <form className="form
+        <form className="form" onSubmit={addSource}>
+          <label>Source name</label>
+
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Example News"
+            required
