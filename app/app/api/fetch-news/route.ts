@@ -3,11 +3,14 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SECRET_KEY!
 );
 
 function stripHtml(text: string) {
-  return text.replace(/<[^>]*>/g, "").trim();
+  return text
+    .replace(/<[^>]*>/g, "")
+    .replace(/<!CDATA\[|\]>/g, "")
+    .trim();
 }
 
 function makeSlug(title: string) {
@@ -74,67 +77,4 @@ export async function GET() {
           continue;
         }
 
-        const title = stripHtml(titleMatch[1])
-          .replace(/<!\[CDATA\[|\]\]>/g, "")
-          .trim();
-
-        const link = stripHtml(linkMatch[1])
-          .replace(/<!\[CDATA\[|\]\]>/g, "")
-          .trim();
-
-        const description = descriptionMatch
-          ? stripHtml(descriptionMatch[1])
-              .replace(/<!\[CDATA\[|\]\]>/g, "")
-              .trim()
-          : "";
-
-        if (!title || !link) {
-          continue;
-        }
-
-        const { data: existing } = await supabase
-          .from("news")
-          .select("id")
-          .eq("slug", link)
-          .maybeSingle();
-
-        if (existing) {
-          continue;
-        }
-
-        const content =
-          `${description}\n\n` +
-          `Source: ${source.name}\n` +
-          `Original story: ${link}`;
-
-        const { error: insertError } = await supabase
-          .from("news")
-          .insert({
-            title,
-            slug: makeSlug(title),
-            content,
-            category: source.category,
-            image_url: null,
-            Published: false,
-          });
-
-        if (!insertError) {
-          added++;
-        }
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      added,
-    });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
-  }
-}
+        const title = strip
