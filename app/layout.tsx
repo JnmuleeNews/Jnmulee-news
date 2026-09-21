@@ -1,1 +1,19 @@
-aW1wb3J0IHR5cGUgeyBNZXRhZGF0YSB9IGZyb20gIm5leHQiOyBpbXBvcnQgIi4vZ2xvYmFscy5jc3MiOwpleHBvcnQgY29uc3QgbWV0YWRhdGE6IE1ldGFkYXRhPXt0aXRsZToiSk5NdWxlZSBOZXdzIixkZXNjcmlwdGlvbjoiSW5kZXBlbmRlbnQgZGlnaXRhbCBuZXdzIGFuZCBjdXJyZW50IGFmZmFpcnMuIn07CmV4cG9ydCBkZWZhdWx0IGZ1bmN0aW9uIFJvb3RMYXlvdXQoe2NoaWxkcmVufTp7Y2hpbGRyZW46UmVhY3QuUmVhY3ROb2RlfSl7cmV0dXJuIDxodG1sIGxhbmc9ImVuIj48Ym9keT57Y2hpbGRyZW59PC9ib2R5PjwvaHRtbD59
+import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "JNMulee News",
+  description: "Independent digital news and current affairs.",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}
