@@ -188,4 +188,25 @@ export default async function Home() {
               className="brand footerBrand"
               href="/"
             >
-             
+              JNMulee <span>News</span>
+            </Link>
+
+            <p>News that keeps you informed.</p>
+          </div>
+
+          <div className="footerLinks">
+            <Link href="/category/world">World</Link>
+            <Link href="/category/business">Business</Link>
+            <Link href="/category/technology">
+              Technology
+            </Link>
+          </div>
+
+          <small>
+            © {new Date().getFullYear()} JNMulee News. All rights reserved.
+          </small>
+        </div>
+      </footer>
+    </main>
+  );
+}
