@@ -335,4 +335,52 @@ export default async function Article({ params }: Props) {
                       alt={post.title}
                       style={{
                         width: "100%",
-                        height: 150
+                        height: 150,
+                        objectFit: "cover",
+                        borderRadius: 12,
+                      }}
+                    />
+                  )}
+
+                  <h3 style={{ marginTop: 10 }}>
+                    {post.title}
+                  </h3>
+
+                  <small>
+                    {formatDate(post.created_at)}
+                  </small>
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* NEXT NEWS */}
+        {nextPost && (
+          <section
+            style={{
+              marginTop: 45,
+              paddingTop: 25,
+              borderTop: "1px solid #ddd",
+            }}
+          >
+            <p style={{ opacity: 0.7 }}>
+              Next News
+            </p>
+
+            <a
+              href={`/news/${nextPost.slug}`}
+              style={{
+                fontSize: 20,
+                fontWeight: 600,
+              }}
+            >
+              {nextPost.title} →
+            </a>
+          </section>
+        )}
+
+      </article>
+    </main>
+  );
+}
