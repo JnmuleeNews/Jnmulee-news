@@ -8,9 +8,45 @@ const supabase = createClient(
 
 function stripHtml(text: string) {
   return text
-    .replace(/<[^>]*>/g, "")
-    .replace(/<!\[CDATA\[|\]\]>/g, "")
+    .replace(/<!\[CDATA\[/gi, "")
+    .replace(/\]\]>/gi, "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+function getImage(item: string) {
+  const mediaContent = item.match(
+    /<media:content[^>]+url=["']([^"']+)["'][^>]*>/i
+  );
+
+  if (mediaContent?.[1]) {
+    return mediaContent[1];
+  }
+
+  const enclosure = item.match(
+    /<enclosure[^>]+url=["']([^"']+)["'][^>]*>/i
+  );
+
+  if (enclosure?.[1]) {
+    return enclosure[1];
+  }
+
+  const image = item.match(
+    /<img[^>]+src=["']([^"']+)["'][^>]*>/i
+  );
+
+  if (image?.[1]) {
+    return image[1];
+  }
+
+  return null;
 }
 
 function makeSlug(title: string) {
@@ -80,6 +116,8 @@ export async function GET() {
           ? stripHtml(descriptionMatch[1])
           : "";
 
+        const imageUrl = getImage(item);
+
         if (!title || !link) continue;
 
         const { data: existing, error: duplicateError } =
@@ -108,10 +146,10 @@ export async function GET() {
             title,
             slug: makeSlug(title),
             content,
-            image_url: null,
+            image_url: imageUrl,
             source_url: link,
             category: source.category,
-            Published: false,
+            Published: true,
           });
 
         if (insertError) {
