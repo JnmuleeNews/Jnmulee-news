@@ -10,22 +10,35 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-function cleanText(value: string) {
+function decodeHtml(value: string) {
   return value
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/gi, "'")
     .replace(/&#x27;/gi, "'")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&");
+}
+
+function cleanText(value: string) {
+  const decoded = decodeHtml(value);
+
+  return decoded
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function getImageFromContent(value: string) {
-  const match = value.match(/<img[^>]+src=["']([^"']+)["']/i);
+  const decoded = decodeHtml(value);
+
+  const match = decoded.match(
+    /<img[^>]+src=["']([^"']+)["']/i
+  );
+
   return match?.[1] ?? null;
 }
 
@@ -75,7 +88,7 @@ export default async function Article({ params }: Props) {
           Published by JNMulee News
         </p>
 
-        {imageUrl ? (
+        {imageUrl && (
           <img
             src={imageUrl}
             alt={story.title}
@@ -87,7 +100,7 @@ export default async function Article({ params }: Props) {
               margin: "20px 0 28px",
             }}
           />
-        ) : null}
+        )}
 
         <div className="articleBody">
           <p>
@@ -95,7 +108,7 @@ export default async function Article({ params }: Props) {
               "Read the latest story from JNMulee News."}
           </p>
 
-          {story.source_url ? (
+          {story.source_url && (
             <p style={{ marginTop: 24 }}>
               <a
                 href={story.source_url}
@@ -105,7 +118,7 @@ export default async function Article({ params }: Props) {
                 Read the original source →
               </a>
             </p>
-          ) : null}
+          )}
         </div>
       </article>
     </main>
