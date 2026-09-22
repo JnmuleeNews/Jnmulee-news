@@ -13,6 +13,15 @@ function stripHtml(text: string) {
     .trim();
 }
 
+function decodeXml(text: string) {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
 function makeSlug(title: string) {
   return (
     title
@@ -26,6 +35,57 @@ function makeSlug(title: string) {
   );
 }
 
+function getTagValue(item: string, tag: string) {
+  const match = item.match(
+    new RegExp(
+      `<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`,
+      "i"
+    )
+  );
+
+  return match ? decodeXml(match[1].trim()) : "";
+}
+
+function getImageUrl(item: string) {
+  // RSS enclosure
+  const enclosure = item.match(
+    /<enclosure[^>]+url=["']([^"']+)["'][^>]*>/i
+  );
+
+  if (enclosure?.[1]) {
+    return decodeXml(enclosure[1].trim());
+  }
+
+  // Media RSS
+  const mediaContent = item.match(
+    /<media:content[^>]+url=["']([^"']+)["'][^>]*>/i
+  );
+
+  if (mediaContent?.[1]) {
+    return decodeXml(mediaContent[1].trim());
+  }
+
+  // media:thumbnail
+  const thumbnail = item.match(
+    /<media:thumbnail[^>]+url=["']([^"']+)["'][^>]*>/i
+  );
+
+  if (thumbnail?.[1]) {
+    return decodeXml(thumbnail[1].trim());
+  }
+
+  // image URL inside media:description/content
+  const imageFromHtml = item.match(
+    /<img[^>]+src=["']([^"']+)["']/i
+  );
+
+  if (imageFromHtml?.[1]) {
+    return decodeXml(imageFromHtml[1].trim());
+  }
+
+  return null;
+}
+
 export async function GET() {
   try {
     const { data: sources, error: sourceError } = await supabase
@@ -35,102 +95,118 @@ export async function GET() {
 
     if (sourceError) {
       return NextResponse.json(
-        { error: sourceError.message },
+        {
+          success: false,
+          error: sourceError.message,
+        },
         { status: 500 }
       );
     }
 
     let added = 0;
+    let skipped = 0;
 
     for (const source of sources ?? []) {
-      const response = await fetch(source.feed_url, {
-        headers: {
-          "User-Agent": "JNMulee-News/1.0",
-        },
-        cache: "no-store",
-      });
+      try {
+        const response = await fetch(source.feed_url, {
+          headers: {
+            "User-Agent": "JNMulee-News/1.0",
+            Accept:
+              "application/rss+xml, application/xml, text/xml, */*",
+          },
+          cache: "no-store",
+        });
 
-      if (!response.ok) continue;
+        if (!response.ok) {
+          skipped++;
+          continue;
+        }
 
-      const xml = await response.text();
-      const items = [...xml.matchAll(/<item[\s\S]*?<\/item>/gi)];
+        const xml = await response.text();
 
-      for (const match of items.slice(0, 10)) {
-        const item = match[0];
+        const items = [
+          ...xml.matchAll(/<item[\s\S]*?<\/item>/gi),
+        ];
 
-        const titleMatch = item.match(
-          /<title[^>]*>([\s\S]*?)<\/title>/i
-        );
+        for (const match of items.slice(0, 10)) {
+          const item = match[0];
 
-        const linkMatch = item.match(
-          /<link[^>]*>([\s\S]*?)<\/link>/i
-        );
+          const title = stripHtml(
+            getTagValue(item, "title")
+          );
 
-        const descriptionMatch = item.match(
-          /<description[^>]*>([\s\S]*?)<\/description>/i
-        );
+          const link = stripHtml(
+            getTagValue(item, "link")
+          );
 
-        if (!titleMatch || !linkMatch) continue;
+          const description = stripHtml(
+            getTagValue(item, "description")
+          );
 
-        const title = stripHtml(titleMatch[1]);
-        const link = stripHtml(linkMatch[1]);
+          if (!title || !link) {
+            skipped++;
+            continue;
+          }
 
-        const description = descriptionMatch
-          ? stripHtml(descriptionMatch[1])
-          : "";
+          const imageUrl = getImageUrl(item);
 
-        if (!title || !link) continue;
+          const { data: existing, error: duplicateError } =
+            await supabase
+              .from("news")
+              .select("id")
+              .eq("source_url", link)
+              .maybeSingle();
 
-        const { data: existing, error: duplicateError } =
-          await supabase
+          if (duplicateError) {
+            skipped++;
+            continue;
+          }
+
+          if (existing) {
+            skipped++;
+            continue;
+          }
+
+          const content =
+            description ||
+            `Latest news information from ${source.name}.`;
+
+          const { error: insertError } = await supabase
             .from("news")
-            .select("source_url")
-            .eq("source_url", link)
-            .maybeSingle();
+            .insert({
+              title,
+              slug: makeSlug(title),
+              content,
+              image_url: imageUrl,
+              source_url: link,
+              category: source.category,
+              Published: false,
+            });
 
-        if (duplicateError) {
-          return NextResponse.json(
-            { error: duplicateError.message },
-            { status: 500 }
-          );
+          if (insertError) {
+            skipped++;
+            continue;
+          }
+
+          added++;
         }
-
-        if (existing) continue;
-
-        const content =
-          description ||
-          `Latest news information from ${source.name}.`;
-
-        const { error: insertError } = await supabase
-          .from("news")
-          .insert({
-            title,
-            slug: makeSlug(title),
-            content,
-            image_url: null,
-            source_url: link,
-            category: source.category,
-            Published: false,
-          });
-
-        if (insertError) {
-          return NextResponse.json(
-            { error: insertError.message },
-            { status: 500 }
-          );
-        }
-
-        added++;
+      } catch {
+        skipped++;
+        continue;
       }
     }
 
     return NextResponse.json({
       success: true,
       added,
+      skipped,
+      message:
+        "RSS import completed. New stories remain unpublished until they have an image.",
     });
   } catch (error) {
     return NextResponse.json(
       {
+        success: false,
         error:
           error instanceof Error
             ? error.message
