@@ -6,44 +6,63 @@ const supabase = createClient(
   process.env.SUPABASE_SECRET_KEY!
 );
 
-function stripHtml(text: string) {
+function decodeHtml(text: string) {
   return text
-    .replace(/<!\[CDATA\[/gi, "")
-    .replace(/\]\]>/gi, "")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&");
+}
+
+function stripHtml(text: string) {
+  return decodeHtml(text)
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function getImage(item: string) {
-  const mediaContent = item.match(
-    /<media:content[^>]+url=["']([^"']+)["'][^>]*>/i
+  const decoded = decodeHtml(item);
+
+  // Sahara Reporters / RSS media image
+  const mediaContent = decoded.match(
+    /<media:content[^>]+url=["']([^"']+)["']/i
   );
 
   if (mediaContent?.[1]) {
     return mediaContent[1];
   }
 
-  const enclosure = item.match(
-    /<enclosure[^>]+url=["']([^"']+)["'][^>]*>/i
+  // RSS enclosure image
+  const enclosure = decoded.match(
+    /<enclosure[^>]+url=["']([^"']+)["']/i
   );
 
   if (enclosure?.[1]) {
     return enclosure[1];
   }
 
-  const image = item.match(
-    /<img[^>]+src=["']([^"']+)["'][^>]*>/i
+  // Image inside description/content
+  const img = decoded.match(
+    /<img[^>]+src=["']([^"']+)["']/i
   );
 
-  if (image?.[1]) {
-    return image[1];
+  if (img?.[1]) {
+    return img[1];
+  }
+
+  // Try property="schema:image"
+  const schemaImage = decoded.match(
+    /property=["']schema:image["'][^>]+src=["']([^"']+)["']/i
+  );
+
+  if (schemaImage?.[1]) {
+    return schemaImage[1];
   }
 
   return null;
@@ -64,10 +83,11 @@ function makeSlug(title: string) {
 
 export async function GET() {
   try {
-    const { data: sources, error: sourceError } = await supabase
-      .from("sources")
-      .select("name,feed_url,category,active")
-      .eq("active", true);
+    const { data: sources, error: sourceError } =
+      await supabase
+        .from("sources")
+        .select("name,feed_url,category,active")
+        .eq("active", true);
 
     if (sourceError) {
       return NextResponse.json(
@@ -79,87 +99,98 @@ export async function GET() {
     let added = 0;
 
     for (const source of sources ?? []) {
-      const response = await fetch(source.feed_url, {
-        headers: {
-          "User-Agent": "JNMulee-News/1.0",
-        },
-        cache: "no-store",
-      });
+      try {
+        const response = await fetch(source.feed_url, {
+          headers: {
+            "User-Agent": "JNMulee-News/1.0",
+            Accept:
+              "application/rss+xml, application/xml, text/xml, */*",
+          },
+          cache: "no-store",
+        });
 
-      if (!response.ok) continue;
-
-      const xml = await response.text();
-
-      const items = [...xml.matchAll(/<item[\s\S]*?<\/item>/gi)];
-
-      for (const match of items.slice(0, 10)) {
-        const item = match[0];
-
-        const titleMatch = item.match(
-          /<title[^>]*>([\s\S]*?)<\/title>/i
-        );
-
-        const linkMatch = item.match(
-          /<link[^>]*>([\s\S]*?)<\/link>/i
-        );
-
-        const descriptionMatch = item.match(
-          /<description[^>]*>([\s\S]*?)<\/description>/i
-        );
-
-        if (!titleMatch || !linkMatch) continue;
-
-        const title = stripHtml(titleMatch[1]);
-        const link = stripHtml(linkMatch[1]);
-
-        const description = descriptionMatch
-          ? stripHtml(descriptionMatch[1])
-          : "";
-
-        const imageUrl = getImage(item);
-
-        if (!title || !link) continue;
-
-        const { data: existing, error: duplicateError } =
-          await supabase
-            .from("news")
-            .select("source_url")
-            .eq("source_url", link)
-            .maybeSingle();
-
-        if (duplicateError) {
-          return NextResponse.json(
-            { error: duplicateError.message },
-            { status: 500 }
-          );
+        if (!response.ok) {
+          continue;
         }
 
-        if (existing) continue;
+        const xml = await response.text();
 
-        const content =
-          description ||
-          `Read the latest story from ${source.name}.`;
+        const items = [
+          ...xml.matchAll(/<item[\s\S]*?<\/item>/gi),
+        ];
 
-        const { error: insertError } = await supabase
-          .from("news")
-          .insert({
-            title,
-            slug: makeSlug(title),
-            content,
-            image_url: imageUrl,
-            source_url: link,
-            category: source.category,
-            Published: true,
-          });
+        for (const match of items.slice(0, 10)) {
+          const item = match[0];
 
-        if (insertError) {
-          return NextResponse.json(
-            { error: insertError.message },
-            { status: 500 }
+          const titleMatch = item.match(
+            /<title[^>]*>([\s\S]*?)<\/title>/i
           );
-        }
 
-        added++;
+          const linkMatch = item.match(
+            /<link[^>]*>([\s\S]*?)<\/link>/i
+          );
+
+          const descriptionMatch = item.match(
+            /<description[^>]*>([\s\S]*?)<\/description>/i
+          );
+
+          if (!titleMatch || !linkMatch) {
+            continue;
+          }
+
+          const title = stripHtml(titleMatch[1]);
+          const link = stripHtml(linkMatch[1]);
+
+          const description = descriptionMatch
+            ? descriptionMatch[1]
+            : "";
+
+          if (!title || !link) {
+            continue;
+          }
+
+          const { data: existing, error: duplicateError } =
+            await supabase
+              .from("news")
+              .select("id")
+              .eq("source_url", link)
+              .maybeSingle();
+
+          if (duplicateError) {
+            continue;
+          }
+
+          if (existing) {
+            continue;
+          }
+
+          const imageUrl = getImage(
+            `${item}\n${description}`
+          );
+
+          const content =
+            stripHtml(description) ||
+            `Read the latest story from ${source.name}.`;
+
+          const { error: insertError } =
+            await supabase.from("news").insert({
+              title,
+              slug: makeSlug(title),
+              content,
+              image_url: imageUrl,
+              source_url: link,
+              category: source.category,
+              Published: true,
+            });
+
+          if (insertError) {
+            continue;
+          }
+
+          added++;
+        }
+      } catch {
+        continue;
       }
     }
 
