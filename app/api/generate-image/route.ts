@@ -18,14 +18,14 @@ export async function GET() {
     const { data: articles, error } = await supabase
       .from("news")
       .select("id,title,content")
-      .eq("Published", false)
-      .is("image_url", null)
+      .eq("Published", true)
+      .or("image_url.is.null,image_url.eq.")
       .order("created_at", { ascending: false })
       .limit(3);
 
     if (error) {
       return NextResponse.json(
-        { error: error.message },
+        { success: false, error: error.message },
         { status: 500 }
       );
     }
@@ -34,7 +34,7 @@ export async function GET() {
       return NextResponse.json({
         success: true,
         generated: 0,
-        message: "No article needs an image",
+        message: "No published article needs an image",
       });
     }
 
@@ -51,7 +51,7 @@ Headline:
 ${article.title}
 
 Story:
-${article.content}
+${article.content || ""}
 
 Requirements:
 - Photorealistic editorial/news photography
