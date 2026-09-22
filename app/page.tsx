@@ -24,7 +24,7 @@ export default async function Home() {
             JNMulee <span>News</span>
           </Link>
 
-          <nav>
+          <nav className="mainNav">
             <Link href="/">Home</Link>
             <Link href="/category/world">World</Link>
             <Link href="/category/business">Business</Link>
@@ -37,7 +37,9 @@ export default async function Home() {
       <section className="hero">
         <div className="container">
           <p className="eyebrow">JNMulee News</p>
+
           <h1>News that keeps you informed.</h1>
+
           <p className="lead">
             Fast, readable coverage across world news, business,
             technology and more.
