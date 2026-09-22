@@ -20,7 +20,7 @@ export default function NewNewsPage() {
   const [slug, setSlug] = useState("");
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("Top Stories");
-  const [imageUrl, setImageUrl] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [published, setPublished] = useState(true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -40,21 +40,49 @@ export default function NewNewsPage() {
       return;
     }
 
+    let imageUrl = "";
+
+    if (imageFile) {
+      const fileExt = imageFile.name.split(".").pop();
+
+      const fileName = `${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2)}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("news-images")
+        .upload(fileName, imageFile);
+
+      if (uploadError) {
+        setSaving(false);
+        setError(uploadError.message);
+        return;
+      }
+
+      const { data } = supabase.storage
+        .from("news-images")
+        .getPublicUrl(fileName);
+
+      imageUrl = data.publicUrl;
+    }
+
     const finalSlug = slug.trim() || makeSlug(title);
 
-    const { error } = await supabase.from("news").insert({
-      title: title.trim(),
-      slug: finalSlug,
-      content: content.trim(),
-      category,
-      image_url: imageUrl.trim() || null,
-      published,
-    });
+    const { error: insertError } = await supabase
+      .from("news")
+      .insert({
+        title: title.trim(),
+        slug: finalSlug,
+        content: content.trim(),
+        category,
+        image_url: imageUrl || null,
+        published,
+      });
 
     setSaving(false);
 
-    if (error) {
-      setError(error.message);
+    if (insertError) {
+      setError(insertError.message);
       return;
     }
 
@@ -76,6 +104,7 @@ export default function NewNewsPage() {
 
         <form className="form" onSubmit={saveNews}>
           <label>Headline</label>
+
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -83,6 +112,7 @@ export default function NewNewsPage() {
           />
 
           <label>Slug</label>
+
           <input
             value={slug}
             onChange={(e) => setSlug(e.target.value)}
@@ -90,6 +120,7 @@ export default function NewNewsPage() {
           />
 
           <label>Category</label>
+
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -103,14 +134,18 @@ export default function NewNewsPage() {
             <option>Politics</option>
           </select>
 
-          <label>Image URL (optional)</label>
+          <label>News Image</label>
+
           <input
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            placeholder="https://..."
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              setImageFile(e.target.files?.[0] || null);
+            }}
           />
 
           <label>Article content</label>
+
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
@@ -122,15 +157,19 @@ export default function NewNewsPage() {
               type="checkbox"
               checked={published}
               onChange={(e) => setPublished(e.target.checked)}
-              style={{ width: "auto", marginRight: 8 }}
+              style={{
+                width: "auto",
+                marginRight: 8,
+              }}
             />
+
             Publish immediately
           </label>
 
           {error && <p className="error">{error}</p>}
 
           <button type="submit" disabled={saving}>
-            {saving ? "Saving..." : "Save News"}
+            {saving ? "Uploading & Saving..." : "Save News"}
           </button>
 
           <a href="/admin">Cancel</a>
