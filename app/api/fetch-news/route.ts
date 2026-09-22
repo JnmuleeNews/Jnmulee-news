@@ -30,7 +30,7 @@ export async function GET() {
   try {
     const { data: sources, error: sourceError } = await supabase
       .from("sources")
-      .select("id,name,feed_url,category,active")
+      .select("name,feed_url,category,active")
       .eq("active", true);
 
     if (sourceError) {
@@ -50,9 +50,7 @@ export async function GET() {
         cache: "no-store",
       });
 
-      if (!response.ok) {
-        continue;
-      }
+      if (!response.ok) continue;
 
       const xml = await response.text();
 
@@ -73,9 +71,7 @@ export async function GET() {
           /<description[^>]*>([\s\S]*?)<\/description>/i
         );
 
-        if (!titleMatch || !linkMatch) {
-          continue;
-        }
+        if (!titleMatch || !linkMatch) continue;
 
         const title = stripHtml(titleMatch[1]);
         const link = stripHtml(linkMatch[1]);
@@ -84,9 +80,7 @@ export async function GET() {
           ? stripHtml(descriptionMatch[1])
           : "";
 
-        if (!title || !link) {
-          continue;
-        }
+        if (!title || !link) continue;
 
         const { data: existing, error: duplicateError } =
           await supabase
@@ -102,14 +96,11 @@ export async function GET() {
           );
         }
 
-        if (existing) {
-          continue;
-        }
+        if (existing) continue;
 
         const content =
-          `${description}\n\n` +
-          `Source: ${source.name}\n` +
-          `Original story: ${link}`;
+          description ||
+          `Read the latest story from ${source.name}.`;
 
         const { error: insertError } = await supabase
           .from("news")
@@ -117,15 +108,20 @@ export async function GET() {
             title,
             slug: makeSlug(title),
             content,
-            category: source.category,
             image_url: null,
             source_url: link,
+            category: source.category,
             Published: false,
           });
 
-        if (!insertError) {
-          added++;
+        if (insertError) {
+          return NextResponse.json(
+            { error: insertError.message },
+            { status: 500 }
+          );
         }
+
+        added++;
       }
     }
 
