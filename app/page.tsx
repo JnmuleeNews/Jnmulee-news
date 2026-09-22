@@ -93,10 +93,16 @@ export default async function Home() {
                   href={`/news/${featured.slug}`}
                   className="featuredImage"
                 >
-                  <img
-                    src={featured.image_url}
-                    alt={featured.title}
-                  />
+                  {featured.image_url ? (
+                    <img
+                      src={featured.image_url}
+                      alt={featured.title}
+                    />
+                  ) : (
+                    <div className="imagePlaceholder">
+                      JNMulee News
+                    </div>
+                  )}
 
                   <span className="imageBadge">
                     Top Story
