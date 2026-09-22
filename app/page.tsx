@@ -1,6 +1,6 @@
-
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import DirectAd from "@/components/DirectAd";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,6 +38,8 @@ export default async function Home() {
           </nav>
         </div>
       </header>
+
+      <DirectAd placement="home_top" />
 
       <section className="hero">
         <div className="container heroInner">
@@ -138,6 +140,8 @@ export default async function Home() {
               </article>
             )}
 
+            <DirectAd placement="home_between" />
+
             <div className="latestHeader">
               <h2>Latest News</h2>
               <div className="latestLine" />
@@ -190,6 +194,8 @@ export default async function Home() {
                 </article>
               ))}
             </div>
+
+            <DirectAd placement="home_bottom" />
           </>
         )}
       </section>
