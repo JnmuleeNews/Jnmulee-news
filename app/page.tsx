@@ -1,3 +1,4 @@
+
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 
@@ -149,10 +150,16 @@ export default async function Home() {
                     href={`/news/${story.slug}`}
                     className="cardImage"
                   >
-                    <img
-                      src={story.image_url}
-                      alt={story.title}
-                    />
+                    {story.image_url ? (
+                      <img
+                        src={story.image_url}
+                        alt={story.title}
+                      />
+                    ) : (
+                      <div className="imagePlaceholder">
+                        JNMulee News
+                      </div>
+                    )}
                   </Link>
 
                   <div className="cardBody">
