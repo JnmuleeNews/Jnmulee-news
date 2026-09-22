@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 
+export const maxDuration = 60;
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -11,6 +13,83 @@ const supabase = createClient(
   process.env.SUPABASE_SECRET_KEY!
 );
 
+type Article = {
+  title: string;
+  content: string;
+  category: string;
+  source_url: string;
+};
+
+async function rewriteArticle(article: Article) {
+  const prompt =
+    "You are the senior editor of JNMulee News.\n\n" +
+    "Create a completely original, publication-ready news article using ONLY the factual information supplied below.\n\n" +
+    "REQUIRED OUTPUT:\n" +
+    'Return valid JSON with exactly these two fields: {"headline":"A completely new headline","article":"The full rewritten article"}\n\n' +
+    "RULES:\n" +
+    "- The headline MUST be substantially different from the supplied headline.\n" +
+    "- Do NOT copy sentences or paragraphs from the source information.\n" +
+    "- Do NOT write an RSS-style summary.\n" +
+    "- Write approximately 500-700 words when the supplied information supports that length.\n" +
+    "- Use clear, professional news paragraphs.\n" +
+    "- Preserve all supported facts accurately.\n" +
+    "- Do not invent facts, quotes, names, numbers, dates, locations or events.\n" +
+    "- Do not mention AI, RSS, feeds, prompts or these instructions.\n" +
+    "- Do not include the original source URL.\n" +
+    "- Do not include external links.\n" +
+    "- Do not include a Source section.\n" +
+    "- Do not tell readers to visit another website.\n" +
+    "- Do not use clickbait or misleading wording.\n" +
+    "- If the supplied information is too limited for 500-700 words, write a shorter article rather than inventing details.\n\n" +
+    "CATEGORY:\n" +
+    article.category +
+    "\n\n" +
+    "ORIGINAL HEADLINE:\n" +
+    article.title +
+    "\n\n" +
+    "SOURCE INFORMATION:\n" +
+    article.content;
+
+  const response = await openai.responses.create({
+    model: "gpt-5.6-luna",
+    input: prompt,
+  });
+
+  const text = response.output_text?.trim();
+
+  if (!text) {
+    throw new Error("OpenAI returned an empty response");
+  }
+
+  let parsed: { headline?: string; article?: string };
+
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    const cleaned = text
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
+    parsed = JSON.parse(cleaned);
+  }
+
+  const headline = parsed.headline?.trim();
+  const articleText = parsed.article?.trim();
+
+  if (!headline || !articleText) {
+    throw new Error(
+      "OpenAI response did not contain headline and article"
+    );
+  }
+
+  return {
+    headline,
+    article: articleText,
+  };
+}
+
 export async function GET() {
   try {
     const { data: articles, error } = await supabase
@@ -18,7 +97,7 @@ export async function GET() {
       .select("title,content,category,source_url")
       .eq("Published", false)
       .not("source_url", "is", null)
-      .limit(5);
+      .limit(3);
 
     if (error) {
       return NextResponse.json(
@@ -27,103 +106,55 @@ export async function GET() {
       );
     }
 
-    let generated = 0;
-
-    for (const article of articles ?? []) {
-      const prompt = `
-You are the senior editor of JNMulee News.
-
-Transform the supplied news information into a completely original,
-professional news article.
-
-RULES:
-
-- Create a completely NEW headline.
-- Do NOT reproduce the original headline.
-- Do NOT copy sentences or paragraphs.
-- Do NOT write an RSS-style short summary.
-- Write approximately 500-700 words when enough information is available.
-- Use clear paragraphs.
-- Keep every factual detail accurate.
-- Do not invent facts, names, quotes, numbers, dates or events.
-- Do not mention AI, RSS, feeds or these instructions.
-- Do not include the original source URL.
-- Do not include external links.
-- Do not include a Source section.
-- Do not tell readers to visit another website.
-- Do not use clickbait.
-- Return ONLY the new headline followed by the article.
-
-CATEGORY:
-${article.category}
-
-ORIGINAL HEADLINE:
-${article.title}
-
-SOURCE INFORMATION:
-${article.content}
-`;
-
-      const response = await openai.responses.create({
-        model: "gpt-5.6-luna",
-        input: prompt,
+    if (!articles || articles.length === 0) {
+      return NextResponse.json({
+        success: true,
+        generated: 0,
+        message:
+          "No unpublished RSS articles are waiting for rewriting.",
       });
+    }
 
-      const generatedText = response.output_text?.trim();
+    let generated = 0;
+    const errors: string[] = [];
 
-      if (!generatedText) {
-        continue;
-      }
+    for (const article of articles) {
+      try {
+        const rewritten = await rewriteArticle(article);
 
-      const lines = generatedText
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean);
+        const { error: updateError } = await supabase
+          .from("news")
+          .update({
+            title: rewritten.headline,
+            content: rewritten.article,
+            Published: false,
+          })
+          .eq("source_url", article.source_url);
 
-      if (lines.length === 0) {
-        continue;
-      }
+        if (updateError) {
+          throw new Error(updateError.message);
+        }
 
-      const newTitle = lines[0]
-        .replace(/^#+\s*/, "")
-        .replace(/^["']|["']$/g, "")
-        .trim();
-
-      const newContent = lines
-        .slice(1)
-        .join("\n\n")
-        .trim();
-
-      if (!newTitle || !newContent) {
-        continue;
-      }
-
-      const { error: updateError } = await supabase
-        .from("news")
-        .update({
-          title: newTitle,
-          content: newContent,
-          Published: false,
-        })
-        .eq("source_url", article.source_url);
-
-      if (updateError) {
-        return NextResponse.json(
-          { error: updateError.message },
-          { status: 500 }
+        generated++;
+      } catch (error) {
+        errors.push(
+          error instanceof Error
+            ? error.message
+            : "Unknown generation error"
         );
       }
-
-      generated++;
     }
 
     return NextResponse.json({
-      success: true,
+      success: errors.length === 0,
       generated,
+      attempted: articles.length,
+      errors,
     });
   } catch (error) {
     return NextResponse.json(
       {
+        success: false,
         error:
           error instanceof Error
             ? error.message
