@@ -29,13 +29,22 @@ function stripHtml(text: string) {
 function getImage(item: string) {
   const decoded = decodeHtml(item);
 
-  // Sahara Reporters / RSS media image
+  // RSS media image
   const mediaContent = decoded.match(
     /<media:content[^>]+url=["']([^"']+)["']/i
   );
 
   if (mediaContent?.[1]) {
     return mediaContent[1];
+  }
+
+  // RSS media thumbnail
+  const mediaThumbnail = decoded.match(
+    /<media:thumbnail[^>]+url=["']([^"']+)["']/i
+  );
+
+  if (mediaThumbnail?.[1]) {
+    return mediaThumbnail[1];
   }
 
   // RSS enclosure image
@@ -56,7 +65,7 @@ function getImage(item: string) {
     return img[1];
   }
 
-  // Try property="schema:image"
+  // Try schema:image
   const schemaImage = decoded.match(
     /property=["']schema:image["'][^>]+src=["']([^"']+)["']/i
   );
@@ -97,6 +106,7 @@ export async function GET() {
     }
 
     let added = 0;
+    let skippedNoImage = 0;
 
     for (const source of sources ?? []) {
       try {
@@ -149,64 +159,4 @@ export async function GET() {
             continue;
           }
 
-          const { data: existing, error: duplicateError } =
-            await supabase
-              .from("news")
-              .select("id")
-              .eq("source_url", link)
-              .maybeSingle();
-
-          if (duplicateError) {
-            continue;
-          }
-
-          if (existing) {
-            continue;
-          }
-
-          const imageUrl = getImage(
-            `${item}\n${description}`
-          );
-
-          const content =
-            stripHtml(description) ||
-            `Read the latest story from ${source.name}.`;
-
-          const { error: insertError } =
-            await supabase.from("news").insert({
-              title,
-              slug: makeSlug(title),
-              content,
-              image_url: imageUrl,
-              source_url: link,
-              category: source.category,
-              Published: true,
-            });
-
-          if (insertError) {
-            continue;
-          }
-
-          added++;
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      added,
-    });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unknown error",
-      },
-      { status: 500 }
-    );
-  }
-}
+          const { data:
