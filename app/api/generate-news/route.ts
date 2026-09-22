@@ -53,7 +53,6 @@ export async function GET() {
       if (!response.ok) continue;
 
       const xml = await response.text();
-
       const items = [...xml.matchAll(/<item[\s\S]*?<\/item>/gi)];
 
       for (const match of items.slice(0, 10)) {
