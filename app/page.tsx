@@ -16,6 +16,9 @@ export default async function Home() {
     .order("created_at", { ascending: false })
     .limit(20);
 
+  const featured = news?.[0];
+  const latest = news?.slice(1) ?? [];
+
   return (
     <main>
       <header className="header">
@@ -24,8 +27,10 @@ export default async function Home() {
             JNMulee <span>News</span>
           </Link>
 
-          <nav className="mainNav">
-            <Link href="/">Home</Link>
+          <nav className="mainNav" aria-label="Main navigation">
+            <Link className="active" href="/">
+              Home
+            </Link>
             <Link href="/category/world">World</Link>
             <Link href="/category/business">Business</Link>
             <Link href="/category/technology">Technology</Link>
@@ -35,84 +40,173 @@ export default async function Home() {
       </header>
 
       <section className="hero">
-        <div className="container">
-          <p className="eyebrow">JNMulee News</p>
+        <div className="container heroInner">
+          <div className="heroCopy">
+            <p className="eyebrow">JNMulee News</p>
 
-          <h1>News that keeps you informed.</h1>
+            <h1>
+              Stay informed.
+              <br />
+              <span>Know what matters.</span>
+            </h1>
 
-          <p className="lead">
-            Fast, readable coverage across world news, business,
-            technology and more.
-          </p>
+            <p className="lead">
+              Breaking stories, world news, business and technology —
+              presented clearly and updated regularly.
+            </p>
+          </div>
 
-          <div className="search">
-            <input placeholder="Search JNMulee News..." />
-            <button type="button">Search</button>
+          <div className="heroPanel">
+            <span>NEWSROOM</span>
+
+            <strong>Latest stories, all in one place.</strong>
+
+            <p>
+              Follow the stories shaping conversations around the world.
+            </p>
           </div>
         </div>
       </section>
 
       <section className="container section">
         <div className="sectionTitle">
-          <h2>Latest stories</h2>
-          <span>Updated regularly</span>
+          <div>
+            <p className="sectionKicker">TOP STORIES</p>
+            <h2>What’s happening now</h2>
+          </div>
+
+          <span className="updated">Updated regularly</span>
         </div>
 
         {error ? (
-          <p>Unable to load news right now.</p>
-        ) : !news || news.length === 0 ? (
-          <p>No news articles available yet.</p>
-        ) : (
-          <div className="grid">
-            {news.map((story, i) => (
-              <article
-                className={i === 0 ? "card featured" : "card"}
-                key={story.id}
-              >
-                {story.image_url ? (
-                  <img
-                    src={story.image_url}
-                    alt={story.title}
-                    style={{
-                      width: "100%",
-                      height: 220,
-                      objectFit: "cover",
-                      borderRadius: 12,
-                    }}
-                  />
-                ) : (
-                  <div className="placeholder">JNMulee News</div>
-                )}
-
-                <p className="category">{story.category}</p>
-
-                <h3>
-                  <Link href={`/news/${story.slug}`}>
-                    {story.title}
-                  </Link>
-                </h3>
-
-                <p>
-                  {story.content
-                    ? story.content.substring(0, 180)
-                    : "Read the latest story from JNMulee News."}
-                  ...
-                </p>
-
-                <small>
-                  <Link href={`/news/${story.slug}`}>
-                    Read more →
-                  </Link>
-                </small>
-              </article>
-            ))}
+          <div className="emptyState">
+            Unable to load news right now.
           </div>
+        ) : !news || news.length === 0 ? (
+          <div className="emptyState">
+            No news articles available yet.
+          </div>
+        ) : (
+          <>
+            {featured && (
+              <article className="featuredStory">
+                <Link
+                  href={`/news/${featured.slug}`}
+                  className="featuredImage"
+                >
+                  <img
+                    src={featured.image_url}
+                    alt={featured.title}
+                  />
+
+                  <span className="imageBadge">
+                    Top Story
+                  </span>
+                </Link>
+
+                <div className="featuredContent">
+                  <p className="category">
+                    {featured.category || "News"}
+                  </p>
+
+                  <h3>
+                    <Link href={`/news/${featured.slug}`}>
+                      {featured.title}
+                    </Link>
+                  </h3>
+
+                  <p className="excerpt">
+                    {featured.content
+                      ? featured.content.substring(0, 260)
+                      : "Read the latest story from JNMulee News."}
+                    …
+                  </p>
+
+                  <Link
+                    className="readMore"
+                    href={`/news/${featured.slug}`}
+                  >
+                    Read full story <span>→</span>
+                  </Link>
+                </div>
+              </article>
+            )}
+
+            <div className="latestHeader">
+              <h2>Latest News</h2>
+              <div className="latestLine" />
+            </div>
+
+            <div className="grid">
+              {latest.map((story) => (
+                <article className="card" key={story.id}>
+                  <Link
+                    href={`/news/${story.slug}`}
+                    className="cardImage"
+                  >
+                    <img
+                      src={story.image_url}
+                      alt={story.title}
+                    />
+                  </Link>
+
+                  <div className="cardBody">
+                    <p className="category">
+                      {story.category || "News"}
+                    </p>
+
+                    <h3>
+                      <Link href={`/news/${story.slug}`}>
+                        {story.title}
+                      </Link>
+                    </h3>
+
+                    <p className="cardExcerpt">
+                      {story.content
+                        ? story.content.substring(0, 120)
+                        : "Read the latest story from JNMulee News."}
+                      …
+                    </p>
+
+                    <Link
+                      className="readMore"
+                      href={`/news/${story.slug}`}
+                    >
+                      Read more <span>→</span>
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
         )}
       </section>
 
       <footer>
-        <div className="container">
-          © {new Date().getFullYear()} JNMulee News. All rights reserved.
+        <div className="container footerInner">
+          <div>
+            <Link
+              className="brand footerBrand"
+              href="/"
+            >
+              JNMulee <span>News</span>
+            </Link>
+
+            <p>News that keeps you informed.</p>
+          </div>
+
+          <div className="footerLinks">
+            <Link href="/category/world">World</Link>
+            <Link href="/category/business">Business</Link>
+            <Link href="/category/technology">
+              Technology
+            </Link>
+          </div>
+
+          <small>
+            © {new Date().getFullYear()} JNMulee News.
+            All rights reserved.
+          </small>
         </div>
       </footer>
     </main>
