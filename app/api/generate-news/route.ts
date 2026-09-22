@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
@@ -31,75 +32,14 @@ export async function GET() {
 
     for (const article of articles ?? []) {
       const prompt = `
-You are the senior editor for JNMulee News.
+You are the senior editor of JNMulee News.
 
-Create an original news report based ONLY on the supplied information.
+Your task is to transform the supplied news information into a completely original,
+professional news article for JNMulee News.
 
-Rules:
-- Do not copy the source word-for-word.
-- Do not invent facts, quotes, names, numbers, or events.
-- Keep all important facts accurate.
-- Create a clear factual headline.
-- Write approximately 400-600 words.
-- Use short paragraphs.
-- Do not mention AI.
-- At the end, include the original source link.
+IMPORTANT RULES:
 
-CATEGORY:
-${article.category}
-
-HEADLINE:
-${article.title}
-
-SOURCE INFORMATION:
-${article.content}
-
-ORIGINAL SOURCE:
-${article.source_url}
-`;
-
-      const response = await openai.responses.create({
-        model: "gpt-5.6-luna",
-        input: prompt,
-      });
-
-      const generatedText = response.output_text?.trim();
-
-      if (!generatedText) {
-        continue;
-      }
-
-      const { error: updateError } = await supabase
-        .from("news")
-        .update({
-          content: generatedText,
-          Published: false,
-        })
-        .eq("source_url", article.source_url);
-
-      if (updateError) {
-        return NextResponse.json(
-          { error: updateError.message },
-          { status: 500 }
-        );
-      }
-
-      generated++;
-    }
-
-    return NextResponse.json({
-      success: true,
-      generated,
-    });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unknown error",
-      },
-      { status: 500 }
-    );
-  }
-}
+1. Do NOT copy sentences or paragraphs from the supplied material.
+2. Do NOT reproduce the original headline.
+3. Create a NEW, original headline that accurately describes the story.
+4. Do NOT invent facts, quotes
