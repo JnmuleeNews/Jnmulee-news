@@ -92,7 +92,6 @@ export default function AdminPage() {
 
   async function addSource(e: React.FormEvent) {
     e.preventDefault();
-
     setSaving(true);
 
     const { error } = await supabase.from("sources").insert({
@@ -117,7 +116,6 @@ export default function AdminPage() {
 
   async function addAd(e: React.FormEvent) {
     e.preventDefault();
-
     setAdSaving(true);
 
     const { error } = await supabase.from("direct_ads").insert({
@@ -233,4 +231,218 @@ export default function AdminPage() {
 
         <p>
           Add adverts from businesses or personal advertisers. Once added,
-          the advert will appear automatically in
+          the advert will appear automatically in the selected position.
+        </p>
+
+        <form className="form" onSubmit={addAd}>
+          <label>Advertiser / Advert Title</label>
+
+          <input
+            value={adTitle}
+            onChange={(e) => setAdTitle(e.target.value)}
+            placeholder="Example: ABC Fashion"
+            required
+          />
+
+          <label>Advert Image URL</label>
+
+          <input
+            type="url"
+            value={adImageUrl}
+            onChange={(e) => setAdImageUrl(e.target.value)}
+            placeholder="https://example.com/banner.jpg"
+            required
+          />
+
+          <label>Advertiser Website / Destination URL</label>
+
+          <input
+            type="url"
+            value={adLinkUrl}
+            onChange={(e) => setAdLinkUrl(e.target.value)}
+            placeholder="https://example.com"
+            required
+          />
+
+          <label>Where should the advert appear?</label>
+
+          <select
+            value={adPlacement}
+            onChange={(e) =>
+              setAdPlacement(
+                e.target.value as DirectAd["placement"]
+              )
+            }
+          >
+            <option value="home_top">
+              Homepage — Top
+            </option>
+
+            <option value="home_between">
+              Homepage — Between Stories
+            </option>
+
+            <option value="home_bottom">
+              Homepage — Bottom
+            </option>
+
+            <option value="article_top">
+              Article — Top
+            </option>
+
+            <option value="article_middle">
+              Article — Middle
+            </option>
+
+            <option value="article_bottom">
+              Article — Bottom
+            </option>
+          </select>
+
+          <button type="submit" disabled={adSaving}>
+            {adSaving ? "Saving Advert..." : "Add Advert"}
+          </button>
+        </form>
+
+        <h2>Current Personal Adverts</h2>
+
+        {loading ? (
+          <p>Loading adverts...</p>
+        ) : ads.length === 0 ? (
+          <p>No personal adverts added yet.</p>
+        ) : (
+          <div className="form">
+            {ads.map((ad) => (
+              <div key={ad.id}>
+                <strong>{ad.title}</strong>
+
+                <p>
+                  Placement:{" "}
+                  {ad.placement.replaceAll("_", " ")}
+                </p>
+
+                <p>
+                  Status:{" "}
+                  {ad.active ? "Active" : "Inactive"}
+                </p>
+
+                <img
+                  src={ad.image_url}
+                  alt={ad.title}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    maxWidth: 500,
+                    maxHeight: 180,
+                    objectFit: "cover",
+                    borderRadius: 8,
+                    margin: "10px 0",
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    toggleAd(ad.id, ad.active)
+                  }
+                >
+                  {ad.active
+                    ? "Deactivate"
+                    : "Activate"}
+                </button>
+
+                {" "}
+
+                <button
+                  type="button"
+                  onClick={() => deleteAd(ad.id)}
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <h2>News Sources</h2>
+
+        <form className="form" onSubmit={addSource}>
+          <label>Source name</label>
+
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Example News"
+            required
+          />
+
+          <label>RSS / Feed URL</label>
+
+          <input
+            value={feedUrl}
+            onChange={(e) => setFeedUrl(e.target.value)}
+            placeholder="https://example.com/feed"
+            required
+          />
+
+          <label>Category</label>
+
+          <select
+            value={category}
+            onChange={(e) =>
+              setCategory(e.target.value)
+            }
+          >
+            <option>Top Stories</option>
+            <option>Nigeria</option>
+            <option>World</option>
+            <option>Business</option>
+            <option>Technology</option>
+            <option>Sports</option>
+            <option>Entertainment</option>
+          </select>
+
+          <button type="submit" disabled={saving}>
+            {saving ? "Saving..." : "Add Source"}
+          </button>
+        </form>
+
+        <h2>Connected Sources</h2>
+
+        {loading ? (
+          <p>Loading sources...</p>
+        ) : sources.length === 0 ? (
+          <p>No sources connected yet.</p>
+        ) : (
+          <div className="form">
+            {sources.map((source) => (
+              <div key={source.id}>
+                <strong>{source.name}</strong>
+
+                <p>{source.feed_url}</p>
+
+                <p>{source.category}</p>
+
+                <p>
+                  Status:{" "}
+                  {source.active
+                    ? "Active"
+                    : "Inactive"}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    deleteSource(source.id)
+                  }
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
