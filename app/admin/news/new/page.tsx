@@ -15,6 +15,7 @@ function makeSlug(value: string) {
 
 export default function NewNewsPage() {
   const router = useRouter();
+
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [content, setContent] = useState("");
@@ -26,10 +27,13 @@ export default function NewNewsPage() {
 
   async function saveNews(e: React.FormEvent) {
     e.preventDefault();
+
     setSaving(true);
     setError("");
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (!user) {
       router.replace("/admin/login");
@@ -44,7 +48,7 @@ export default function NewNewsPage() {
       content: content.trim(),
       category,
       image_url: imageUrl.trim() || null,
-      Published: published
+      published,
     });
 
     setSaving(false);
