@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import DirectAd from "@/components/DirectAd";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -144,7 +145,6 @@ export default async function Article({ params }: Props) {
       </header>
 
       <article className="container article">
-
         {/* Category */}
         <p className="category">
           {story.category || "News"}
@@ -157,6 +157,9 @@ export default async function Article({ params }: Props) {
         <p className="meta">
           Published by JNMulee News • {formatDate(story.created_at)}
         </p>
+
+        {/* Top Advertisement */}
+        <DirectAd placement="article_top" />
 
         {/* Main image */}
         {imageUrl && (
@@ -172,6 +175,9 @@ export default async function Article({ params }: Props) {
             }}
           />
         )}
+
+        {/* Middle Advertisement */}
+        <DirectAd placement="article_middle" />
 
         {/* Article */}
         <div className="articleBody">
@@ -190,6 +196,9 @@ export default async function Article({ params }: Props) {
             </p>
           )}
         </div>
+
+        {/* Bottom Advertisement */}
+        <DirectAd placement="article_bottom" />
 
         {/* COMMENTS */}
         <section
@@ -379,7 +388,6 @@ export default async function Article({ params }: Props) {
             </a>
           </section>
         )}
-
       </article>
     </main>
   );
