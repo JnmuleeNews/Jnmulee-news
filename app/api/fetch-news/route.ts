@@ -27,20 +27,20 @@ function cleanText(value: string | null | undefined) {
     .replace(/<[^>]*>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function makeSlug(title: string) {
-  return (
-    title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 180) +
-    "-" +
-    Date.now()
-  );
+  const base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 180);
+
+  return `${base}-${Date.now()}`;
 }
 
 function xmlValue(item: string, tag: string) {
@@ -120,7 +120,7 @@ function classifyCategory(
   }
 
   if (
-    /\b(crypto|bitcoin|ethereum|blockchain|binance|coinbase|token|defi|nft)\b/i.test(
+    /\b(crypto|bitcoin|ethereum|blockchain|binance|coinbase|token|defi|nft|altcoin|solana|xrp)\b/i.test(
       text
     )
   ) {
@@ -128,7 +128,7 @@ function classifyCategory(
   }
 
   if (
-    /\b(football|soccer|sport|arsenal|chelsea|manchester|liverpool|barcelona|real madrid|nba|nfl|tennis|boxing|ufc|afcon|fifa)\b/i.test(
+    /\b(football|soccer|sport|arsenal|chelsea|manchester|liverpool|barcelona|real madrid|nba|nfl|tennis|boxing|ufc|afcon|fifa|champions league|premier league)\b/i.test(
       text
     )
   ) {
@@ -136,7 +136,7 @@ function classifyCategory(
   }
 
   if (
-    /\b(technology|technology news|tech|artificial intelligence|iphone|android|google|microsoft|apple|meta|software|cybersecurity|startup|chip)\b/i.test(
+    /\b(technology|tech|artificial intelligence|ai|iphone|android|google|microsoft|apple|meta|software|cybersecurity|startup|chip|robot|robotics|semiconductor)\b/i.test(
       text
     )
   ) {
@@ -144,7 +144,7 @@ function classifyCategory(
   }
 
   if (
-    /\b(business|economy|economic|market|markets|stock|stocks|finance|bank|banking|investment|investor|company|companies|oil price|naira)\b/i.test(
+    /\b(business|economy|economic|market|markets|stock|stocks|finance|bank|banking|investment|investor|company|companies|oil price|naira|inflation|trade|trading)\b/i.test(
       text
     )
   ) {
@@ -152,7 +152,7 @@ function classifyCategory(
   }
 
   if (
-    /\b(politics|political|president|governor|senate|senator|election|minister|house of representatives|campaign|party|apc|pdp|labour party)\b/i.test(
+    /\b(politics|political|president|governor|senate|senator|election|minister|house of representatives|campaign|party|apc|pdp|labour party|government|legislator)\b/i.test(
       text
     )
   ) {
@@ -160,7 +160,7 @@ function classifyCategory(
   }
 
   if (
-    /\b(entertainment|music|movie|film|actor|actress|celebrity|singer|album|concert|award|hollywood|nollywood)\b/i.test(
+    /\b(entertainment|music|movie|film|actor|actress|celebrity|singer|album|concert|award|hollywood|nollywood|music star)\b/i.test(
       text
     )
   ) {
@@ -168,7 +168,7 @@ function classifyCategory(
   }
 
   if (
-    /\b(gossip|rumour|rumor|relationship|dating|breakup|marriage|controversy)\b/i.test(
+    /\b(gossip|rumour|rumor|relationship|dating|breakup|marriage|controversy|love life)\b/i.test(
       text
     )
   ) {
@@ -176,7 +176,7 @@ function classifyCategory(
   }
 
   if (
-    /\b(nigeria|nigerian|lagos|abuja|anambra|enugu|imo|delta|rivers|kaduna|kano|oyo)\b/i.test(
+    /\b(nigeria|nigerian|lagos|abuja|anambra|enugu|imo|delta|rivers|kaduna|kano|oyo|onitsha|port harcourt|ibadan|benin city)\b/i.test(
       text
     )
   ) {
@@ -184,7 +184,7 @@ function classifyCategory(
   }
 
   if (
-    /\b(world|international|america|american|united states|uk|britain|british|europe|european|china|russia|ukraine|israel|palestine|india)\b/i.test(
+    /\b(world|international|america|american|united states|uk|britain|british|europe|european|china|russia|ukraine|israel|palestine|india|canada|australia|france|germany)\b/i.test(
       text
     )
   ) {
@@ -285,10 +285,7 @@ export async function GET() {
           source.feed_url
         );
 
-        for (const rawItem of items.slice(
-          0,
-          20
-        )) {
+        for (const rawItem of items.slice(0, 20)) {
           processed++;
 
           const title = cleanText(
@@ -301,14 +298,8 @@ export async function GET() {
             "";
 
           const description = cleanText(
-            xmlValue(
-              rawItem,
-              "description"
-            ) ||
-              xmlValue(
-                rawItem,
-                "content:encoded"
-              )
+            xmlValue(rawItem, "description") ||
+              xmlValue(rawItem, "content:encoded")
           );
 
           if (!title || !link) {
@@ -318,8 +309,7 @@ export async function GET() {
 
           /*
            * NO IMAGE = NO INSERT
-           * This guarantees that an article
-           * without an image cannot be published.
+           * Stories without a valid image are completely skipped.
            */
           const imageUrl =
             extractImage(rawItem);
@@ -330,10 +320,11 @@ export async function GET() {
           }
 
           /*
-           * Prevent duplicate stories.
+           * Prevent duplicate stories using source URL.
            */
           const {
             data: duplicate,
+            error: duplicateError,
           } = await supabase
             .from("news")
             .select("id")
@@ -341,14 +332,20 @@ export async function GET() {
             .limit(1)
             .maybeSingle();
 
+          if (duplicateError) {
+            errors.push(
+              `${title}: ${duplicateError.message}`
+            );
+            continue;
+          }
+
           if (duplicate) {
             skipped++;
             continue;
           }
 
           /*
-           * Automatically categorize
-           * the imported article.
+           * Automatically categorize the story.
            */
           const category =
             classifyCategory(
@@ -358,9 +355,9 @@ export async function GET() {
             );
 
           /*
-           * Imported stories are NOT automatically
-           * published. They remain unpublished until
-           * your publishing workflow approves them.
+           * Publish automatically.
+           * The Supabase database trigger still prevents
+           * publication if image_url is empty.
            */
           const {
             error: insertError,
@@ -372,7 +369,7 @@ export async function GET() {
               content:
                 description || title,
               image_url: imageUrl,
-              Published: false,
+              Published: true,
               source_url: link,
               category,
             });
@@ -385,6 +382,7 @@ export async function GET() {
           }
 
           generated++;
+          published++;
         }
       } catch (error) {
         errors.push(
@@ -406,7 +404,7 @@ export async function GET() {
       skippedNoImage,
       errors,
       message:
-        "Feed import completed successfully. Articles without images were skipped and new articles were automatically categorized.",
+        "Feed import completed. Stories with images were automatically categorized and published. Stories without images were skipped.",
     });
   } catch (error) {
     return NextResponse.json(
