@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
 import DirectAd from "@/components/DirectAd";
 
@@ -13,125 +12,328 @@ const supabase = createClient(
 
 const categories = [
   { name: "Top Stories", slug: "news" },
-  { name: "Sports", slug: "sport" },
+  { name: "Nigeria", slug: "nigeria" },
+  { name: "World", slug: "world" },
+  { name: "Business", slug: "business" },
+  { name: "Technology", slug: "technology" },
+  { name: "Sports", slug: "sports" },
   { name: "Entertainment", slug: "entertainment" },
   { name: "Gossip", slug: "gossip" },
-  { name: "Business", slug: "business" },
-  { name: "Crypto", slug: "crypto" },
+  { name: "Politics", slug: "politics" },
+  { name: "Crypto", slug: "crypto" }
 ];
 
+function cleanText(text: string | null | undefined) {
+  if (!text) return "";
+  return text.replace(/<[^>]*>/g, "").trim();
+}
+
+function shortText(text: string | null | undefined, length = 150) {
+  const value = cleanText(text);
+  if (value.length <= length) return value;
+  return value.slice(0, length).trim() + "...";
+}
+
 export default async function HomePage() {
-  const { data: stories } = await supabase
+  const { data: stories, error } = await supabase
     .from("news")
     .select(
-      "id,title,slug,content,image_url,Published,source_url,category,created_at"
+      "id,title,slug,content,image_url,category,created_at"
     )
     .eq("Published", true)
     .not("image_url", "is", null)
     .neq("image_url", "")
     .order("created_at", { ascending: false })
-    .limit(30);
+    .limit(60);
 
-  const posts = stories || [];
+  if (error) {
+    return (
+      <main className="dashboardPage">
+        <section className="section">
+          <div className="container">
+            <div className="emptyState">
+              <h2>Unable to load news</h2>
+              <p>Please try again later.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  const allStories = stories || [];
+  const featured = allStories[0];
+
+  const getCategoryStories = (slug: string) => {
+    return allStories
+      .filter((story) => {
+        const category = (story.category || "").toLowerCase();
+
+        if (slug === "news") {
+          return [
+            "news",
+            "top stories",
+            "top story",
+            "general"
+          ].includes(category);
+        }
+
+        if (slug === "sports") {
+          return category === "sports" || category === "sport";
+        }
+
+        return category === slug;
+      })
+      .slice(0, 4);
+  };
 
   return (
-    <main>
-      <header className="siteHeader">
-        <div className="container headerInner">
-          <Link href="/" className="logo">
-            JNMulee News
+    <>
+      <header className="header">
+        <div className="container nav">
+          <Link href="/" className="brand">
+            JNMulee<span>News</span>
           </Link>
 
-          <nav>
+          <nav className="mainNav">
             <Link href="/">Home</Link>
-            <Link href="/search">Search</Link>
-            {categories.map((category) => (
-              <Link key={category.slug} href={`/category/${category.slug}`}>
-                {category.name}
-              </Link>
-            ))}
-            <Link href="/ads">Ads</Link>
-          </nav>
-        </div>
-      </header>
 
-      <div className="container">
-        <DirectAd slot="home_top" />
-
-        <section className="heroSection">
-          <h1>Latest News</h1>
-
-          {posts.length === 0 ? (
-            <div className="emptyState">
-              <h2>No published stories yet</h2>
-              <p>New stories will appear here when they have images.</p>
-            </div>
-          ) : (
-            <div className="newsGrid">
-              {posts.map((story) => (
-                <article className="newsCard" key={story.id}>
-                  <Link href={`/news/${story.slug}`}>
-                    <div className="newsImage">
-                      <Image
-                        src={story.image_url!}
-                        alt={story.title}
-                        fill
-                        sizes="(max-width: 768px) 100vw, 33vw"
-                      />
-                    </div>
-
-                    <div className="newsCardBody">
-                      <span className="categoryLabel">
-                        {story.category}
-                      </span>
-
-                      <h2>{story.title}</h2>
-
-                      <p>
-                        {story.content?.slice(0, 150)}
-                        {story.content?.length > 150 ? "..." : ""}
-                      </p>
-                    </div>
-                  </Link>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <DirectAd slot="home_between" />
-
-        <section className="categoryLinks">
-          <h2>Explore JNMulee News</h2>
-
-          <div className="categoryGrid">
-            {categories.map((category) => (
+            {categories.slice(1).map((category) => (
               <Link
-                href={`/category/${category.slug}`}
-                className="categoryBox"
                 key={category.slug}
+                href={`/category/${category.slug}`}
               >
                 {category.name}
               </Link>
             ))}
+          </nav>
+        </div>
+      </header>
+
+      <main>
+        <section className="hero">
+          <div className="container heroInner">
+            <div className="heroCopy">
+              <p className="eyebrow">JNMulee News</p>
+
+              <h1>
+                News that keeps you
+                <br />
+                informed.
+              </h1>
+
+              <p className="lead">
+                Latest news, breaking stories, sports,
+                business, technology, entertainment and more.
+              </p>
+            </div>
+
+            <div className="heroPanel">
+              <span>LIVE NEWS</span>
+              <strong>
+                Fresh stories from Nigeria and around the world.
+              </strong>
+              <p>
+                Stay updated with the latest headlines and
+                important stories as they happen.
+              </p>
+            </div>
           </div>
         </section>
 
-        <DirectAd slot="home_bottom" />
-      </div>
+        <section className="section">
+          <div className="container">
 
-      <footer className="siteFooter">
-        <div className="container">
-          <div className="footerLinks">
-            <Link href="/about">About</Link>
-            <Link href="/contact">Contact</Link>
-            <Link href="/privacy">Privacy Policy</Link>
-            <Link href="/terms">Terms</Link>
+            <div className="categoryBar">
+              {categories.map((category) => (
+                <Link
+                  key={category.slug}
+                  href={
+                    category.slug === "news"
+                      ? "/"
+                      : `/category/${category.slug}`
+                  }
+                  className="categoryPill"
+                >
+                  {category.name}
+                </Link>
+              ))}
+            </div>
+
+            <DirectAd placement="homepage" />
+
+            {featured && (
+              <>
+                <div className="sectionTitle">
+                  <div>
+                    <p className="sectionKicker">
+                      Latest
+                    </p>
+                    <h2>Top Story</h2>
+                  </div>
+                </div>
+
+                <article className="featuredStory">
+                  <Link
+                    href={`/news/${featured.slug}`}
+                    className="featuredImage"
+                  >
+                    <img
+                      src={featured.image_url}
+                      alt={featured.title}
+                    />
+
+                    <span className="imageBadge">
+                      {featured.category || "News"}
+                    </span>
+                  </Link>
+
+                  <div className="featuredContent">
+                    <p className="category">
+                      {featured.category || "News"}
+                    </p>
+
+                    <h3>
+                      <Link href={`/news/${featured.slug}`}>
+                        {featured.title}
+                      </Link>
+                    </h3>
+
+                    <p className="excerpt">
+                      {shortText(featured.content, 220)}
+                    </p>
+
+                    <Link
+                      href={`/news/${featured.slug}`}
+                      className="readMore"
+                    >
+                      Read full story →
+                    </Link>
+                  </div>
+                </article>
+              </>
+            )}
+
+            <DirectAd placement="homepage_ads" />
+
+            <div className="latestHeader">
+              <h2>Latest News</h2>
+              <div className="latestLine" />
+            </div>
+
+            <div className="grid">
+              {allStories.slice(1, 13).map((story) => (
+                <article className="card" key={story.id}>
+                  <Link
+                    href={`/news/${story.slug}`}
+                    className="cardImage"
+                  >
+                    <img
+                      src={story.image_url}
+                      alt={story.title}
+                    />
+                  </Link>
+
+                  <div className="cardBody">
+                    <p className="category">
+                      {story.category || "News"}
+                    </p>
+
+                    <h3>
+                      <Link href={`/news/${story.slug}`}>
+                        {story.title}
+                      </Link>
+                    </h3>
+
+                    <p className="excerpt">
+                      {shortText(story.content, 120)}
+                    </p>
+
+                    <Link
+                      href={`/news/${story.slug}`}
+                      className="readMore"
+                    >
+                      Read story →
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            {categories
+              .filter((category) => category.slug !== "news")
+              .map((category) => {
+                const categoryStories =
+                  getCategoryStories(category.slug);
+
+                if (categoryStories.length === 0) {
+                  return null;
+                }
+
+                return (
+                  <section
+                    className="categorySection"
+                    key={category.slug}
+                  >
+                    <div className="categorySectionHeader">
+                      <h2>{category.name}</h2>
+
+                      <Link
+                        href={`/category/${category.slug}`}
+                        className="viewCategory"
+                      >
+                        View all →
+                      </Link>
+                    </div>
+
+                    <div className="categoryGrid">
+                      {categoryStories.map((story) => (
+                        <article
+                          className="categoryCard"
+                          key={story.id}
+                        >
+                          <Link
+                            href={`/news/${story.slug}`}
+                            className="categoryCardImage"
+                          >
+                            <img
+                              src={story.image_url}
+                              alt={story.title}
+                            />
+                          </Link>
+
+                          <div className="categoryCardBody">
+                            <p className="category">
+                              {story.category}
+                            </p>
+
+                            <h3>
+                              <Link
+                                href={`/news/${story.slug}`}
+                              >
+                                {story.title}
+                              </Link>
+                            </h3>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
+
+            {!featured && (
+              <div className="emptyState">
+                <h2>No published stories yet</h2>
+                <p>
+                  Publish news with an image from the admin
+                  dashboard.
+                </p>
+              </div>
+            )}
           </div>
-
-          <p>© {new Date().getFullYear()} JNMulee News</p>
-        </div>
-      </footer>
-    </main>
+        </section>
+      </main>
+    </>
   );
 }
