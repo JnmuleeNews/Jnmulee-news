@@ -3,80 +3,117 @@ import Link from "next/link";
 export const metadata = {
   title: "Contact JNMulee News",
   description:
-    "Contact JNMulee News for questions, corrections, business inquiries and other matters.",
+    "Contact JNMulee News for news corrections, business inquiries, advertising, privacy requests, and general questions.",
 };
 
 export default function ContactPage() {
   return (
     <main>
-      <header className="siteHeader">
-        <div className="container headerInner">
-          <Link href="/" className="logo">
-            JNMulee News
+      <header className="header">
+        <div className="container nav">
+          <Link href="/" className="brand">
+            JNMulee<span>News</span>
           </Link>
 
-          <nav>
+          <nav className="mainNav">
             <Link href="/">Home</Link>
-            <Link href="/search">Search</Link>
-            <Link href="/category/news">News</Link>
-            <Link href="/category/sport">Sports</Link>
+            <Link href="/category/nigeria">Nigeria</Link>
+            <Link href="/category/world">World</Link>
+            <Link href="/category/business">Business</Link>
+            <Link href="/category/technology">
+              Technology
+            </Link>
+            <Link href="/category/sports">Sports</Link>
             <Link href="/category/entertainment">
               Entertainment
             </Link>
-            <Link href="/category/gossip">Gossip</Link>
-            <Link href="/category/business">Business</Link>
+            <Link href="/category/politics">Politics</Link>
             <Link href="/category/crypto">Crypto</Link>
           </nav>
         </div>
       </header>
 
-      <div className="container pageContainer">
-        <h1>Contact JNMulee News</h1>
+      <section className="section">
+        <div className="container">
+          <div className="pageContainer">
+            <p className="sectionKicker">
+              Get in touch
+            </p>
 
-        <p>
-          We welcome questions, feedback, corrections, business
-          inquiries, advertising inquiries, and other messages
-          concerning JNMulee News.
-        </p>
+            <h1>Contact JNMulee News</h1>
 
-        <h2>News Corrections</h2>
+            <p>
+              We welcome questions, news tips, corrections,
+              business inquiries, advertising inquiries,
+              privacy requests, and general feedback.
+            </p>
 
-        <p>
-          If you believe information published on JNMulee News is
-          inaccurate, please contact us with the article title and
-          details of the correction.
-        </p>
+            <h2>News Corrections</h2>
 
-        <h2>Business and Advertising</h2>
+            <p>
+              If you believe an article contains inaccurate
+              information, please provide the article title,
+              the specific information that needs correction,
+              and supporting information where available.
+            </p>
 
-        <p>
-          For advertising, partnerships, sponsorships, and other
-          business inquiries, please contact the JNMulee News team.
-        </p>
+            <h2>News Tips</h2>
 
-        <h2>General Inquiries</h2>
+            <p>
+              If you have information about a news event that
+              you believe should be reported, provide as much
+              useful information as possible and clearly
+              identify information that is confidential.
+            </p>
 
-        <p>
-          Please send us a clear description of your inquiry so that
-          we can properly review your message.
-        </p>
+            <h2>Business and Advertising</h2>
 
-        <div className="emptyState">
-          <h2>Contact information</h2>
+            <p>
+              Businesses and organizations can contact JNMulee
+              News regarding advertising, partnerships,
+              sponsorships, media opportunities, and other
+              commercial matters.
+            </p>
 
-          <p>
-            Email contact details will be published here when the
-            official JNMulee News contact address is available.
-          </p>
+            <h2>Privacy Requests</h2>
+
+            <p>
+              For privacy questions or requests concerning
+              personal information, please identify the
+              nature of your request clearly.
+            </p>
+
+            <div className="emptyState">
+              <h2>Contact form coming next</h2>
+
+              <p>
+                JNMulee News is preparing a secure contact
+                form for messages, news tips, corrections,
+                advertising inquiries, and privacy requests.
+              </p>
+
+              <p>
+                Please check back soon.
+              </p>
+            </div>
+
+            <p>
+              <Link href="/">
+                ← Back to JNMulee News
+              </Link>
+            </p>
+          </div>
         </div>
-      </div>
+      </section>
 
       <footer className="siteFooter">
         <div className="container">
           <div className="footerLinks">
             <Link href="/about">About</Link>
             <Link href="/contact">Contact</Link>
-            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/privacy">
+              Privacy Policy
+            </Link>
             <Link href="/terms">Terms</Link>
           </div>
 
