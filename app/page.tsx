@@ -48,46 +48,16 @@ const SITE_URL =
   "https://jnmulee-news.vercel.app";
 
 const categories = [
-  {
-    name: "Top Stories",
-    slug: "news",
-  },
-  {
-    name: "Nigeria",
-    slug: "nigeria",
-  },
-  {
-    name: "World",
-    slug: "world",
-  },
-  {
-    name: "Business",
-    slug: "business",
-  },
-  {
-    name: "Technology",
-    slug: "technology",
-  },
-  {
-    name: "Sports",
-    slug: "sports",
-  },
-  {
-    name: "Entertainment",
-    slug: "entertainment",
-  },
-  {
-    name: "Gossip",
-    slug: "gossip",
-  },
-  {
-    name: "Politics",
-    slug: "politics",
-  },
-  {
-    name: "Crypto",
-    slug: "crypto",
-  },
+  { name: "Top Stories", slug: "news" },
+  { name: "Nigeria", slug: "nigeria" },
+  { name: "World", slug: "world" },
+  { name: "Business", slug: "business" },
+  { name: "Technology", slug: "technology" },
+  { name: "Sports", slug: "sports" },
+  { name: "Entertainment", slug: "entertainment" },
+  { name: "Gossip", slug: "gossip" },
+  { name: "Politics", slug: "politics" },
+  { name: "Crypto", slug: "crypto" },
 ];
 
 type Story = {
@@ -98,6 +68,7 @@ type Story = {
   image_url: string | null;
   category: string | null;
   created_at: string | null;
+  view_count?: number | null;
 };
 
 function getExcerpt(
@@ -315,14 +286,16 @@ function CompactStory({
         <span
           style={{
             display: "block",
-            color: "#6b7280",
+            color: "#d7193f",
             fontSize: "11px",
-            marginTop: "6px",
+            fontWeight: 700,
+            marginTop: "4px",
           }}
         >
-          {formatDate(
-            story.created_at
-          )}
+          {Number(
+            story.view_count || 0
+          ).toLocaleString()}{" "}
+          views
         </span>
       </div>
     </Link>
@@ -334,7 +307,7 @@ export default async function HomePage() {
     await supabase
       .from("news")
       .select(
-        "id,title,slug,content,image_url,category,created_at"
+        "id,title,slug,content,image_url,category,created_at,view_count"
       )
       .eq("Published", true)
       .not("image_url", "is", null)
@@ -354,10 +327,25 @@ export default async function HomePage() {
     5
   );
 
-  const trending = latest.slice(
-    1,
-    7
-  );
+  const { data: trendingData } =
+    await supabase
+      .from("news")
+      .select(
+        "id,title,slug,content,image_url,category,created_at,view_count"
+      )
+      .eq("Published", true)
+      .not("image_url", "is", null)
+      .neq("image_url", "")
+      .order("view_count", {
+        ascending: false,
+      })
+      .order("created_at", {
+        ascending: false,
+      })
+      .limit(6);
+
+  const trending =
+    (trendingData || []) as Story[];
 
   const categoryStories: Record<
     string,
@@ -491,439 +479,4 @@ export default async function HomePage() {
             maxWidth: "1200px",
             margin: "0 auto",
             padding:
-              "10px 16px",
-            display: "flex",
-            gap: "9px",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {categories.map(
-            (category) => (
-              <Link
-                key={category.slug}
-                href={
-                  category.slug ===
-                  "news"
-                    ? "/"
-                    : `/category/${category.slug}`
-                }
-                style={{
-                  padding:
-                    "8px 13px",
-                  borderRadius:
-                    "999px",
-                  background:
-                    "#f3f4f6",
-                  color: "#111827",
-                  textDecoration:
-                    "none",
-                  fontSize: "13px",
-                  fontWeight: 700,
-                }}
-              >
-                {category.name}
-              </Link>
-            )
-          )}
-        </div>
-      </nav>
-
-      <main
-        style={{
-          maxWidth: "1200px",
-          margin: "0 auto",
-          padding:
-            "0 16px 60px",
-        }}
-      >
-        {breakingNews.length >
-        0 ? (
-          <section
-            aria-label="Breaking news"
-            style={{
-              marginTop: "18px",
-              background:
-                "#111827",
-              color: "#ffffff",
-              borderRadius: "10px",
-              overflow: "hidden",
-              display: "flex",
-              alignItems: "stretch",
-            }}
-          >
-            <div
-              style={{
-                background:
-                  "#d7193f",
-                padding:
-                  "12px 15px",
-                fontWeight: 900,
-                whiteSpace:
-                  "nowrap",
-                fontSize: "13px",
-              }}
-            >
-              🔴 BREAKING
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "28px",
-                padding:
-                  "0 16px",
-                overflowX: "auto",
-                whiteSpace:
-                  "nowrap",
-              }}
-            >
-              {breakingNews.map(
-                (story) => (
-                  <Link
-                    key={story.id}
-                    href={`/news/${story.slug}`}
-                    style={{
-                      color:
-                        "#ffffff",
-                      textDecoration:
-                        "none",
-                      fontSize:
-                        "13px",
-                      fontWeight:
-                        650,
-                    }}
-                  >
-                    {story.title}
-                  </Link>
-                )
-              )}
-            </div>
-          </section>
-        ) : null}
-
-        <section
-          style={{
-            paddingTop: "28px",
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns:
-                "minmax(0, 2fr) minmax(280px, 1fr)",
-              gap: "24px",
-            }}
-          >
-            {featured ? (
-              <StoryCard
-                story={featured}
-                large
-              />
-            ) : (
-              <div
-                style={{
-                  padding: "40px",
-                  border:
-                    "1px solid #e5e7eb",
-                  borderRadius: "14px",
-                }}
-              >
-                No news available yet.
-              </div>
-            )}
-
-            <aside
-              style={{
-                background:
-                  "#ffffff",
-                border:
-                  "1px solid #e5e7eb",
-                borderRadius:
-                  "14px",
-                padding:
-                  "18px",
-              }}
-            >
-              <h2
-                style={{
-                  margin:
-                    "0 0 8px",
-                  fontSize:
-                    "24px",
-                  fontWeight: 900,
-                }}
-              >
-                🔥 Trending
-              </h2>
-
-              <p
-                style={{
-                  margin:
-                    "0 0 4px",
-                  color:
-                    "#6b7280",
-                  fontSize:
-                    "12px",
-                }}
-              >
-                Latest stories readers
-                can catch up on.
-              </p>
-
-              <div>
-                {trending.map(
-                  (
-                    story,
-                    index
-                  ) => (
-                    <CompactStory
-                      key={story.id}
-                      story={story}
-                      number={
-                        index + 1
-                      }
-                    />
-                  )
-                )}
-              </div>
-            </aside>
-          </div>
-        </section>
-
-        <div
-          style={{
-            margin:
-              "28px 0",
-          }}
-        >
-          <DirectAd
-            placement="homepage"
-          />
-        </div>
-
-        <section>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent:
-                "space-between",
-              gap: "12px",
-              marginBottom:
-                "18px",
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontSize:
-                  "clamp(1.6rem, 4vw, 2rem)",
-                fontWeight: 900,
-              }}
-            >
-              Latest News
-            </h2>
-
-            <Link
-              href="/search"
-              style={{
-                color:
-                  "#d7193f",
-                textDecoration:
-                  "none",
-                fontWeight: 800,
-                fontSize:
-                  "13px",
-              }}
-            >
-              View all →
-            </Link>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns:
-                "repeat(4, minmax(0, 1fr))",
-              gap: "18px",
-            }}
-          >
-            {latest
-              .slice(1, 13)
-              .map((story) => (
-                <StoryCard
-                  key={story.id}
-                  story={story}
-                />
-              ))}
-          </div>
-        </section>
-
-        <div
-          style={{
-            margin:
-              "36px 0",
-          }}
-        >
-          <DirectAd
-            placement="home_between"
-          />
-        </div>
-
-        {categories
-          .filter(
-            (category) =>
-              category.slug !==
-              "news"
-          )
-          .map((category) => {
-            const stories =
-              categoryStories[
-                category.slug
-              ] || [];
-
-            if (!stories.length) {
-              return null;
-            }
-
-            return (
-              <section
-                key={
-                  category.slug
-                }
-                style={{
-                  marginTop:
-                    "42px",
-                }}
-              >
-                <div
-                  style={{
-                    display:
-                      "flex",
-                    alignItems:
-                      "center",
-                    justifyContent:
-                      "space-between",
-                    gap: "12px",
-                    marginBottom:
-                      "18px",
-                    borderBottom:
-                      "3px solid #d7193f",
-                    paddingBottom:
-                      "10px",
-                  }}
-                >
-                  <h2
-                    style={{
-                      margin: 0,
-                      fontSize:
-                        "clamp(1.4rem, 4vw, 1.9rem)",
-                      fontWeight:
-                        900,
-                    }}
-                  >
-                    {category.name}
-                  </h2>
-
-                  <Link
-                    href={`/category/${category.slug}`}
-                    style={{
-                      color:
-                        "#d7193f",
-                      textDecoration:
-                        "none",
-                      fontWeight:
-                        800,
-                      fontSize:
-                        "13px",
-                    }}
-                  >
-                    More →
-                  </Link>
-                </div>
-
-                <div
-                  style={{
-                    display:
-                      "grid",
-                    gridTemplateColumns:
-                      "repeat(4, minmax(0, 1fr))",
-                    gap: "18px",
-                  }}
-                >
-                  {stories.map(
-                    (story) => (
-                      <StoryCard
-                        key={
-                          story.id
-                        }
-                        story={
-                          story
-                        }
-                      />
-                    )
-                  )}
-                </div>
-              </section>
-            );
-          })}
-
-        <div
-          style={{
-            margin:
-              "45px 0 20px",
-          }}
-        >
-          <DirectAd
-            placement="home_bottom"
-          />
-        </div>
-      </main>
-
-      <style>{`
-        @media (max-width: 900px) {
-          main > section:first-of-type > div {
-            grid-template-columns: 1fr !important;
-          }
-
-          section[aria-label="Breaking news"] {
-            margin-left: 0;
-            margin-right: 0;
-          }
-        }
-
-        @media (max-width: 760px) {
-          main {
-            padding-left: 12px !important;
-            padding-right: 12px !important;
-          }
-
-          main > section:not([aria-label="Breaking news"]) {
-            width: 100%;
-          }
-
-          main section div[style*="repeat(4"] {
-            grid-template-columns:
-              repeat(2, minmax(0, 1fr)) !important;
-          }
-
-          nav div {
-            padding-left: 12px !important;
-            padding-right: 12px !important;
-          }
-        }
-
-        @media (max-width: 480px) {
-          main section div[style*="repeat(4"] {
-            grid-template-columns: 1fr !important;
-          }
-
-          h1 {
-            word-break: normal;
-          }
-        }
-      `}</style>
-    </>
-  );
-}
+              "10px
