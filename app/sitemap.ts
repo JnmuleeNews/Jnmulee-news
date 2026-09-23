@@ -1,6 +1,9 @@
 import { MetadataRoute } from "next";
 import { createClient } from "@supabase/supabase-js";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -9,42 +12,49 @@ const supabase = createClient(
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
-    "https://jnmulee-news.vercel.app";
+    "https://jnmulee-news-jnnation.vercel.app";
+
+  const now = new Date();
 
   const urls: MetadataRoute.Sitemap = [
     {
       url: baseUrl,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "hourly",
       priority: 1,
     },
+
     {
       url: `${baseUrl}/search`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "daily",
-      priority: 0.8,
+      priority: 0.7,
     },
+
     {
       url: `${baseUrl}/about`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "monthly",
       priority: 0.5,
     },
+
     {
       url: `${baseUrl}/contact`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "monthly",
       priority: 0.5,
     },
+
     {
       url: `${baseUrl}/privacy`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "monthly",
       priority: 0.3,
     },
+
     {
       url: `${baseUrl}/terms`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "monthly",
       priority: 0.3,
     },
@@ -52,38 +62,52 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const categories = [
     "news",
-    "sport",
+    "nigeria",
+    "world",
+    "business",
+    "technology",
+    "sports",
     "entertainment",
     "gossip",
-    "business",
+    "politics",
     "crypto",
   ];
 
   for (const category of categories) {
     urls.push({
       url: `${baseUrl}/category/${category}`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "hourly",
       priority: 0.8,
     });
   }
 
-  const { data: stories } = await supabase
+  const { data: stories, error } = await supabase
     .from("news")
-    .select("slug,created_at")
+    .select("slug,created_at,image_url")
     .eq("Published", true)
     .not("image_url", "is", null)
     .neq("image_url", "")
-    .order("created_at", { ascending: false })
+    .order("created_at", {
+      ascending: false,
+    })
     .limit(5000);
 
-  for (const story of stories || []) {
-    urls.push({
-      url: `${baseUrl}/news/${story.slug}`,
-      lastModified: new Date(story.created_at),
-      changeFrequency: "daily",
-      priority: 0.7,
-    });
+  if (!error) {
+    for (const story of stories || []) {
+      if (!story.slug) {
+        continue;
+      }
+
+      urls.push({
+        url: `${baseUrl}/news/${story.slug}`,
+        lastModified: story.created_at
+          ? new Date(story.created_at)
+          : now,
+        changeFrequency: "daily",
+        priority: 0.7,
+      });
+    }
   }
 
   return urls;
