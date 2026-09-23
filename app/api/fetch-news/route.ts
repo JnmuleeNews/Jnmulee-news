@@ -6,6 +6,19 @@ const supabase = createClient(
   process.env.SUPABASE_SECRET_KEY!
 );
 
+const allowedCategories = [
+  "Top Stories",
+  "News",
+  "World",
+  "Business",
+  "Technology",
+  "Sports",
+  "Gossip",
+  "Entertainment",
+  "Politics",
+  "Crypto",
+];
+
 function stripHtml(text: string) {
   return text
     .replace(/<[^>]*>/g, "")
@@ -47,7 +60,6 @@ function getTagValue(item: string, tag: string) {
 }
 
 function getImageUrl(item: string) {
-  // RSS enclosure
   const enclosure = item.match(
     /<enclosure[^>]+url=["']([^"']+)["'][^>]*>/i
   );
@@ -56,7 +68,6 @@ function getImageUrl(item: string) {
     return decodeXml(enclosure[1].trim());
   }
 
-  // Media RSS
   const mediaContent = item.match(
     /<media:content[^>]+url=["']([^"']+)["'][^>]*>/i
   );
@@ -65,7 +76,6 @@ function getImageUrl(item: string) {
     return decodeXml(mediaContent[1].trim());
   }
 
-  // media:thumbnail
   const thumbnail = item.match(
     /<media:thumbnail[^>]+url=["']([^"']+)["'][^>]*>/i
   );
@@ -74,7 +84,6 @@ function getImageUrl(item: string) {
     return decodeXml(thumbnail[1].trim());
   }
 
-  // image URL inside media:description/content
   const imageFromHtml = item.match(
     /<img[^>]+src=["']([^"']+)["']/i
   );
@@ -108,6 +117,10 @@ export async function GET() {
 
     for (const source of sources ?? []) {
       try {
+        const category = allowedCategories.includes(source.category)
+          ? source.category
+          : "Top Stories";
+
         const response = await fetch(source.feed_url, {
           headers: {
             "User-Agent": "JNMulee-News/1.0",
@@ -179,7 +192,7 @@ export async function GET() {
               content,
               image_url: imageUrl,
               source_url: link,
-              category: source.category,
+              category,
               Published: false,
             });
 
