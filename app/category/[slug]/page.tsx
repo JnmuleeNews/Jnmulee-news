@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
@@ -172,7 +171,10 @@ export default async function CategoryPage({
         }
 
         .jnm-image img {
+          width: 100%;
+          height: 100%;
           object-fit: cover;
+          display: block;
         }
 
         .jnm-card-body {
@@ -363,11 +365,12 @@ export default async function CategoryPage({
                 <Link href={`/news/${story.slug}`}>
                   {story.image_url && (
                     <div className="jnm-image">
-                      <Image
-                        src={story.image_url}
+                      <img
+                        src={`/api/image?url=${encodeURIComponent(
+                          story.image_url
+                        )}`}
                         alt={story.title}
-                        fill
-                        sizes="(max-width: 600px) 100vw, (max-width: 900px) 50vw, 33vw"
+                        loading="lazy"
                       />
                     </div>
                   )}
