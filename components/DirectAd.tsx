@@ -1,16 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
-type Placement =
-  | "home_top"
-  | "home_between"
-  | "home_bottom"
-  | "article"
-  | "article_top"
-  | "article_middle"
-  | "article_bottom";
-
 type Props = {
-  placement: Placement;
+  slot: string;
 };
 
 const supabase = createClient(
@@ -18,77 +9,55 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export default async function DirectAd({ placement }: Props) {
-  /*
-   * All homepage ad positions use either:
-   * - homepage
-   * - homepage_ads
-   *
-   * Ads Page uses:
-   * - ads_page
-   * - homepage_ads
-   */
+export default async function DirectAd({ slot }: Props) {
+  let placement = "";
 
-  const isHomepage =
-    placement === "home_top" ||
-    placement === "home_between" ||
-    placement === "home_bottom";
-
-  const placements = isHomepage
-    ? ["homepage", "homepage_ads"]
-    : ["ads_page", "homepage_ads"];
+  if (
+    slot === "home_top" ||
+    slot === "home_between" ||
+    slot === "home_bottom"
+  ) {
+    placement = "homepage";
+  } else if (
+    slot === "article_top" ||
+    slot === "article_between" ||
+    slot === "article_bottom"
+  ) {
+    placement = "article";
+  } else if (slot === "ads_page") {
+    placement = "ads_page";
+  } else {
+    placement = "homepage_ads";
+  }
 
   const { data: ads } = await supabase
     .from("direct_ads")
-    .select("id, title, image_url, link_url, placement")
-    .in("placement", placements)
+    .select("id,title,image_url,link_url")
     .eq("active", true)
-    .or("starts_at.is.null,starts_at.lte.now()")
-    .or("ends_at.is.null,ends_at.gte.now()")
+    .eq("placement", placement)
     .order("created_at", { ascending: false })
     .limit(1);
 
   const ad = ads?.[0];
 
-  if (!ad) {
+  if (!ad || !ad.image_url) {
     return null;
   }
 
   return (
-    <div
-      style={{
-        margin: "28px 0",
-        textAlign: "center",
-      }}
-    >
-      <p
-        style={{
-          fontSize: 11,
-          opacity: 0.6,
-          marginBottom: 8,
-          letterSpacing: 1,
-          textTransform: "uppercase",
-        }}
-      >
-        Advertisement
-      </p>
-
+    <div className={`directAd directAd-${slot}`}>
       <a
-        href={ad.link_url}
-        target="_blank"
-        rel="sponsored noopener noreferrer"
-        aria-label={ad.title}
+        href={ad.link_url || "#"}
+        target={ad.link_url ? "_blank" : undefined}
+        rel={
+          ad.link_url
+            ? "noopener noreferrer sponsored"
+            : undefined
+        }
       >
         <img
           src={ad.image_url}
-          alt={ad.title}
-          style={{
-            display: "block",
-            width: "100%",
-            maxHeight: 280,
-            objectFit: "cover",
-            borderRadius: 12,
-          }}
+          alt={ad.title || "Advertisement"}
         />
       </a>
     </div>
