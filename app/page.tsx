@@ -70,4 +70,233 @@ export default async function Home() {
       <section className="hero">
         <div className="container heroInner">
           <div className="heroCopy">
-            <p className="eyebrow">JNMule
+            <p className="eyebrow">JNMulee News</p>
+
+            <h1>
+              Stay informed.
+              <br />
+              <span>Know what matters.</span>
+            </h1>
+
+            <p className="lead">
+              News, sport, entertainment, gossip, business and crypto —
+              presented clearly and updated regularly.
+            </p>
+          </div>
+
+          <div className="heroPanel">
+            <span>NEWSROOM</span>
+
+            <strong>Latest stories, all in one place.</strong>
+
+            <p>
+              Follow the stories shaping conversations around the world.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="container section">
+        <div className="categoryBar">
+          {categories.map((category) => (
+            <Link
+              key={category.slug}
+              href={`/category/${category.slug}`}
+              className="categoryPill"
+            >
+              {category.name}
+            </Link>
+          ))}
+        </div>
+
+        <div className="sectionTitle">
+          <div>
+            <p className="sectionKicker">TOP STORIES</p>
+            <h2>What’s happening now</h2>
+          </div>
+
+          <span className="updated">Updated regularly</span>
+        </div>
+
+        {error ? (
+          <div className="emptyState">
+            Unable to load news right now.
+          </div>
+        ) : !featured ? (
+          <div className="emptyState">
+            No news articles available yet.
+          </div>
+        ) : (
+          <>
+            <article className="featuredStory">
+              <Link
+                href={`/news/${featured.slug}`}
+                className="featuredImage"
+              >
+                {featured.image_url ? (
+                  <img
+                    src={featured.image_url}
+                    alt={featured.title}
+                  />
+                ) : (
+                  <div className="imagePlaceholder">
+                    JNMulee News
+                  </div>
+                )}
+
+                <span className="imageBadge">
+                  Top Story
+                </span>
+              </Link>
+
+              <div className="featuredContent">
+                <p className="category">
+                  {featured.category || "News"}
+                </p>
+
+                <h3>
+                  <Link href={`/news/${featured.slug}`}>
+                    {featured.title}
+                  </Link>
+                </h3>
+
+                <p className="excerpt">
+                  {featured.content
+                    ? featured.content
+                        .replace(/<[^>]+>/g, " ")
+                        .substring(0, 260)
+                    : "Read the latest story from JNMulee News."}
+                  …
+                </p>
+
+                <Link
+                  className="readMore"
+                  href={`/news/${featured.slug}`}
+                >
+                  Read full story <span>→</span>
+                </Link>
+              </div>
+            </article>
+
+            <DirectAd placement="home_between" />
+
+            <div className="latestHeader">
+              <h2>Latest News</h2>
+              <div className="latestLine" />
+            </div>
+
+            <div className="grid">
+              {latest.map((story) => (
+                <article className="card" key={story.id}>
+                  <Link
+                    href={`/news/${story.slug}`}
+                    className="cardImage"
+                  >
+                    {story.image_url ? (
+                      <img
+                        src={story.image_url}
+                        alt={story.title}
+                      />
+                    ) : (
+                      <div className="imagePlaceholder">
+                        JNMulee News
+                      </div>
+                    )}
+                  </Link>
+
+                  <div className="cardBody">
+                    <p className="category">
+                      {story.category || "News"}
+                    </p>
+
+                    <h3>
+                      <Link href={`/news/${story.slug}`}>
+                        {story.title}
+                      </Link>
+                    </h3>
+
+                    <p className="excerpt">
+                      {story.content
+                        ? story.content
+                            .replace(/<[^>]+>/g, " ")
+                            .substring(0, 150)
+                        : "Read more from JNMulee News."}
+                      …
+                    </p>
+
+                    <Link
+                      className="readMore"
+                      href={`/news/${story.slug}`}
+                    >
+                      Read More →
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            {categories.map((category) => {
+              const categoryStories =
+                getCategoryStories(category.name);
+
+              if (!categoryStories.length) {
+                return null;
+              }
+
+              return (
+                <section
+                  className="categorySection"
+                  key={category.slug}
+                >
+                  <div className="categorySectionHeader">
+                    <h2>{category.name}</h2>
+
+                    <Link
+                      className="viewCategory"
+                      href={`/category/${category.slug}`}
+                    >
+                      View all →
+                    </Link>
+                  </div>
+
+                  <div className="categoryGrid">
+                    {categoryStories.map((story) => (
+                      <article
+                        className="categoryCard"
+                        key={story.id}
+                      >
+                        <Link href={`/news/${story.slug}`}>
+                          {story.image_url ? (
+                            <img
+                              className="categoryCardImage"
+                              src={story.image_url}
+                              alt={story.title}
+                            />
+                          ) : (
+                            <div className="categoryCardImage imagePlaceholder">
+                              JNMulee News
+                            </div>
+                          )}
+                        </Link>
+
+                        <div className="categoryCardBody">
+                          <h3>
+                            <Link
+                              href={`/news/${story.slug}`}
+                            >
+                              {story.title}
+                            </Link>
+                          </h3>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+          </>
+        )}
+      </section>
+    </main>
+  );
+}
