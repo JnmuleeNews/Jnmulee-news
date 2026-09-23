@@ -18,6 +18,12 @@ const NEWS_CATEGORIES = [
   "Crypto",
 ];
 
+const AD_PLACEMENTS = [
+  { value: "homepage", label: "Homepage" },
+  { value: "ads", label: "Ads Page" },
+  { value: "homepage_ads", label: "Homepage + Ads Page" },
+];
+
 type Source = {
   id: string;
   name: string;
@@ -31,8 +37,11 @@ type DirectAd = {
   id: string;
   title: string;
   image_url: string;
-  target_url: string;
+  link_url: string;
+  placement: string;
   active: boolean;
+  starts_at?: string | null;
+  ends_at?: string | null;
   created_at?: string;
 };
 
@@ -48,7 +57,8 @@ export default function AdminDashboard() {
 
   const [adTitle, setAdTitle] = useState("");
   const [adImageUrl, setAdImageUrl] = useState("");
-  const [adTargetUrl, setAdTargetUrl] = useState("");
+  const [adLinkUrl, setAdLinkUrl] = useState("");
+  const [adPlacement, setAdPlacement] = useState("homepage");
 
   const [loading, setLoading] = useState(true);
   const [addingSource, setAddingSource] = useState(false);
@@ -68,7 +78,9 @@ export default function AdminDashboard() {
 
       supabase
         .from("direct_ads")
-        .select("id,title,image_url,target_url,active,created_at")
+        .select(
+          "id,title,image_url,link_url,placement,active,starts_at,ends_at,created_at"
+        )
         .order("created_at", { ascending: false }),
     ]);
 
@@ -168,8 +180,14 @@ export default function AdminDashboard() {
     setMessage("");
     setError("");
 
-    if (!adTitle.trim() || !adImageUrl.trim() || !adTargetUrl.trim()) {
-      setError("Please fill in all advertisement fields.");
+    if (
+      !adTitle.trim() ||
+      !adImageUrl.trim() ||
+      !adLinkUrl.trim()
+    ) {
+      setError(
+        "Please fill in the advertisement title, image URL and link."
+      );
       setAddingAd(false);
       return;
     }
@@ -177,17 +195,19 @@ export default function AdminDashboard() {
     const { error } = await supabase.from("direct_ads").insert({
       title: adTitle.trim(),
       image_url: adImageUrl.trim(),
-      target_url: adTargetUrl.trim(),
+      link_url: adLinkUrl.trim(),
+      placement: adPlacement,
       active: true,
     });
 
     if (error) {
       setError(error.message);
     } else {
-      setMessage("Advertisement added successfully.");
+      setMessage("Personal advertisement added successfully.");
       setAdTitle("");
       setAdImageUrl("");
-      setAdTargetUrl("");
+      setAdLinkUrl("");
+      setAdPlacement("homepage");
       await loadData();
     }
 
@@ -195,7 +215,7 @@ export default function AdminDashboard() {
   }
 
   async function deleteAd(id: string) {
-    if (!confirm("Delete this advertisement?")) {
+    if (!confirm("Delete this personal advertisement?")) {
       return;
     }
 
@@ -210,7 +230,7 @@ export default function AdminDashboard() {
     if (error) {
       setError(error.message);
     } else {
-      setMessage("Advertisement deleted.");
+      setMessage("Personal advertisement deleted.");
       await loadData();
     }
   }
@@ -250,6 +270,8 @@ export default function AdminDashboard() {
       setMessage(
         data?.message || "RSS news import completed successfully."
       );
+
+      await loadData();
     } catch {
       setError("Unable to start the news import.");
     }
@@ -258,6 +280,14 @@ export default function AdminDashboard() {
   async function logout() {
     await supabase.auth.signOut();
     router.push("/admin/login");
+  }
+
+  function getPlacementLabel(placement: string) {
+    const found = AD_PLACEMENTS.find(
+      (item) => item.value === placement
+    );
+
+    return found?.label || placement;
   }
 
   return (
@@ -282,6 +312,7 @@ export default function AdminDashboard() {
 
       <div className="container">
         {message && <div className="success">{message}</div>}
+
         {error && <div className="error">{error}</div>}
 
         {/* POST NEWS */}
@@ -291,23 +322,16 @@ export default function AdminDashboard() {
               <h1>Post News</h1>
 
               <p>
-                Create your own news article, add an image and publish it
-                directly to JNMulee News.
+                Create your own news article, add an image and
+                publish it directly to JNMulee News.
               </p>
             </div>
 
-            <Link href="/admin/news/new" className="adminLink">
+            <Link
+              href="/admin/news/new"
+              className="adminLink"
+            >
               + Post News
-            </Link>
-          </div>
-
-          <div className="adminActions">
-            <Link href="/admin/news/new" className="adminLink">
-              Create New Article
-            </Link>
-
-            <Link href="/admin/news" className="adminLink">
-              Manage News
             </Link>
           </div>
         </section>
@@ -319,12 +343,15 @@ export default function AdminDashboard() {
               <h2>News Sources / RSS Feeds</h2>
 
               <p>
-                Connect RSS feeds and choose the category where imported
-                stories should appear.
+                Connect RSS feeds and choose the category where
+                imported stories should appear.
               </p>
             </div>
 
-            <button type="button" onClick={runNewsImport}>
+            <button
+              type="button"
+              onClick={runNewsImport}
+            >
               Import News Now
             </button>
           </div>
@@ -336,7 +363,9 @@ export default function AdminDashboard() {
               <input
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) =>
+                  setName(e.target.value)
+                }
                 placeholder="Example: Crypto News"
               />
             </label>
@@ -347,7 +376,9 @@ export default function AdminDashboard() {
               <input
                 type="url"
                 value={feedUrl}
-                onChange={(e) => setFeedUrl(e.target.value)}
+                onChange={(e) =>
+                  setFeedUrl(e.target.value)
+                }
                 placeholder="https://example.com/feed/"
               />
             </label>
@@ -357,18 +388,28 @@ export default function AdminDashboard() {
 
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                onChange={(e) =>
+                  setCategory(e.target.value)
+                }
               >
                 {NEWS_CATEGORIES.map((item) => (
-                  <option key={item} value={item}>
+                  <option
+                    key={item}
+                    value={item}
+                  >
                     {item}
                   </option>
                 ))}
               </select>
             </label>
 
-            <button type="submit" disabled={addingSource}>
-              {addingSource ? "Adding..." : "Add News Source"}
+            <button
+              type="submit"
+              disabled={addingSource}
+            >
+              {addingSource
+                ? "Adding..."
+                : "Add News Source"}
             </button>
           </form>
         </section>
@@ -384,7 +425,10 @@ export default function AdminDashboard() {
           ) : (
             <div className="sourceList">
               {sources.map((source) => (
-                <div className="sourceItem" key={source.id}>
+                <div
+                  className="sourceItem"
+                  key={source.id}
+                >
                   <div>
                     <h3>{source.name}</h3>
 
@@ -401,21 +445,29 @@ export default function AdminDashboard() {
                           : "statusBadge"
                       }
                     >
-                      {source.active ? "Active" : "Inactive"}
+                      {source.active
+                        ? "Active"
+                        : "Inactive"}
                     </span>
                   </div>
 
                   <div className="adminActions">
                     <button
                       type="button"
-                      onClick={() => toggleSource(source)}
+                      onClick={() =>
+                        toggleSource(source)
+                      }
                     >
-                      {source.active ? "Disable" : "Enable"}
+                      {source.active
+                        ? "Disable"
+                        : "Enable"}
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => deleteSource(source.id)}
+                      onClick={() =>
+                        deleteSource(source.id)
+                      }
                     >
                       Delete
                     </button>
@@ -426,29 +478,6 @@ export default function AdminDashboard() {
           )}
         </section>
 
-        {/* NEWS MANAGEMENT */}
-        <section className="section">
-          <div className="sectionHeader">
-            <div>
-              <h2>News Management</h2>
-
-              <p>
-                View, edit and manage all manually posted news.
-              </p>
-            </div>
-
-            <div className="adminActions">
-              <Link href="/admin/news/new" className="adminLink">
-                + Create News
-              </Link>
-
-              <Link href="/admin/news" className="adminLink">
-                Manage News
-              </Link>
-            </div>
-          </div>
-        </section>
-
         {/* PERSONAL ADS */}
         <section className="section">
           <div className="sectionHeader">
@@ -456,19 +485,25 @@ export default function AdminDashboard() {
               <h2>Personal Ads</h2>
 
               <p>
-                Add your own advertisements to display on the website.
+                Add your own advertisements and choose where
+                each advertisement appears on the platform.
               </p>
             </div>
           </div>
 
-          <form onSubmit={addAd} className="form">
+          <form
+            onSubmit={addAd}
+            className="form"
+          >
             <label>
               Advertisement Title
 
               <input
                 type="text"
                 value={adTitle}
-                onChange={(e) => setAdTitle(e.target.value)}
+                onChange={(e) =>
+                  setAdTitle(e.target.value)
+                }
                 placeholder="Advertisement title"
               />
             </label>
@@ -479,44 +514,75 @@ export default function AdminDashboard() {
               <input
                 type="url"
                 value={adImageUrl}
-                onChange={(e) => setAdImageUrl(e.target.value)}
+                onChange={(e) =>
+                  setAdImageUrl(e.target.value)
+                }
                 placeholder="https://example.com/ad.jpg"
               />
             </label>
 
             <label>
-              Advertisement Target URL
+              Advertisement Link
 
               <input
                 type="url"
-                value={adTargetUrl}
-                onChange={(e) => setAdTargetUrl(e.target.value)}
+                value={adLinkUrl}
+                onChange={(e) =>
+                  setAdLinkUrl(e.target.value)
+                }
                 placeholder="https://example.com"
               />
             </label>
 
-            <button type="submit" disabled={addingAd}>
-              {addingAd ? "Adding..." : "Add Personal Ad"}
+            <label>
+              Ad Placement
+
+              <select
+                value={adPlacement}
+                onChange={(e) =>
+                  setAdPlacement(e.target.value)
+                }
+              >
+                {AD_PLACEMENTS.map((item) => (
+                  <option
+                    key={item.value}
+                    value={item.value}
+                  >
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="submit"
+              disabled={addingAd}
+            >
+              {addingAd
+                ? "Adding..."
+                : "Add Personal Ad"}
             </button>
           </form>
-        </section>
 
-        {/* CURRENT PERSONAL ADS */}
-        <section className="section">
-          <h2>Current Personal Ads</h2>
-
-          {loading ? (
-            <p>Loading advertisements...</p>
-          ) : ads.length === 0 ? (
-            <p>No personal advertisements added yet.</p>
-          ) : (
+          {/* EXISTING ADS */}
+          {ads.length > 0 && (
             <div className="sourceList">
               {ads.map((ad) => (
-                <div className="sourceItem" key={ad.id}>
+                <div
+                  className="sourceItem"
+                  key={ad.id}
+                >
                   <div>
                     <h3>{ad.title}</h3>
 
-                    <p>{ad.target_url}</p>
+                    <p>
+                      Placement:{" "}
+                      {getPlacementLabel(
+                        ad.placement
+                      )}
+                    </p>
+
+                    <p>{ad.link_url}</p>
 
                     <span
                       className={
@@ -525,21 +591,29 @@ export default function AdminDashboard() {
                           : "statusBadge"
                       }
                     >
-                      {ad.active ? "Active" : "Inactive"}
+                      {ad.active
+                        ? "Active"
+                        : "Inactive"}
                     </span>
                   </div>
 
                   <div className="adminActions">
                     <button
                       type="button"
-                      onClick={() => toggleAd(ad)}
+                      onClick={() =>
+                        toggleAd(ad)
+                      }
                     >
-                      {ad.active ? "Disable" : "Enable"}
+                      {ad.active
+                        ? "Disable"
+                        : "Enable"}
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => deleteAd(ad.id)}
+                      onClick={() =>
+                        deleteAd(ad.id)
+                      }
                     >
                       Delete
                     </button>
