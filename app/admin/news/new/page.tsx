@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -134,6 +133,7 @@ export default function NewNewsPage() {
             <option>Gossip</option>
             <option>Entertainment</option>
             <option>Politics</option>
+            <option>Crypto</option>
           </select>
 
           <label>News Image</label>
