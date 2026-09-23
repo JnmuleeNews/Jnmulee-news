@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 
 type Props = {
-  slot: string;
+  slot?: string;
+  placement?: string;
 };
 
 const supabase = createClient(
@@ -9,25 +10,34 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export default async function DirectAd({ slot }: Props) {
-  let placement = "";
+export default async function DirectAd({
+  slot,
+  placement: placementProp,
+}: Props) {
+  let placement = placementProp || "";
 
-  if (
-    slot === "home_top" ||
-    slot === "home_between" ||
-    slot === "home_bottom"
-  ) {
-    placement = "homepage";
-  } else if (
-    slot === "article_top" ||
-    slot === "article_between" ||
-    slot === "article_bottom"
-  ) {
+  if (!placement && slot) {
+    if (
+      slot === "home_top" ||
+      slot === "home_between" ||
+      slot === "home_bottom"
+    ) {
+      placement = "homepage";
+    } else if (
+      slot === "article_top" ||
+      slot === "article_between" ||
+      slot === "article_bottom"
+    ) {
+      placement = "article";
+    } else if (slot === "ads_page") {
+      placement = "ads_page";
+    } else {
+      placement = "homepage_ads";
+    }
+  }
+
+  if (placement === "article_middle") {
     placement = "article";
-  } else if (slot === "ads_page") {
-    placement = "ads_page";
-  } else {
-    placement = "homepage_ads";
   }
 
   const { data: ads } = await supabase
@@ -45,7 +55,11 @@ export default async function DirectAd({ slot }: Props) {
   }
 
   return (
-    <div className={`directAd directAd-${slot}`}>
+    <div
+      className={`directAd ${
+        slot ? `directAd-${slot}` : ""
+      }`}
+    >
       <a
         href={ad.link_url || "#"}
         target={ad.link_url ? "_blank" : undefined}
