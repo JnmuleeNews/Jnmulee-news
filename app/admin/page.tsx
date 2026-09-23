@@ -50,6 +50,8 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [addingSource, setAddingSource] = useState(false);
   const [addingAd, setAddingAd] = useState(false);
+  const [importing, setImporting] = useState(false);
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -99,9 +101,11 @@ export default function AdminDashboard() {
       setError(error.message);
     } else {
       setMessage("News source added successfully.");
+
       setName("");
       setFeedUrl("");
       setCategory("Top Stories");
+
       await loadData();
     }
 
@@ -135,7 +139,9 @@ export default function AdminDashboard() {
 
     const { error } = await supabase
       .from("sources")
-      .update({ active: !source.active })
+      .update({
+        active: !source.active,
+      })
       .eq("id", source.id);
 
     if (error) {
@@ -160,6 +166,7 @@ export default function AdminDashboard() {
       setError(
         "Please fill in the advertisement title, image URL and link."
       );
+
       setAddingAd(false);
       return;
     }
@@ -175,7 +182,10 @@ export default function AdminDashboard() {
     if (error) {
       setError(error.message);
     } else {
-      setMessage("Personal advertisement added successfully.");
+      setMessage(
+        "Personal advertisement added successfully."
+      );
+
       setAdTitle("");
       setAdImageUrl("");
       setAdLinkUrl("");
@@ -188,6 +198,7 @@ export default function AdminDashboard() {
   async function runNewsImport() {
     setMessage("");
     setError("");
+    setImporting(true);
 
     try {
       const response = await fetch("/api/fetch-news", {
@@ -197,17 +208,22 @@ export default function AdminDashboard() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data?.error || "News import failed.");
+        setError(
+          data?.error || "News import failed."
+        );
         return;
       }
 
       setMessage(
-        data?.message || "RSS news import completed successfully."
+        data?.message ||
+          "RSS news import completed successfully."
       );
 
       await loadData();
     } catch {
       setError("Unable to start the news import.");
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -221,25 +237,40 @@ export default function AdminDashboard() {
       <header className="dashboardHeader">
         <div className="container dashboardHeaderInner">
           <div>
-            <Link href="/admin" className="dashboardBrand">
+            <Link
+              href="/admin"
+              className="dashboardBrand"
+            >
               JNMulee News Admin
             </Link>
 
             <p className="dashboardSubtitle">
-              Manage news, RSS feeds and personal advertisements
+              Manage news, RSS feeds and personal
+              advertisements
             </p>
           </div>
 
-          <button type="button" onClick={logout}>
+          <button
+            type="button"
+            onClick={logout}
+          >
             Logout
           </button>
         </div>
       </header>
 
       <div className="container">
-        {message && <div className="success">{message}</div>}
+        {message && (
+          <div className="success">
+            {message}
+          </div>
+        )}
 
-        {error && <div className="error">{error}</div>}
+        {error && (
+          <div className="error">
+            {error}
+          </div>
+        )}
 
         {/* POST NEWS */}
         <section className="section">
@@ -248,8 +279,9 @@ export default function AdminDashboard() {
               <h1>Post News</h1>
 
               <p>
-                Create your own news article, add an image and
-                publish it directly to JNMulee News.
+                Create your own news article, add an
+                image and publish it directly to
+                JNMulee News.
               </p>
             </div>
 
@@ -269,8 +301,8 @@ export default function AdminDashboard() {
               <h2>Comments</h2>
 
               <p>
-                Review, approve or delete comments submitted by
-                visitors.
+                Review, approve or delete comments
+                submitted by visitors.
               </p>
             </div>
 
@@ -290,20 +322,27 @@ export default function AdminDashboard() {
               <h2>News Sources / RSS Feeds</h2>
 
               <p>
-                Connect RSS feeds and choose the category where
-                imported stories should appear.
+                Connect RSS feeds and choose the
+                category where imported stories
+                should appear.
               </p>
             </div>
 
             <button
               type="button"
               onClick={runNewsImport}
+              disabled={importing}
             >
-              Import News Now
+              {importing
+                ? "Importing..."
+                : "Import News Now"}
             </button>
           </div>
 
-          <form onSubmit={addSource} className="form">
+          <form
+            onSubmit={addSource}
+            className="form"
+          >
             <label>
               Source Name
 
@@ -324,22 +363,4 @@ export default function AdminDashboard() {
                 type="url"
                 value={feedUrl}
                 onChange={(e) =>
-                  setFeedUrl(e.target.value)
-                }
-                placeholder="https://example.com/feed/"
-              />
-            </label>
-
-            <label>
-              Feed Category
-
-              <select
-                value={category}
-                onChange={(e) =>
-                  setCategory(e.target.value)
-                }
-              >
-                {NEWS_CATEGORIES.map((item) => (
-                  <option
-                    key={item}
-                   
+                 
