@@ -69,7 +69,7 @@ async function postComment(formData: FormData) {
 
   const supabaseServer = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
   await supabaseServer.from("comments").insert({
@@ -104,24 +104,23 @@ export default async function Article({ params }: Props) {
 
   const cleanContent = cleanText(rawContent);
 
-  // Get comments for this particular article
   const { data: comments } = await supabase
     .from("comments")
     .select("id, name, comment, created_at")
     .eq("news_id", story.id)
     .order("created_at", { ascending: false });
 
-  // Get related posts from the same category
   const { data: relatedPosts } = await supabase
     .from("news")
-    .select("id, title, slug, image_url, category, created_at")
+    .select(
+      "id, title, slug, image_url, category, created_at"
+    )
     .eq("Published", true)
     .eq("category", story.category)
     .neq("id", story.id)
     .order("created_at", { ascending: false })
     .limit(3);
 
-  // Get the next older published story
   const { data: nextPosts } = await supabase
     .from("news")
     .select("title, slug")
@@ -145,23 +144,104 @@ export default async function Article({ params }: Props) {
       </header>
 
       <article className="container article">
-        {/* Category */}
         <p className="category">
           {story.category || "News"}
         </p>
 
-        {/* Headline */}
         <h1>{story.title}</h1>
 
-        {/* Publication information */}
         <p className="meta">
           Published by JNMulee News • {formatDate(story.created_at)}
         </p>
 
-        {/* Top Advertisement */}
+        {/* SOCIAL SHARING */}
+        <section
+          style={{
+            margin: "20px 0",
+            padding: "16px 0",
+          }}
+        >
+          <strong>Share this story</strong>
+
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 10,
+              marginTop: 12,
+            }}
+          >
+            <a
+              href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(
+                story.title
+              )}&url=${encodeURIComponent(
+                `https://jnmulee-news.vercel.app/news/${story.slug}`
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                padding: "10px 16px",
+                borderRadius: 8,
+                textDecoration: "none",
+                background: "#000",
+                color: "#fff",
+              }}
+            >
+              X
+            </a>
+
+            <a
+              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+                `https://jnmulee-news.vercel.app/news/${story.slug}`
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                padding: "10px 16px",
+                borderRadius: 8,
+                textDecoration: "none",
+                background: "#1877f2",
+                color: "#fff",
+              }}
+            >
+              Facebook
+            </a>
+
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(
+                `${story.title}\n\nhttps://jnmulee-news.vercel.app/news/${story.slug}`
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                padding: "10px 16px",
+                borderRadius: 8,
+                textDecoration: "none",
+                background: "#25d366",
+                color: "#fff",
+              }}
+            >
+              WhatsApp
+            </a>
+
+            <button
+              type="button"
+              onClick={undefined}
+              style={{
+                padding: "10px 16px",
+                borderRadius: 8,
+                border: "1px solid #ccc",
+                background: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              Copy Link
+            </button>
+          </div>
+        </section>
+
         <DirectAd placement="article_top" />
 
-        {/* Main image */}
         {imageUrl && (
           <img
             src={imageUrl}
@@ -176,10 +256,8 @@ export default async function Article({ params }: Props) {
           />
         )}
 
-        {/* Middle Advertisement */}
         <DirectAd placement="article_middle" />
 
-        {/* Article */}
         <div className="articleBody">
           {cleanContent ? (
             cleanContent
@@ -197,7 +275,6 @@ export default async function Article({ params }: Props) {
           )}
         </div>
 
-        {/* Bottom Advertisement */}
         <DirectAd placement="article_bottom" />
 
         {/* COMMENTS */}
@@ -233,7 +310,7 @@ export default async function Article({ params }: Props) {
             <input
               name="name"
               type="text"
-              placeholder="Your name"
+              placeholder="Your name or Anonymous"
               maxLength={80}
               required
               style={{
@@ -274,7 +351,6 @@ export default async function Article({ params }: Props) {
             </button>
           </form>
 
-          {/* Existing comments */}
           {comments && comments.length > 0 ? (
             <div>
               {comments.map((comment) => (
@@ -338,7 +414,7 @@ export default async function Article({ params }: Props) {
                     color: "inherit",
                   }}
                 >
-                  {post.image_url && (
+                  {post.image_url ? (
                     <img
                       src={post.image_url}
                       alt={post.title}
@@ -349,6 +425,21 @@ export default async function Article({ params }: Props) {
                         borderRadius: 12,
                       }}
                     />
+                  ) : (
+                    <div
+                      style={{
+                        width: "100%",
+                        height: 150,
+                        borderRadius: 12,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "#f1f3f5",
+                        fontWeight: 600,
+                      }}
+                    >
+                      JNMulee News
+                    </div>
                   )}
 
                   <h3 style={{ marginTop: 10 }}>
