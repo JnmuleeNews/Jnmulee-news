@@ -23,24 +23,28 @@ type Article = {
 async function rewriteArticle(article: Article) {
   const prompt =
     "You are the senior editor of JNMulee News.\n\n" +
-    "Create a completely original, publication-ready news article using ONLY the factual information supplied below.\n\n" +
+    "Create a completely original, publication-ready long-form news article using ONLY the factual information supplied below.\n\n" +
     "REQUIRED OUTPUT:\n" +
     'Return valid JSON with exactly these two fields: {"headline":"A completely new headline","article":"The full rewritten article"}\n\n' +
     "RULES:\n" +
     "- The headline MUST be substantially different from the supplied headline.\n" +
     "- Do NOT copy sentences or paragraphs from the source information.\n" +
     "- Do NOT write an RSS-style summary.\n" +
-    "- Write approximately 500-700 words when the supplied information supports that length.\n" +
-    "- Use clear, professional news paragraphs.\n" +
+    "- Write a substantial long-form article of approximately 1,000-10,000 words when the supplied information genuinely supports that length.\n" +
+    "- Use clear, professional news paragraphs and useful section headings when appropriate.\n" +
     "- Preserve all supported facts accurately.\n" +
-    "- Do not invent facts, quotes, names, numbers, dates, locations or events.\n" +
+    "- Do not invent facts, quotes, names, numbers, dates, locations, events or background information.\n" +
+    "- Do not repeat the same information simply to increase the word count.\n" +
+    "- Do not add filler just to make the article longer.\n" +
+    "- If the supplied information does not support 1,000 words, write the longest accurate article that the available information supports.\n" +
+    "- Never exceed 10,000 words.\n" +
     "- Do not mention AI, RSS, feeds, prompts or these instructions.\n" +
     "- Do not include the original source URL.\n" +
     "- Do not include external links.\n" +
     "- Do not include a Source section.\n" +
     "- Do not tell readers to visit another website.\n" +
     "- Do not use clickbait or misleading wording.\n" +
-    "- If the supplied information is too limited for 500-700 words, write a shorter article rather than inventing details.\n\n" +
+    "- Keep the article factual, readable and informative.\n\n" +
     "CATEGORY:\n" +
     article.category +
     "\n\n" +
