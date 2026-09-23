@@ -268,8 +268,9 @@ export default function AdminDashboard() {
             <Link href="/admin" className="dashboardBrand">
               JNMulee News Admin
             </Link>
+
             <p className="dashboardSubtitle">
-              Manage news sources, RSS feeds and advertisements
+              Manage news, RSS feeds and personal advertisements
             </p>
           </div>
 
@@ -283,10 +284,40 @@ export default function AdminDashboard() {
         {message && <div className="success">{message}</div>}
         {error && <div className="error">{error}</div>}
 
+        {/* POST NEWS */}
         <section className="section">
           <div className="sectionHeader">
             <div>
-              <h1>News Sources</h1>
+              <h1>Post News</h1>
+
+              <p>
+                Create your own news article, add an image and publish it
+                directly to JNMulee News.
+              </p>
+            </div>
+
+            <Link href="/admin/news/new" className="adminLink">
+              + Post News
+            </Link>
+          </div>
+
+          <div className="adminActions">
+            <Link href="/admin/news/new" className="adminLink">
+              Create New Article
+            </Link>
+
+            <Link href="/admin/news" className="adminLink">
+              Manage News
+            </Link>
+          </div>
+        </section>
+
+        {/* NEWS SOURCES */}
+        <section className="section">
+          <div className="sectionHeader">
+            <div>
+              <h2>News Sources / RSS Feeds</h2>
+
               <p>
                 Connect RSS feeds and choose the category where imported
                 stories should appear.
@@ -301,6 +332,7 @@ export default function AdminDashboard() {
           <form onSubmit={addSource} className="form">
             <label>
               Source Name
+
               <input
                 type="text"
                 value={name}
@@ -311,6 +343,7 @@ export default function AdminDashboard() {
 
             <label>
               RSS Feed URL
+
               <input
                 type="url"
                 value={feedUrl}
@@ -320,7 +353,8 @@ export default function AdminDashboard() {
             </label>
 
             <label>
-              Category
+              Feed Category
+
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -339,6 +373,7 @@ export default function AdminDashboard() {
           </form>
         </section>
 
+        {/* CONNECTED NEWS SOURCES */}
         <section className="section">
           <h2>Connected News Sources</h2>
 
@@ -352,6 +387,7 @@ export default function AdminDashboard() {
                 <div className="sourceItem" key={source.id}>
                   <div>
                     <h3>{source.name}</h3>
+
                     <p>{source.feed_url}</p>
 
                     <span className="categoryBadge">
@@ -390,32 +426,45 @@ export default function AdminDashboard() {
           )}
         </section>
 
+        {/* NEWS MANAGEMENT */}
         <section className="section">
           <div className="sectionHeader">
             <div>
               <h2>News Management</h2>
-              <p>Create and manage articles manually.</p>
+
+              <p>
+                View, edit and manage all manually posted news.
+              </p>
             </div>
 
-            <Link href="/admin/news" className="adminLink">
-              Manage News
-            </Link>
+            <div className="adminActions">
+              <Link href="/admin/news/new" className="adminLink">
+                + Create News
+              </Link>
 
-            <Link href="/admin/news/new" className="adminLink">
-              Create News
-            </Link>
+              <Link href="/admin/news" className="adminLink">
+                Manage News
+              </Link>
+            </div>
           </div>
         </section>
 
+        {/* PERSONAL ADS */}
         <section className="section">
-          <h2>Direct Advertisements</h2>
-          <p>
-            Add advertisements that can be displayed on the website.
-          </p>
+          <div className="sectionHeader">
+            <div>
+              <h2>Personal Ads</h2>
+
+              <p>
+                Add your own advertisements to display on the website.
+              </p>
+            </div>
+          </div>
 
           <form onSubmit={addAd} className="form">
             <label>
               Advertisement Title
+
               <input
                 type="text"
                 value={adTitle}
@@ -426,6 +475,7 @@ export default function AdminDashboard() {
 
             <label>
               Advertisement Image URL
+
               <input
                 type="url"
                 value={adImageUrl}
@@ -436,6 +486,7 @@ export default function AdminDashboard() {
 
             <label>
               Advertisement Target URL
+
               <input
                 type="url"
                 value={adTargetUrl}
@@ -445,24 +496,26 @@ export default function AdminDashboard() {
             </label>
 
             <button type="submit" disabled={addingAd}>
-              {addingAd ? "Adding..." : "Add Advertisement"}
+              {addingAd ? "Adding..." : "Add Personal Ad"}
             </button>
           </form>
         </section>
 
+        {/* CURRENT PERSONAL ADS */}
         <section className="section">
-          <h2>Current Advertisements</h2>
+          <h2>Current Personal Ads</h2>
 
           {loading ? (
             <p>Loading advertisements...</p>
           ) : ads.length === 0 ? (
-            <p>No advertisements added yet.</p>
+            <p>No personal advertisements added yet.</p>
           ) : (
             <div className="sourceList">
               {ads.map((ad) => (
                 <div className="sourceItem" key={ad.id}>
                   <div>
                     <h3>{ad.title}</h3>
+
                     <p>{ad.target_url}</p>
 
                     <span
