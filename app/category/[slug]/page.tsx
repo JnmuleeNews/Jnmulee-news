@@ -98,15 +98,7 @@ export default async function Category({ params }: Props) {
           JNMulee News.
         </p>
 
-        <nav
-          style={{
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-            marginTop: 24,
-            marginBottom: 30,
-          }}
-        >
+        <nav className="categoryNav">
           {categoryLinks.map((category) => {
             const active =
               category.slug === slug.toLowerCase() ||
@@ -117,14 +109,11 @@ export default async function Category({ params }: Props) {
               <Link
                 key={category.slug}
                 href={`/category/${category.slug}`}
-                style={{
-                  padding: "9px 15px",
-                  borderRadius: 999,
-                  textDecoration: "none",
-                  fontWeight: 700,
-                  background: active ? "#111" : "#f1f1f1",
-                  color: active ? "#fff" : "#111",
-                }}
+                className={
+                  active
+                    ? "categoryNavLink active"
+                    : "categoryNavLink"
+                }
               >
                 {category.name}
               </Link>
@@ -133,14 +122,7 @@ export default async function Category({ params }: Props) {
         </nav>
 
         {!posts || posts.length === 0 ? (
-          <div
-            style={{
-              padding: "40px 20px",
-              textAlign: "center",
-              border: "1px solid #e5e5e5",
-              borderRadius: 16,
-            }}
-          >
+          <div className="emptyState">
             <h2>No {displayCategory} news yet</h2>
 
             <p>
