@@ -74,11 +74,13 @@ async function postComment(formData: FormData) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { error } = await supabaseServer.from("comments").insert({
-    news_id: newsId,
-    name,
-    comment,
-  });
+  const { error } = await supabaseServer
+    .from("comments")
+    .insert({
+      news_id: newsId,
+      name,
+      comment,
+    });
 
   if (error) {
     console.error("Comment insert error:", error);
@@ -87,48 +89,50 @@ async function postComment(formData: FormData) {
   redirect(`/news/${slug}#comments`);
 }
 
-export default async function NewsArticlePage({ params }: Props) {
+export default async function NewsArticlePage({
+  params,
+}: Props) {
   const { slug } = await params;
 
-  const { data: article, error } = await supabase
+  const { data: story, error } = await supabase
     .from("news")
     .select("*")
     .eq("slug", slug)
     .single();
 
-  if (error || !article) {
+  if (error || !story) {
     notFound();
   }
 
-  const title = article.title || "JNMulee News";
-  const content = article.content || article.description || "";
-  const description =
-    cleanText(article.description || article.content || "").slice(
-      0,
-      160
-    );
+  const title = story.title || "JNMulee News";
+  const content =
+    story.content || story.description || "";
+
+  const description = cleanText(
+    story.description || story.content || ""
+  ).substring(0, 160);
 
   const image =
-    article.image_url ||
-    article.image ||
+    story.image_url ||
+    story.image ||
     getImageFromContent(content);
 
   const publishedAt =
-    article.published_at ||
-    article.created_at ||
+    story.published_at ||
+    story.created_at ||
     new Date().toISOString();
 
-  const articleUrl = `${SITE_URL}/news/${article.slug}`;
+  const articleUrl = `${SITE_URL}/news/${story.slug}`;
 
   const { data: comments } = await supabase
     .from("comments")
-    .select("*")
-    .eq("news_id", article.id)
+    .select("id, name, comment, created_at")
+    .eq("news_id", story.id)
     .order("created_at", { ascending: false });
 
   return (
     <>
-      <main className="mx-auto w-full max-w-4xl px-4 py-8">
+      <main className="container section">
         <article>
           <div className="mb-6">
             <a
@@ -139,6 +143,10 @@ export default async function NewsArticlePage({ params }: Props) {
             </a>
           </div>
 
+          <p className="category">
+            {story.category || "News"}
+          </p>
+
           <h1 className="mb-4 text-3xl font-bold leading-tight md:text-5xl">
             {title}
           </h1>
@@ -147,7 +155,7 @@ export default async function NewsArticlePage({ params }: Props) {
             {formatDate(publishedAt)}
           </div>
 
-          {image && (
+          {image ? (
             <div className="mb-8 overflow-hidden rounded-xl">
               <img
                 src={image}
@@ -155,7 +163,7 @@ export default async function NewsArticlePage({ params }: Props) {
                 className="h-auto w-full object-cover"
               />
             </div>
-          )}
+          ) : null}
 
           <div
             className="prose prose-lg max-w-none"
@@ -165,25 +173,31 @@ export default async function NewsArticlePage({ params }: Props) {
           />
 
           <div className="my-10">
-            <DirectAd />
+            <DirectAd placement="article" />
           </div>
 
-          <div className="mt-12 border-t pt-8">
+          <section
+            id="comments"
+            className="mt-12 border-t pt-8"
+          >
             <h2 className="mb-6 text-2xl font-bold">
               Comments
             </h2>
 
-            <form action={postComment} className="mb-10 space-y-4">
+            <form
+              action={postComment}
+              className="mb-10 space-y-4"
+            >
               <input
                 type="hidden"
                 name="news_id"
-                value={article.id}
+                value={story.id}
               />
 
               <input
                 type="hidden"
                 name="slug"
-                value={article.slug}
+                value={story.slug}
               />
 
               <div>
@@ -200,7 +214,7 @@ export default async function NewsArticlePage({ params }: Props) {
                   type="text"
                   maxLength={80}
                   required
-                  className="w-full rounded-lg border px-4 py-3 outline-none focus:ring-2"
+                  className="w-full rounded-lg border px-4 py-3 outline-none"
                   placeholder="Enter your name"
                 />
               </div>
@@ -219,14 +233,14 @@ export default async function NewsArticlePage({ params }: Props) {
                   maxLength={2000}
                   required
                   rows={5}
-                  className="w-full rounded-lg border px-4 py-3 outline-none focus:ring-2"
+                  className="w-full rounded-lg border px-4 py-3 outline-none"
                   placeholder="Write your comment..."
                 />
               </div>
 
               <button
                 type="submit"
-                className="rounded-lg bg-black px-6 py-3 font-semibold text-white hover:opacity-90"
+                className="rounded-lg bg-black px-6 py-3 font-semibold text-white"
               >
                 Post Comment
               </button>
@@ -244,11 +258,11 @@ export default async function NewsArticlePage({ params }: Props) {
                         {comment.name || "Anonymous"}
                       </strong>
 
-                      {comment.created_at && (
+                      {comment.created_at ? (
                         <span className="text-xs text-gray-500">
                           {formatDate(comment.created_at)}
                         </span>
-                      )}
+                      ) : null}
                     </div>
 
                     <p className="whitespace-pre-wrap text-gray-700">
@@ -262,7 +276,7 @@ export default async function NewsArticlePage({ params }: Props) {
                 </p>
               )}
             </div>
-          </div>
+          </section>
         </article>
       </main>
 
