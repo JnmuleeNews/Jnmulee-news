@@ -1,4 +1,6 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import DirectAd from "@/components/DirectAd";
 import ShareButtons from "@/components/ShareButtons";
@@ -34,6 +36,16 @@ function cleanText(value: string) {
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function getDescription(value: string) {
+  const text = cleanText(value);
+
+  if (text.length <= 160) {
+    return text;
+  }
+
+  return `${text.substring(0, 157).trim()}...`;
 }
 
 function getImageFromContent(value: string) {
@@ -89,12 +101,26 @@ async function postComment(formData: FormData) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
+  // Verify that the article exists and is actually published.
+  const { data: article } = await supabaseServer
+    .from("news")
+    .select("id,slug")
+    .eq("id", newsId)
+    .eq("slug", slug)
+    .eq("Published", true)
+    .single();
+
+  if (!article) {
+    redirect("/");
+  }
+
   const { error } = await supabaseServer
     .from("comments")
     .insert({
       news_id: newsId,
       name,
       comment,
+      approved: false,
     });
 
   if (error) {
@@ -105,6 +131,90 @@ async function postComment(formData: FormData) {
   }
 
   redirect(`/news/${slug}#comments`);
+}
+
+export async function generateMetadata({
+  params,
+}: Props): Promise<Metadata> {
+  const { slug } = await params;
+
+  const { data: story } = await supabase
+    .from("news")
+    .select(
+      "title,content,image_url,slug,category,created_at"
+    )
+    .eq("slug", slug)
+    .eq("Published", true)
+    .single();
+
+  if (!story) {
+    return {
+      title: "News | JNMulee News",
+      description:
+        "Latest news from JNMulee News.",
+    };
+  }
+
+  const title =
+    story.title || "JNMulee News";
+
+  const description = getDescription(
+    story.content || ""
+  );
+
+  const image =
+    story.image_url ||
+    getImageFromContent(
+      story.content || ""
+    );
+
+  const articleUrl =
+    `${SITE_URL}/news/${story.slug}`;
+
+  return {
+    title,
+    description,
+
+    alternates: {
+      canonical: articleUrl,
+    },
+
+    openGraph: {
+      title,
+      description,
+      url: articleUrl,
+      siteName: "JNMulee News",
+      type: "article",
+      publishedTime:
+        story.created_at || undefined,
+      section:
+        story.category || "News",
+      images: image
+        ? [
+            {
+              url: image,
+              alt: title,
+            },
+          ]
+        : undefined,
+    },
+
+    twitter: {
+      card: image
+        ? "summary_large_image"
+        : "summary",
+      title,
+      description,
+      images: image
+        ? [image]
+        : undefined,
+    },
+
+    robots: {
+      index: true,
+      follow: true,
+    },
+  };
 }
 
 export default async function NewsArticlePage({
@@ -118,6 +228,7 @@ export default async function NewsArticlePage({
       "id,title,slug,content,image_url,Published,source_url,category,created_at"
     )
     .eq("slug", slug)
+    .eq("Published", true)
     .single();
 
   if (error || !story) {
@@ -130,9 +241,9 @@ export default async function NewsArticlePage({
   const content =
     story.content || "";
 
-  const description = cleanText(
+  const description = getDescription(
     content
-  ).substring(0, 160);
+  );
 
   const image =
     story.image_url ||
@@ -145,6 +256,10 @@ export default async function NewsArticlePage({
   const articleUrl =
     `${SITE_URL}/news/${story.slug}`;
 
+  const category =
+    story.category || "News";
+
+  // Load approved comments only.
   const { data: comments } =
     await supabase
       .from("comments")
@@ -152,193 +267,370 @@ export default async function NewsArticlePage({
         "id,name,comment,created_at"
       )
       .eq("news_id", story.id)
+      .eq("approved", true)
       .order("created_at", {
         ascending: false,
       });
 
+  // Load related stories from the same category.
+  const { data: relatedStories } =
+    await supabase
+      .from("news")
+      .select(
+        "id,title,slug,image_url,category,created_at"
+      )
+      .eq("Published", true)
+      .eq("category", category)
+      .neq("id", story.id)
+      .not("image_url", "is", null)
+      .neq("image_url", "")
+      .order("created_at", {
+        ascending: false,
+      })
+      .limit(4);
+
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    headline: title,
+    description,
+    image: image
+      ? [image]
+      : undefined,
+    datePublished: publishedAt,
+    dateModified: publishedAt,
+    url: articleUrl,
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": articleUrl,
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "JNMulee News",
+      url: SITE_URL,
+    },
+    articleSection: category,
+  };
+
   return (
     <>
-      <main className="container section">
-        <article>
-          <div className="mb-6">
-            <a
-              href="/"
-              className="text-sm font-medium text-blue-600 hover:underline"
-            >
-              ← Back to Home
-            </a>
-          </div>
+      <main
+        style={{
+          maxWidth: "900px",
+          margin: "0 auto",
+          padding: "40px 20px 60px",
+        }}
+      >
+        <div style={{ marginBottom: "24px" }}>
+          <Link
+            href="/"
+            style={{
+              color: "#d7193f",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+          >
+            ← Back to Home
+          </Link>
+        </div>
 
+        <article>
           <p className="category">
-            {story.category || "News"}
+            {category}
           </p>
 
-          <h1 className="mb-4 text-3xl font-bold leading-tight md:text-5xl">
+          <h1
+            style={{
+              fontSize:
+                "clamp(2rem, 5vw, 3.6rem)",
+              lineHeight: 1.08,
+              margin: "10px 0 18px",
+              fontWeight: 800,
+            }}
+          >
             {title}
           </h1>
 
-          <div className="mb-6 text-sm text-gray-500">
-            {formatDate(publishedAt)}
+          <div
+            style={{
+              color: "#6b7280",
+              fontSize: "14px",
+              marginBottom: "28px",
+            }}
+          >
+            Published {formatDate(publishedAt)}
           </div>
 
           {image ? (
-            <div className="mb-8 overflow-hidden rounded-xl">
+            <figure
+              style={{
+                margin: "0 0 32px",
+              }}
+            >
               <img
                 src={image}
                 alt={title}
-                className="h-auto w-full object-cover"
+                style={{
+                  display: "block",
+                  width: "100%",
+                  height: "auto",
+                  maxHeight: "650px",
+                  objectFit: "cover",
+                  borderRadius: "14px",
+                }}
               />
-            </div>
+            </figure>
           ) : null}
 
           <div
-            className="prose prose-lg max-w-none"
+            style={{
+              fontSize: "18px",
+              lineHeight: 1.8,
+              color: "#1f2937",
+            }}
             dangerouslySetInnerHTML={{
               __html: content,
             }}
           />
+
+          {story.source_url ? (
+            <div
+              style={{
+                marginTop: "30px",
+                padding: "16px 18px",
+                background: "#f8f8f8",
+                borderLeft:
+                  "4px solid #d7193f",
+                borderRadius: "6px",
+                fontSize: "14px",
+              }}
+            >
+              Source:
+              {" "}
+              <a
+                href={story.source_url}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+              >
+                Original source
+              </a>
+            </div>
+          ) : null}
 
           <ShareButtons
             title={title}
             url={articleUrl}
           />
 
-          <div className="my-10">
-            <DirectAd placement="article_middle" />
-          </div>
-
-          <section
-            id="comments"
-            className="mt-12 border-t pt-8"
+          <div
+            style={{
+              margin: "40px 0",
+            }}
           >
-            <h2 className="mb-6 text-2xl font-bold">
-              Comments
+            <DirectAd
+              placement="article_middle"
+            />
+          </div>
+        </article>
+
+        {relatedStories &&
+        relatedStories.length > 0 ? (
+          <section
+            style={{
+              marginTop: "55px",
+              paddingTop: "30px",
+              borderTop:
+                "1px solid #e5e7eb",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "28px",
+                fontWeight: 800,
+                marginBottom: "22px",
+              }}
+            >
+              Related Stories
             </h2>
 
-            <form
-              action={postComment}
-              className="mb-10 space-y-4"
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit, minmax(210px, 1fr))",
+                gap: "20px",
+              }}
             >
-              <input
-                type="hidden"
-                name="news_id"
-                value={story.id}
-              />
-
-              <input
-                type="hidden"
-                name="slug"
-                value={story.slug}
-              />
-
-              <div>
-                <label
-                  htmlFor="name"
-                  className="mb-2 block text-sm font-medium"
-                >
-                  Your name
-                </label>
-
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  maxLength={80}
-                  required
-                  className="w-full rounded-lg border px-4 py-3 outline-none"
-                  placeholder="Enter your name"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="comment"
-                  className="mb-2 block text-sm font-medium"
-                >
-                  Your comment
-                </label>
-
-                <textarea
-                  id="comment"
-                  name="comment"
-                  maxLength={2000}
-                  required
-                  rows={5}
-                  className="w-full rounded-lg border px-4 py-3 outline-none"
-                  placeholder="Write your comment..."
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="rounded-lg bg-black px-6 py-3 font-semibold text-white"
-              >
-                Post Comment
-              </button>
-            </form>
-
-            <div className="space-y-6">
-              {comments &&
-              comments.length > 0 ? (
-                comments.map((comment) => (
-                  <div
-                    key={comment.id}
-                    className="rounded-lg border p-5"
+              {relatedStories.map(
+                (related) => (
+                  <article
+                    key={related.id}
+                    style={{
+                      border:
+                        "1px solid #e5e7eb",
+                      borderRadius: "12px",
+                      overflow: "hidden",
+                      background: "#ffffff",
+                    }}
                   >
-                    <div className="mb-2 flex items-center justify-between gap-4">
-                      <strong>
-                        {comment.name ||
-                          "Anonymous"}
-                      </strong>
-
-                      {comment.created_at ? (
-                        <span className="text-xs text-gray-500">
-                          {formatDate(
-                            comment.created_at
-                          )}
-                        </span>
+                    <Link
+                      href={`/news/${related.slug}`}
+                      style={{
+                        color: "inherit",
+                        textDecoration:
+                          "none",
+                      }}
+                    >
+                      {related.image_url ? (
+                        <img
+                          src={
+                            related.image_url
+                          }
+                          alt={
+                            related.title
+                          }
+                          style={{
+                            width: "100%",
+                            aspectRatio:
+                              "16 / 9",
+                            objectFit:
+                              "cover",
+                            display:
+                              "block",
+                          }}
+                        />
                       ) : null}
-                    </div>
 
-                    <p className="whitespace-pre-wrap text-gray-700">
-                      {comment.comment}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-500">
-                  No comments yet. Be the first
-                  to comment.
-                </p>
+                      <div
+                        style={{
+                          padding:
+                            "16px",
+                        }}
+                      >
+                        <p
+                          className="category"
+                          style={{
+                            marginBottom:
+                              "8px",
+                          }}
+                        >
+                          {related.category ||
+                            category}
+                        </p>
+
+                        <h3
+                          style={{
+                            fontSize:
+                              "18px",
+                            lineHeight:
+                              1.35,
+                            fontWeight: 700,
+                            margin: 0,
+                          }}
+                        >
+                          {
+                            related.title
+                          }
+                        </h3>
+                      </div>
+                    </Link>
+                  </article>
+                )
               )}
             </div>
           </section>
-        </article>
-      </main>
+        ) : null}
 
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context":
-              "https://schema.org",
-            "@type":
-              "NewsArticle",
-            headline: title,
-            description,
-            image: image
-              ? [image]
-              : undefined,
-            datePublished:
-              publishedAt,
-            url: articleUrl,
-            mainEntityOfPage: {
-              "@type": "WebPage",
-              "@id": articleUrl,
-            },
-          }),
-        }}
-      />
-    </>
-  );
-}
+        <section
+          id="comments"
+          style={{
+            marginTop: "55px",
+            paddingTop: "30px",
+            borderTop:
+              "1px solid #e5e7eb",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "28px",
+              fontWeight: 800,
+              marginBottom: "24px",
+            }}
+          >
+            Comments
+          </h2>
+
+          <form
+            action={postComment}
+            style={{
+              marginBottom: "40px",
+            }}
+          >
+            <input
+              type="hidden"
+              name="news_id"
+              value={story.id}
+            />
+
+            <input
+              type="hidden"
+              name="slug"
+              value={story.slug}
+            />
+
+            <div
+              style={{
+                marginBottom: "16px",
+              }}
+            >
+              <label
+                htmlFor="name"
+                style={{
+                  display: "block",
+                  fontWeight: 600,
+                  marginBottom: "8px",
+                }}
+              >
+                Your name
+              </label>
+
+              <input
+                id="name"
+                name="name"
+                type="text"
+                maxLength={80}
+                required
+                placeholder="Enter your name"
+                style={{
+                  width: "100%",
+                  padding: "13px 15px",
+                  border:
+                    "1px solid #d1d5db",
+                  borderRadius: "8px",
+                  fontSize: "16px",
+                  boxSizing:
+                    "border-box",
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                marginBottom: "16px",
+              }}
+            >
+              <label
+                htmlFor="comment"
+                style={{
+                  display: "block",
+                  fontWeight: 600,
+                  marginBottom: "8px",
+                }}
+              >
+                Your comment
+              </label>
+
+              <textarea
+                id="comment"
+                name="comment"
+                maxLength={
