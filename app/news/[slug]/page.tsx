@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import DirectAd from "@/components/DirectAd";
+import ShareButtons from "@/components/ShareButtons";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -171,6 +172,11 @@ export default async function NewsArticlePage({
             dangerouslySetInnerHTML={{
               __html: content,
             }}
+          />
+
+          <ShareButtons
+            title={title}
+            url={articleUrl}
           />
 
           <div className="my-10">
