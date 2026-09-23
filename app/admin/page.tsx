@@ -363,4 +363,212 @@ export default function AdminDashboard() {
                 type="url"
                 value={feedUrl}
                 onChange={(e) =>
-                 
+                  setFeedUrl(e.target.value)
+                }
+                placeholder="https://example.com/feed/"
+              />
+            </label>
+
+            <label>
+              Feed Category
+
+              <select
+                value={category}
+                onChange={(e) =>
+                  setCategory(e.target.value)
+                }
+              >
+                {NEWS_CATEGORIES.map(
+                  (item) => (
+                    <option
+                      key={item}
+                      value={item}
+                    >
+                      {item}
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+
+            <button
+              type="submit"
+              disabled={addingSource}
+            >
+              {addingSource
+                ? "Adding..."
+                : "Add RSS Source"}
+            </button>
+          </form>
+
+          <div className="adminList">
+            <h3>Connected Sources</h3>
+
+            {loading ? (
+              <p>Loading sources...</p>
+            ) : sources.length === 0 ? (
+              <p>
+                No RSS sources added yet.
+              </p>
+            ) : (
+              sources.map((source) => (
+                <div
+                  className="adminListItem"
+                  key={source.id}
+                >
+                  <div>
+                    <strong>
+                      {source.name}
+                    </strong>
+
+                    <p>
+                      {source.feed_url}
+                    </p>
+
+                    <small>
+                      {source.category} ·{" "}
+                      {source.active
+                        ? "Active"
+                        : "Disabled"}
+                    </small>
+                  </div>
+
+                  <div className="adminActions">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        toggleSource(
+                          source
+                        )
+                      }
+                    >
+                      {source.active
+                        ? "Disable"
+                        : "Enable"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        deleteSource(
+                          source.id
+                        )
+                      }
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        {/* PERSONAL ADVERTISEMENTS */}
+        <section className="section">
+          <div className="sectionHeader">
+            <div>
+              <h2>
+                Personal Advertisements
+              </h2>
+
+              <p>
+                Add an image advertisement
+                that can appear on the
+                selected placement.
+              </p>
+            </div>
+
+            <Link
+              href="/ads"
+              className="adminLink"
+            >
+              View Ads Page
+            </Link>
+          </div>
+
+          <form
+            onSubmit={addAd}
+            className="form"
+          >
+            <label>
+              Advertisement Title
+
+              <input
+                type="text"
+                value={adTitle}
+                onChange={(e) =>
+                  setAdTitle(e.target.value)
+                }
+                placeholder="Example: JNMulee Business"
+              />
+            </label>
+
+            <label>
+              Advertisement Image URL
+
+              <input
+                type="url"
+                value={adImageUrl}
+                onChange={(e) =>
+                  setAdImageUrl(
+                    e.target.value
+                  )
+                }
+                placeholder="https://example.com/ad-image.jpg"
+              />
+            </label>
+
+            <label>
+              Advertisement Link
+
+              <input
+                type="url"
+                value={adLinkUrl}
+                onChange={(e) =>
+                  setAdLinkUrl(
+                    e.target.value
+                  )
+                }
+                placeholder="https://example.com"
+              />
+            </label>
+
+            <label>
+              Placement
+
+              <select
+                value={adPlacement}
+                onChange={(e) =>
+                  setAdPlacement(
+                    e.target.value
+                  )
+                }
+              >
+                {AD_PLACEMENTS.map(
+                  (item) => (
+                    <option
+                      key={item.value}
+                      value={item.value}
+                    >
+                      {item.label}
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+
+            <button
+              type="submit"
+              disabled={addingAd}
+            >
+              {addingAd
+                ? "Adding..."
+                : "Add Advertisement"}
+            </button>
+          </form>
+        </section>
+      </div>
+    </main>
+  );
+}
