@@ -46,7 +46,8 @@ export const revalidate = 60;
 export default async function Category({ params }: Props) {
   const { slug } = await params;
 
-  const databaseCategory = categoryMap[slug.toLowerCase()];
+  const slugKey = slug.toLowerCase();
+  const databaseCategory = categoryMap[slugKey];
 
   if (!databaseCategory) {
     notFound();
@@ -54,7 +55,7 @@ export default async function Category({ params }: Props) {
 
   const displayCategory =
     categoryLinks.find(
-      (category) => category.slug === slug.toLowerCase()
+      (category) => category.slug === slugKey
     )?.name || databaseCategory;
 
   const supabase = createClient(
@@ -62,10 +63,27 @@ export default async function Category({ params }: Props) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
+  /*
+   * IMPORTANT:
+   * The Supabase news table does NOT have a description column
+   * or a published_at column.
+   *
+   * The real columns are:
+   * id
+   * title
+   * slug
+   * content
+   * image_url
+   * Published
+   * source_url
+   * category
+   * created_at
+   */
+
   const { data: posts, error } = await supabase
     .from("news")
     .select(
-      "id, title, slug, content, description, image_url, category, created_at, published_at"
+      "id, title, slug, content, image_url, category, created_at"
     )
     .eq("Published", true)
     .eq("category", databaseCategory)
@@ -84,26 +102,55 @@ export default async function Category({ params }: Props) {
             JNMulee <span>News</span>
           </Link>
 
-          <Link href="/">⌂ Home</Link>
+          <nav className="mainNav">
+            <Link href="/">Home</Link>
+
+            {categoryLinks.map((category) => {
+              const active =
+                category.slug === slugKey ||
+                (category.slug === "sport" &&
+                  slugKey === "sports");
+
+              return (
+                <Link
+                  key={category.slug}
+                  href={`/category/${category.slug}`}
+                  className={active ? "active" : ""}
+                >
+                  {category.name}
+                </Link>
+              );
+            })}
+          </nav>
         </div>
       </header>
 
       <section className="container section">
         <p className="eyebrow">Category</p>
 
-        <h1>{displayCategory} News</h1>
+        <div className="sectionTitle">
+          <div>
+            <p className="sectionKicker">
+              JNMULEE NEWS
+            </p>
 
-        <p className="lead">
-          Latest {displayCategory.toLowerCase()} news and stories from
-          JNMulee News.
+            <h1>
+              {displayCategory} News
+            </h1>
+          </div>
+        </div>
+
+        <p className="categoryDescription">
+          Latest {displayCategory.toLowerCase()} news and
+          stories from JNMulee News.
         </p>
 
         <nav className="categoryNav">
           {categoryLinks.map((category) => {
             const active =
-              category.slug === slug.toLowerCase() ||
+              category.slug === slugKey ||
               (category.slug === "sport" &&
-                slug.toLowerCase() === "sports");
+                slugKey === "sports");
 
             return (
               <Link
@@ -121,30 +168,47 @@ export default async function Category({ params }: Props) {
           })}
         </nav>
 
-        {!posts || posts.length === 0 ? (
+        {error ? (
           <div className="emptyState">
-            <h2>No {displayCategory} news yet</h2>
+            <h2>Unable to load this category</h2>
 
             <p>
-              New {displayCategory.toLowerCase()} stories will appear here
-              when they are published.
+              There was a problem loading the latest
+              {displayCategory.toLowerCase()} stories.
+              Please try again shortly.
+            </p>
+          </div>
+        ) : !posts || posts.length === 0 ? (
+          <div className="emptyState">
+            <h2>
+              No {displayCategory} news yet
+            </h2>
+
+            <p>
+              New {displayCategory.toLowerCase()} stories
+              will appear here when they are published.
             </p>
           </div>
         ) : (
           <div className="grid">
             {posts.map((post) => {
               const text = cleanText(
-                post.description || post.content || ""
+                post.content || ""
               );
 
               return (
-                <article className="card" key={post.id}>
+                <article
+                  className="card"
+                  key={post.id}
+                >
                   {post.image_url ? (
-                    <Link href={`/news/${post.slug}`}>
+                    <Link
+                      href={`/news/${post.slug}`}
+                      className="cardImage"
+                    >
                       <img
                         src={post.image_url}
                         alt={post.title}
-                        className="cardImage"
                       />
                     </Link>
                   ) : (
@@ -158,11 +222,14 @@ export default async function Category({ params }: Props) {
 
                   <div className="cardBody">
                     <p className="category">
-                      {post.category || displayCategory}
+                      {post.category ||
+                        displayCategory}
                     </p>
 
                     <h3>
-                      <Link href={`/news/${post.slug}`}>
+                      <Link
+                        href={`/news/${post.slug}`}
+                      >
                         {post.title}
                       </Link>
                     </h3>
