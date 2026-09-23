@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+export const dynamic = "force-dynamic";
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SECRET_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const allowedCategories = [
+const ALLOWED_CATEGORIES = [
   "Top Stories",
   "News",
+  "Nigeria",
   "World",
   "Business",
   "Technology",
@@ -19,141 +22,150 @@ const allowedCategories = [
   "Crypto",
 ];
 
-function stripHtml(text: string) {
-  return text
-    .replace(/<[^>]*>/g, "")
-    .replace(/<!\[CDATA\[|\]\]>/g, "")
+function cleanText(value: string | null | undefined) {
+  return (value || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
-function decodeXml(text: string) {
-  return text
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+function getImage(item: Element) {
+  const enclosure = item.querySelector("enclosure");
+  const media = item.querySelector("media\\:content, content");
+  const thumbnail = item.querySelector("media\\:thumbnail");
+  const image = item.querySelector("image");
+
+  const candidates = [
+    enclosure?.getAttribute("url"),
+    media?.getAttribute("url"),
+    thumbnail?.getAttribute("url"),
+    image?.textContent,
+  ];
+
+  const html = item.querySelector("description")?.textContent || "";
+
+  const htmlMatch = html.match(
+    /<img[^>]+(?:src|data-src)=["']([^"']+)["']/i
+  );
+
+  if (htmlMatch?.[1]) {
+    candidates.push(htmlMatch[1]);
+  }
+
+  for (const value of candidates) {
+    if (!value) continue;
+
+    const url = value.trim();
+
+    if (/^https?:\/\/.+/i.test(url)) {
+      return url;
+    }
+  }
+
+  return null;
 }
 
 function makeSlug(title: string) {
   return (
     title
       .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-") +
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 180) +
     "-" +
     Date.now()
   );
 }
 
-function getTagValue(item: string, tag: string) {
-  const match = item.match(
-    new RegExp(
-      `<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`,
-      "i"
-    )
+async function parseFeed(feedUrl: string) {
+  const response = await fetch(feedUrl, {
+    headers: {
+      "User-Agent": "JNMuleeNews/1.0",
+      Accept: "application/rss+xml, application/xml, text/xml",
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Feed returned ${response.status}`);
+  }
+
+  const xml = await response.text();
+
+  const items = [...xml.matchAll(/<item[\s\S]*?<\/item>/gi)].map(
+    (match) => match[0]
   );
 
-  return match ? decodeXml(match[1].trim()) : "";
+  return items;
 }
 
-function getImageUrl(item: string) {
-  const enclosure = item.match(
-    /<enclosure[^>]+url=["']([^"']+)["'][^>]*>/i
+function xmlValue(item: string, tag: string) {
+  const match = item.match(
+    new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i")
   );
 
-  if (enclosure?.[1]) {
-    return decodeXml(enclosure[1].trim());
-  }
+  return match?.[1]
+    ?.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .trim();
+}
 
-  const mediaContent = item.match(
-    /<media:content[^>]+url=["']([^"']+)["'][^>]*>/i
-  );
+function extractImage(item: string) {
+  const matches = [
+    item.match(/<media:content[^>]+url=["']([^"']+)["']/i)?.[1],
+    item.match(/<media:thumbnail[^>]+url=["']([^"']+)["']/i)?.[1],
+    item.match(/<enclosure[^>]+url=["']([^"']+)["']/i)?.[1],
+    item.match(/<image[^>]*>([\s\S]*?)<\/image>/i)?.[1],
+    item.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1],
+  ];
 
-  if (mediaContent?.[1]) {
-    return decodeXml(mediaContent[1].trim());
-  }
-
-  const thumbnail = item.match(
-    /<media:thumbnail[^>]+url=["']([^"']+)["'][^>]*>/i
-  );
-
-  if (thumbnail?.[1]) {
-    return decodeXml(thumbnail[1].trim());
-  }
-
-  const imageFromHtml = item.match(
-    /<img[^>]+src=["']([^"']+)["']/i
-  );
-
-  if (imageFromHtml?.[1]) {
-    return decodeXml(imageFromHtml[1].trim());
+  for (const image of matches) {
+    if (image && /^https?:\/\//i.test(image.trim())) {
+      return image.trim();
+    }
   }
 
   return null;
 }
 
 export async function GET() {
+  let processed = 0;
+  let generated = 0;
+  let published = 0;
+  let skipped = 0;
+  let skippedNoImage = 0;
+  const errors: string[] = [];
+
   try {
     const { data: sources, error: sourceError } = await supabase
       .from("sources")
-      .select("name,feed_url,category,active")
+      .select("*")
       .eq("active", true);
 
     if (sourceError) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: sourceError.message,
-        },
-        { status: 500 }
-      );
+      throw sourceError;
     }
 
-    let added = 0;
-    let skipped = 0;
+    for (const source of sources || []) {
+      if (!source.feed_url) continue;
 
-    for (const source of sources ?? []) {
       try {
-        const category = allowedCategories.includes(source.category)
-          ? source.category
-          : "Top Stories";
+        const items = await parseFeed(source.feed_url);
 
-        const response = await fetch(source.feed_url, {
-          headers: {
-            "User-Agent": "JNMulee-News/1.0",
-            Accept:
-              "application/rss+xml, application/xml, text/xml, */*",
-          },
-          cache: "no-store",
-        });
+        for (const rawItem of items.slice(0, 20)) {
+          processed++;
 
-        if (!response.ok) {
-          skipped++;
-          continue;
-        }
+          const title = cleanText(xmlValue(rawItem, "title"));
 
-        const xml = await response.text();
+          const link =
+            xmlValue(rawItem, "link") ||
+            xmlValue(rawItem, "guid") ||
+            "";
 
-        const items = [
-          ...xml.matchAll(/<item[\s\S]*?<\/item>/gi),
-        ];
-
-        for (const match of items.slice(0, 10)) {
-          const item = match[0];
-
-          const title = stripHtml(
-            getTagValue(item, "title")
-          );
-
-          const link = stripHtml(
-            getTagValue(item, "link")
-          );
-
-          const description = stripHtml(
-            getTagValue(item, "description")
+          const description = cleanText(
+            xmlValue(rawItem, "description") ||
+              xmlValue(rawItem, "content:encoded")
           );
 
           if (!title || !link) {
@@ -161,69 +173,82 @@ export async function GET() {
             continue;
           }
 
-          const imageUrl = getImageUrl(item);
+          const imageUrl = extractImage(rawItem);
 
-          const { data: existing, error: duplicateError } =
-            await supabase
-              .from("news")
-              .select("id")
-              .eq("source_url", link)
-              .maybeSingle();
-
-          if (duplicateError) {
-            skipped++;
+          // HARD RULE:
+          // No image = never insert/publish the article.
+          if (!imageUrl) {
+            skippedNoImage++;
             continue;
           }
 
-          if (existing) {
-            skipped++;
-            continue;
-          }
-
-          const content =
-            description ||
-            `Latest news information from ${source.name}.`;
-
-          const { error: insertError } = await supabase
+          const { data: duplicate } = await supabase
             .from("news")
-            .insert({
-              title,
-              slug: makeSlug(title),
-              content,
-              image_url: imageUrl,
-              source_url: link,
-              category,
-              Published: false,
-            });
+            .select("id")
+            .eq("source_url", link)
+            .limit(1)
+            .maybeSingle();
 
-          if (insertError) {
+          if (duplicate) {
             skipped++;
             continue;
           }
 
-          added++;
+          const category = ALLOWED_CATEGORIES.includes(source.category)
+            ? source.category
+            : "Top Stories";
+
+          const content = description || title;
+
+          const { error } = await supabase.from("news").insert({
+            title,
+            slug: makeSlug(title),
+            content,
+            image_url: imageUrl,
+            Published: false,
+            source_url: link,
+            category,
+          });
+
+          if (error) {
+            errors.push(`${title}: ${error.message}`);
+            continue;
+          }
+
+          generated++;
         }
-      } catch {
-        skipped++;
-        continue;
+      } catch (error) {
+        errors.push(
+          `${source.name}: ${
+            error instanceof Error ? error.message : "Feed error"
+          }`
+        );
       }
     }
 
     return NextResponse.json({
       success: true,
-      added,
+      processed,
+      generated,
+      published,
       skipped,
+      skippedNoImage,
+      errors,
       message:
-        "RSS import completed. New stories remain unpublished until they have an image.",
+        "Feed import completed. Articles without images were skipped.",
     });
   } catch (error) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unknown error",
+        processed,
+        generated,
+        published,
+        skipped,
+        skippedNoImage,
+        errors: [
+          error instanceof Error ? error.message : "Unknown error",
+        ],
       },
       { status: 500 }
     );
