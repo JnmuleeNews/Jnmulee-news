@@ -262,6 +262,27 @@ export default function AdminDashboard() {
           </div>
         </section>
 
+        {/* COMMENT MANAGEMENT */}
+        <section className="section">
+          <div className="sectionHeader">
+            <div>
+              <h2>Comments</h2>
+
+              <p>
+                Review, approve or delete comments submitted by
+                visitors.
+              </p>
+            </div>
+
+            <Link
+              href="/admin/comments"
+              className="adminLink"
+            >
+              Manage Comments
+            </Link>
+          </div>
+        </section>
+
         {/* NEWS SOURCES */}
         <section className="section">
           <div className="sectionHeader">
@@ -321,176 +342,4 @@ export default function AdminDashboard() {
                 {NEWS_CATEGORIES.map((item) => (
                   <option
                     key={item}
-                    value={item}
-                  >
-                    {item}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button
-              type="submit"
-              disabled={addingSource}
-            >
-              {addingSource
-                ? "Adding..."
-                : "Add News Source"}
-            </button>
-          </form>
-        </section>
-
-        {/* CONNECTED NEWS SOURCES */}
-        <section className="section">
-          <h2>Connected News Sources</h2>
-
-          {loading ? (
-            <p>Loading sources...</p>
-          ) : sources.length === 0 ? (
-            <p>No news sources connected yet.</p>
-          ) : (
-            <div className="sourceList">
-              {sources.map((source) => (
-                <div
-                  className="sourceItem"
-                  key={source.id}
-                >
-                  <div>
-                    <h3>{source.name}</h3>
-
-                    <p>{source.feed_url}</p>
-
-                    <span className="categoryBadge">
-                      {source.category}
-                    </span>
-
-                    <span
-                      className={
-                        source.active
-                          ? "statusBadge active"
-                          : "statusBadge"
-                      }
-                    >
-                      {source.active
-                        ? "Active"
-                        : "Inactive"}
-                    </span>
-                  </div>
-
-                  <div className="adminActions">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        toggleSource(source)
-                      }
-                    >
-                      {source.active
-                        ? "Disable"
-                        : "Enable"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        deleteSource(source.id)
-                      }
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* PERSONAL ADS */}
-        <section className="section">
-          <div className="sectionHeader">
-            <div>
-              <h2>Personal Ads</h2>
-
-              <p>
-                Add your own advertisements and choose where
-                each advertisement appears on the platform.
-              </p>
-            </div>
-          </div>
-
-          <form
-            onSubmit={addAd}
-            className="form"
-          >
-            <label>
-              Advertisement Title
-
-              <input
-                type="text"
-                value={adTitle}
-                onChange={(e) =>
-                  setAdTitle(e.target.value)
-                }
-                placeholder="Advertisement title"
-              />
-            </label>
-
-            <label>
-              Advertisement Image URL
-
-              <input
-                type="url"
-                value={adImageUrl}
-                onChange={(e) =>
-                  setAdImageUrl(e.target.value)
-                }
-                placeholder="https://example.com/ad.jpg"
-              />
-            </label>
-
-            <label>
-              Advertisement Link
-
-              <input
-                type="url"
-                value={adLinkUrl}
-                onChange={(e) =>
-                  setAdLinkUrl(e.target.value)
-                }
-                placeholder="https://example.com"
-              />
-            </label>
-
-            <label>
-              Ad Placement
-
-              <select
-                value={adPlacement}
-                onChange={(e) =>
-                  setAdPlacement(e.target.value)
-                }
-              >
-                {AD_PLACEMENTS.map((item) => (
-                  <option
-                    key={item.value}
-                    value={item.value}
-                  >
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button
-              type="submit"
-              disabled={addingAd}
-            >
-              {addingAd
-                ? "Adding..."
-                : "Add Personal Ad"}
-            </button>
-          </form>
-        </section>
-      </div>
-    </main>
-  );
-}
+                   
