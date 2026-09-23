@@ -1,12 +1,23 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import OpenAI from "openai";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  : null;
+
+const OPENAI_MODEL =
+  process.env.OPENAI_MODEL || "gpt-4o-mini";
 
 const ALLOWED_CATEGORIES = [
   "Top Stories",
@@ -22,73 +33,169 @@ const ALLOWED_CATEGORIES = [
   "Crypto",
 ];
 
-function cleanText(value: string | null | undefined) {
-  return (value || "")
+function decodeHtml(value: string) {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#(\d+);/g, (_, code) =>
+      String.fromCharCode(Number(code))
+    )
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) =>
+      String.fromCharCode(parseInt(code, 16))
+    );
+}
+
+function cleanText(
+  value: string | null | undefined
+) {
+  if (!value) {
+    return "";
+  }
+
+  return decodeHtml(value)
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<iframe[\s\S]*?<\/iframe>/gi, " ")
+    .replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, "$1")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
     .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\bwww\.\S+/gi, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
+function wordCount(text: string) {
+  return text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
 function makeSlug(title: string) {
-  const base = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 180);
+  const base =
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 150) || "news";
 
   return `${base}-${Date.now()}`;
 }
 
-function xmlValue(item: string, tag: string) {
+function xmlValue(
+  item: string,
+  tag: string
+) {
   const match = item.match(
     new RegExp(
-      `<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`,
+      `<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`,
       "i"
     )
   );
 
-  return match?.[1]
-    ?.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+  if (!match?.[1]) {
+    return "";
+  }
+
+  return match[1]
+    .replace(
+      /<!\[CDATA\[([\s\S]*?)\]\]>/g,
+      "$1"
+    )
     .trim();
+}
+
+function xmlAttribute(
+  item: string,
+  tag: string,
+  attribute: string
+) {
+  const match = item.match(
+    new RegExp(
+      `<${tag}\\b[^>]*\\b${attribute}=["']([^"']+)["']`,
+      "i"
+    )
+  );
+
+  return match?.[1]?.trim() || null;
 }
 
 function extractImage(item: string) {
   const images = [
+    xmlAttribute(
+      item,
+      "media:content",
+      "url"
+    ),
+
+    xmlAttribute(
+      item,
+      "media:thumbnail",
+      "url"
+    ),
+
+    xmlAttribute(
+      item,
+      "enclosure",
+      "url"
+    ),
+
     item.match(
-      /<media:content[^>]+url=["']([^"']+)["']/i
+      /<img\b[^>]*\bsrc=["']([^"']+)["']/i
     )?.[1],
 
     item.match(
-      /<media:thumbnail[^>]+url=["']([^"']+)["']/i
+      /<img\b[^>]*\bdata-src=["']([^"']+)["']/i
     )?.[1],
 
     item.match(
-      /<enclosure[^>]+url=["']([^"']+)["']/i
-    )?.[1],
-
-    item.match(
-      /<img[^>]+src=["']([^"']+)["']/i
-    )?.[1],
-
-    item.match(
-      /<img[^>]+data-src=["']([^"']+)["']/i
+      /<img\b[^>]*\bdata-original=["']([^"']+)["']/i
     )?.[1],
   ];
 
   for (const image of images) {
     if (
       image &&
-      /^https?:\/\//i.test(image.trim())
+      /^https?:\/\//i.test(image)
     ) {
-      return image.trim();
+      return image;
     }
   }
 
   return null;
+}
+
+function extractSourceCategory(
+  rawItem: string
+) {
+  const categories: string[] = [];
+
+  const regex =
+    /<category(?:\s[^>]*)?>([\s\S]*?)<\/category>/gi;
+
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(rawItem))) {
+    const value = cleanText(match[1]);
+
+    if (value) {
+      categories.push(value);
+    }
+  }
+
+  return categories[0] || null;
 }
 
 function classifyCategory(
@@ -99,9 +206,8 @@ function classifyCategory(
   const text =
     `${title} ${description}`.toLowerCase();
 
-  const source = (
-    sourceCategory || ""
-  ).trim();
+  const source =
+    (sourceCategory || "").trim();
 
   const specificCategories = [
     "Nigeria",
@@ -115,7 +221,9 @@ function classifyCategory(
     "Crypto",
   ];
 
-  if (specificCategories.includes(source)) {
+  if (
+    specificCategories.includes(source)
+  ) {
     return source;
   }
 
@@ -191,19 +299,24 @@ function classifyCategory(
     return "World";
   }
 
-  if (ALLOWED_CATEGORIES.includes(source)) {
+  if (
+    ALLOWED_CATEGORIES.includes(source)
+  ) {
     return source;
   }
 
   return "Top Stories";
 }
 
-async function parseFeed(feedUrl: string) {
+async function parseFeed(
+  feedUrl: string
+) {
   const response = await fetch(feedUrl, {
     headers: {
-      "User-Agent": "JNMuleeNews/1.0",
+      "User-Agent":
+        "Mozilla/5.0 (compatible; JNMuleeNews/1.0)",
       Accept:
-        "application/rss+xml, application/xml, text/xml",
+        "application/rss+xml, application/atom+xml, application/xml, text/xml",
     },
     cache: "no-store",
   });
@@ -239,18 +352,221 @@ async function parseFeed(feedUrl: string) {
       break;
     }
 
-    const item = xml.slice(
-      itemStart,
-      itemEnd + "</item>".length
+    items.push(
+      xml.slice(
+        itemStart,
+        itemEnd + "</item>".length
+      )
     );
-
-    items.push(item);
 
     start =
       itemEnd + "</item>".length;
   }
 
+  /*
+   * Some feeds use Atom <entry> instead of RSS <item>.
+   */
+  if (items.length === 0) {
+    let entryStart = 0;
+
+    while (true) {
+      const startIndex = xml.indexOf(
+        "<entry",
+        entryStart
+      );
+
+      if (startIndex === -1) {
+        break;
+      }
+
+      const endIndex = xml.indexOf(
+        "</entry>",
+        startIndex
+      );
+
+      if (endIndex === -1) {
+        break;
+      }
+
+      items.push(
+        xml.slice(
+          startIndex,
+          endIndex + "</entry>".length
+        )
+      );
+
+      entryStart =
+        endIndex + "</entry>".length;
+    }
+  }
+
   return items;
+}
+
+function extractFeedContent(
+  rawItem: string
+) {
+  /*
+   * Prefer content:encoded because it commonly
+   * contains the full article body when supplied
+   * by the publisher.
+   */
+  const encoded =
+    xmlValue(
+      rawItem,
+      "content:encoded"
+    );
+
+  const content =
+    cleanText(encoded);
+
+  if (content) {
+    return content;
+  }
+
+  const contentEncoded =
+    xmlValue(
+      rawItem,
+      "content"
+    );
+
+  const fullContent =
+    cleanText(contentEncoded);
+
+  if (fullContent) {
+    return fullContent;
+  }
+
+  return cleanText(
+    xmlValue(
+      rawItem,
+      "description"
+    )
+  );
+}
+
+async function createLongOriginalArticle({
+  title,
+  content,
+  category,
+}: {
+  title: string;
+  content: string;
+  category: string;
+}) {
+  if (!openai) {
+    return null;
+  }
+
+  if (wordCount(content) >= 450) {
+    return null;
+  }
+
+  try {
+    const response =
+      await openai.chat.completions.create({
+        model: OPENAI_MODEL,
+        temperature: 0.2,
+        messages: [
+          {
+            role: "system",
+            content: `
+You are the senior news editor for JNMulee News.
+
+Rewrite the supplied news material into an ORIGINAL, detailed news article.
+
+Requirements:
+- Write approximately 600 to 900 words.
+- Use only facts contained in the supplied material.
+- Do not invent names, quotations, statistics, dates, locations, events or facts.
+- Do not pretend to have information that was not supplied.
+- If the supplied material does not contain enough factual information, expand the explanation and context only from facts already provided.
+- Do not copy sentences from the supplied material unnecessarily.
+- Write in clear professional news style.
+- Do not include a source link.
+- Do not mention RSS.
+- Do not mention that the article was generated.
+- Do not say "according to the source" unless the supplied material itself identifies a source.
+- Use normal paragraphs.
+- Do not use HTML.
+- Do not use markdown headings.
+- Do not add a conclusion that introduces new facts.
+
+Return ONLY valid JSON in this exact format:
+
+{
+  "headline": "new headline",
+  "article": "full article text"
+}
+            `.trim(),
+          },
+          {
+            role: "user",
+            content: `
+Category:
+${category}
+
+Original headline:
+${title}
+
+Available factual material:
+${content}
+            `.trim(),
+          },
+        ],
+      });
+
+    const text =
+      response.choices[0]?.message?.content
+        ?.trim();
+
+    if (!text) {
+      return null;
+    }
+
+    let parsed: {
+      headline?: string;
+      article?: string;
+    };
+
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      const cleaned = text
+        .replace(/^```json/i, "")
+        .replace(/^```/i, "")
+        .replace(/```$/i, "")
+        .trim();
+
+      parsed = JSON.parse(cleaned);
+    }
+
+    const headline =
+      cleanText(parsed.headline);
+
+    const article =
+      cleanText(parsed.article);
+
+    if (
+      !headline ||
+      !article ||
+      wordCount(article) < 350
+    ) {
+      return null;
+    }
+
+    return {
+      headline,
+      article,
+    };
+  } catch (error) {
+    console.error(
+      "OpenAI article generation failed:",
+      error
+    );
+
+    return null;
+  }
 }
 
 export async function GET() {
@@ -259,6 +575,7 @@ export async function GET() {
   let published = 0;
   let skipped = 0;
   let skippedNoImage = 0;
+  let aiGenerated = 0;
 
   const errors: string[] = [];
 
@@ -281,14 +598,16 @@ export async function GET() {
       }
 
       try {
-        const items = await parseFeed(
-          source.feed_url
-        );
+        const items =
+          await parseFeed(source.feed_url);
 
-        for (const rawItem of items.slice(0, 20)) {
+        for (const rawItem of items.slice(
+          0,
+          20
+        )) {
           processed++;
 
-          const title = cleanText(
+          let title = cleanText(
             xmlValue(rawItem, "title")
           );
 
@@ -297,10 +616,12 @@ export async function GET() {
             xmlValue(rawItem, "guid") ||
             "";
 
-          const description = cleanText(
-            xmlValue(rawItem, "description") ||
-              xmlValue(rawItem, "content:encoded")
-          );
+          /*
+           * Get the best content available from RSS.
+           * content:encoded is preferred over description.
+           */
+          const originalContent =
+            extractFeedContent(rawItem);
 
           if (!title || !link) {
             skipped++;
@@ -309,7 +630,6 @@ export async function GET() {
 
           /*
            * NO IMAGE = NO INSERT
-           * Stories without a valid image are completely skipped.
            */
           const imageUrl =
             extractImage(rawItem);
@@ -320,7 +640,7 @@ export async function GET() {
           }
 
           /*
-           * Prevent duplicate stories using source URL.
+           * Prevent duplicates using source URL.
            */
           const {
             data: duplicate,
@@ -344,30 +664,78 @@ export async function GET() {
             continue;
           }
 
-          /*
-           * Automatically categorize the story.
-           */
+          const sourceCategory =
+            extractSourceCategory(rawItem) ||
+            source.category ||
+            null;
+
           const category =
             classifyCategory(
               title,
-              description,
-              source.category
+              originalContent,
+              sourceCategory
             );
 
           /*
+           * If the RSS feed contains only a short
+           * excerpt, use OpenAI to create a longer
+           * original article from the available facts.
+           */
+          const generatedArticle =
+            await createLongOriginalArticle({
+              title,
+              content:
+                originalContent || title,
+              category,
+            });
+
+          let finalTitle = title;
+          let finalContent =
+            originalContent || title;
+
+          if (generatedArticle) {
+            finalTitle =
+              generatedArticle.headline;
+
+            finalContent =
+              generatedArticle.article;
+
+            aiGenerated++;
+          }
+
+          /*
+           * Final cleanup:
+           * Never publish source URLs or raw HTML.
+           */
+          finalTitle =
+            cleanText(finalTitle);
+
+          finalContent =
+            cleanText(finalContent);
+
+          if (!finalTitle) {
+            finalTitle = title;
+          }
+
+          if (!finalContent) {
+            finalContent = title;
+          }
+
+          /*
            * Publish automatically.
-           * The Supabase database trigger still prevents
-           * publication if image_url is empty.
+           *
+           * source_url remains stored privately for
+           * duplicate detection, but is not rendered
+           * publicly by the article page.
            */
           const {
             error: insertError,
           } = await supabase
             .from("news")
             .insert({
-              title,
-              slug: makeSlug(title),
-              content:
-                description || title,
+              title: finalTitle,
+              slug: makeSlug(finalTitle),
+              content: finalContent,
               image_url: imageUrl,
               Published: true,
               source_url: link,
@@ -376,7 +744,7 @@ export async function GET() {
 
           if (insertError) {
             errors.push(
-              `${title}: ${insertError.message}`
+              `${finalTitle}: ${insertError.message}`
             );
             continue;
           }
@@ -402,9 +770,10 @@ export async function GET() {
       published,
       skipped,
       skippedNoImage,
+      aiGenerated,
       errors,
       message:
-        "Feed import completed. Stories with images were automatically categorized and published. Stories without images were skipped.",
+        "News import completed. Full RSS content was preferred, short stories were expanded into longer original articles when OpenAI credits were available, stories without images were skipped, and source URLs remain private.",
     });
   } catch (error) {
     return NextResponse.json(
@@ -415,6 +784,7 @@ export async function GET() {
         published,
         skipped,
         skippedNoImage,
+        aiGenerated,
         errors: [
           error instanceof Error
             ? error.message
