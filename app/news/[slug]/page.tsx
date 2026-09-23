@@ -105,6 +105,7 @@ export default async function NewsArticlePage({
   }
 
   const title = story.title || "JNMulee News";
+
   const content =
     story.content || story.description || "";
 
@@ -173,7 +174,7 @@ export default async function NewsArticlePage({
           />
 
           <div className="my-10">
-            <DirectAd placement="article" />
+            <DirectAd placement="article_middle" />
           </div>
 
           <section
