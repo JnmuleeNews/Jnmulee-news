@@ -1,309 +1,137 @@
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
 import DirectAd from "@/components/DirectAd";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export const revalidate = 60;
-
 const categories = [
-  { name: "News", slug: "news" },
-  { name: "Sport", slug: "sport" },
+  { name: "Top Stories", slug: "news" },
+  { name: "Sports", slug: "sport" },
   { name: "Entertainment", slug: "entertainment" },
   { name: "Gossip", slug: "gossip" },
   { name: "Business", slug: "business" },
   { name: "Crypto", slug: "crypto" },
 ];
 
-function cleanText(value: string | null) {
-  return (value || "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-export default async function Home() {
-  const { data: news, error } = await supabase
+export default async function HomePage() {
+  const { data: stories } = await supabase
     .from("news")
     .select(
-      "id, title, slug, content, image_url, category, created_at"
+      "id,title,slug,content,image_url,Published,source_url,category,created_at"
     )
     .eq("Published", true)
+    .not("image_url", "is", null)
+    .neq("image_url", "")
     .order("created_at", { ascending: false })
-    .limit(40);
+    .limit(30);
 
-  const stories = news || [];
-  const featured = stories[0];
-  const latest = stories.slice(1, 13);
-
-  const getCategoryStories = (category: string) => {
-    return stories
-      .filter(
-        (story) =>
-          (story.category || "").toLowerCase() ===
-          category.toLowerCase()
-      )
-      .slice(0, 4);
-  };
+  const posts = stories || [];
 
   return (
     <main>
-      <header className="header">
-        <div className="container nav">
-          <Link className="brand" href="/">
-            JNMulee <span>News</span>
+      <header className="siteHeader">
+        <div className="container headerInner">
+          <Link href="/" className="logo">
+            JNMulee News
           </Link>
 
-          <nav className="mainNav" aria-label="Main navigation">
-            <Link className="active" href="/">
-              Home
-            </Link>
-
+          <nav>
+            <Link href="/">Home</Link>
+            <Link href="/search">Search</Link>
             {categories.map((category) => (
-              <Link
-                key={category.slug}
-                href={`/category/${category.slug}`}
-              >
+              <Link key={category.slug} href={`/category/${category.slug}`}>
                 {category.name}
               </Link>
             ))}
+            <Link href="/ads">Ads</Link>
           </nav>
         </div>
       </header>
 
-      <DirectAd placement="home_top" />
+      <div className="container">
+        <DirectAd slot="home_top" />
 
-      <section className="hero">
-        <div className="container heroInner">
-          <div className="heroCopy">
-            <p className="eyebrow">JNMulee News</p>
+        <section className="heroSection">
+          <h1>Latest News</h1>
 
-            <h1>
-              Stay informed.
-              <br />
-              <span>Know what matters.</span>
-            </h1>
-
-            <p className="lead">
-              News, sport, entertainment, gossip, business and crypto —
-              presented clearly and updated regularly.
-            </p>
-          </div>
-
-          <div className="heroPanel">
-            <span>NEWSROOM</span>
-
-            <strong>Latest stories, all in one place.</strong>
-
-            <p>
-              Follow the stories shaping conversations around the world.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="container section">
-        <div className="categoryBar">
-          {categories.map((category) => (
-            <Link
-              key={category.slug}
-              href={`/category/${category.slug}`}
-              className="categoryPill"
-            >
-              {category.name}
-            </Link>
-          ))}
-        </div>
-
-        <div className="sectionTitle">
-          <div>
-            <p className="sectionKicker">TOP STORIES</p>
-            <h2>What’s happening now</h2>
-          </div>
-
-          <span className="updated">Updated regularly</span>
-        </div>
-
-        {error ? (
-          <div className="emptyState">
-            Unable to load news right now.
-          </div>
-        ) : !featured ? (
-          <div className="emptyState">
-            No news articles available yet.
-          </div>
-        ) : (
-          <>
-            <article className="featuredStory">
-              <Link
-                href={`/news/${featured.slug}`}
-                className="featuredImage"
-              >
-                {featured.image_url ? (
-                  <img
-                    src={featured.image_url}
-                    alt={featured.title}
-                  />
-                ) : (
-                  <div className="imagePlaceholder">
-                    JNMulee News
-                  </div>
-                )}
-
-                <span className="imageBadge">
-                  Top Story
-                </span>
-              </Link>
-
-              <div className="featuredContent">
-                <p className="category">
-                  {featured.category || "News"}
-                </p>
-
-                <h3>
-                  <Link href={`/news/${featured.slug}`}>
-                    {featured.title}
-                  </Link>
-                </h3>
-
-                <p className="excerpt">
-                  {cleanText(featured.content).substring(0, 260)}
-                  {cleanText(featured.content).length > 260
-                    ? "…"
-                    : ""}
-                </p>
-
-                <Link
-                  className="readMore"
-                  href={`/news/${featured.slug}`}
-                >
-                  Read full story <span>→</span>
-                </Link>
-              </div>
-            </article>
-
-            <DirectAd placement="home_between" />
-
-            <div className="latestHeader">
-              <h2>Latest News</h2>
-              <div className="latestLine" />
+          {posts.length === 0 ? (
+            <div className="emptyState">
+              <h2>No published stories yet</h2>
+              <p>New stories will appear here when they have images.</p>
             </div>
-
-            <div className="grid">
-              {latest.map((story) => (
-                <article className="card" key={story.id}>
-                  <Link
-                    href={`/news/${story.slug}`}
-                    className="cardImage"
-                  >
-                    {story.image_url ? (
-                      <img
-                        src={story.image_url}
+          ) : (
+            <div className="newsGrid">
+              {posts.map((story) => (
+                <article className="newsCard" key={story.id}>
+                  <Link href={`/news/${story.slug}`}>
+                    <div className="newsImage">
+                      <Image
+                        src={story.image_url!}
                         alt={story.title}
+                        fill
+                        sizes="(max-width: 768px) 100vw, 33vw"
                       />
-                    ) : (
-                      <div className="imagePlaceholder">
-                        JNMulee News
-                      </div>
-                    )}
+                    </div>
+
+                    <div className="newsCardBody">
+                      <span className="categoryLabel">
+                        {story.category}
+                      </span>
+
+                      <h2>{story.title}</h2>
+
+                      <p>
+                        {story.content?.slice(0, 150)}
+                        {story.content?.length > 150 ? "..." : ""}
+                      </p>
+                    </div>
                   </Link>
-
-                  <div className="cardBody">
-                    <p className="category">
-                      {story.category || "News"}
-                    </p>
-
-                    <h3>
-                      <Link href={`/news/${story.slug}`}>
-                        {story.title}
-                      </Link>
-                    </h3>
-
-                    <p className="excerpt">
-                      {cleanText(story.content).substring(0, 150)}
-                      {cleanText(story.content).length > 150
-                        ? "…"
-                        : ""}
-                    </p>
-
-                    <Link
-                      className="readMore"
-                      href={`/news/${story.slug}`}
-                    >
-                      Read More →
-                    </Link>
-                  </div>
                 </article>
               ))}
             </div>
+          )}
+        </section>
 
-            {categories.map((category) => {
-              const categoryStories =
-                getCategoryStories(category.name);
+        <DirectAd slot="home_between" />
 
-              if (categoryStories.length === 0) {
-                return null;
-              }
+        <section className="categoryLinks">
+          <h2>Explore JNMulee News</h2>
 
-              return (
-                <section
-                  className="categorySection"
-                  key={category.slug}
-                >
-                  <div className="categorySectionHeader">
-                    <h2>{category.name}</h2>
+          <div className="categoryGrid">
+            {categories.map((category) => (
+              <Link
+                href={`/category/${category.slug}`}
+                className="categoryBox"
+                key={category.slug}
+              >
+                {category.name}
+              </Link>
+            ))}
+          </div>
+        </section>
 
-                    <Link
-                      className="viewCategory"
-                      href={`/category/${category.slug}`}
-                    >
-                      View all →
-                    </Link>
-                  </div>
+        <DirectAd slot="home_bottom" />
+      </div>
 
-                  <div className="categoryGrid">
-                    {categoryStories.map((story) => (
-                      <article
-                        className="categoryCard"
-                        key={story.id}
-                      >
-                        <Link href={`/news/${story.slug}`}>
-                          {story.image_url ? (
-                            <img
-                              className="categoryCardImage"
-                              src={story.image_url}
-                              alt={story.title}
-                            />
-                          ) : (
-                            <div className="categoryCardImage imagePlaceholder">
-                              JNMulee News
-                            </div>
-                          )}
-                        </Link>
+      <footer className="siteFooter">
+        <div className="container">
+          <div className="footerLinks">
+            <Link href="/about">About</Link>
+            <Link href="/contact">Contact</Link>
+            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/terms">Terms</Link>
+          </div>
 
-                        <div className="categoryCardBody">
-                          <h3>
-                            <Link
-                              href={`/news/${story.slug}`}
-                            >
-                              {story.title}
-                            </Link>
-                          </h3>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              );
-            })}
-          </>
-        )}
-      </section>
+          <p>© {new Date().getFullYear()} JNMulee News</p>
+        </div>
+      </footer>
     </main>
   );
 }
