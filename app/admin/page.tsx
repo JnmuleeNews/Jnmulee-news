@@ -20,7 +20,7 @@ const NEWS_CATEGORIES = [
 
 const AD_PLACEMENTS = [
   { value: "homepage", label: "Homepage" },
-  { value: "ads", label: "Ads Page" },
+  { value: "ads_page", label: "Ads Page" },
   { value: "homepage_ads", label: "Homepage + Ads Page" },
 ];
 
@@ -33,23 +33,10 @@ type Source = {
   created_at?: string;
 };
 
-type DirectAd = {
-  id: string;
-  title: string;
-  image_url: string;
-  link_url: string;
-  placement: string;
-  active: boolean;
-  starts_at?: string | null;
-  ends_at?: string | null;
-  created_at?: string;
-};
-
 export default function AdminDashboard() {
   const router = useRouter();
 
   const [sources, setSources] = useState<Source[]>([]);
-  const [ads, setAds] = useState<DirectAd[]>([]);
 
   const [name, setName] = useState("");
   const [feedUrl, setFeedUrl] = useState("");
@@ -70,30 +57,15 @@ export default function AdminDashboard() {
     setLoading(true);
     setError("");
 
-    const [sourceResult, adResult] = await Promise.all([
-      supabase
-        .from("sources")
-        .select("id,name,feed_url,category,active,created_at")
-        .order("created_at", { ascending: false }),
+    const { data, error } = await supabase
+      .from("sources")
+      .select("id,name,feed_url,category,active,created_at")
+      .order("created_at", { ascending: false });
 
-      supabase
-        .from("direct_ads")
-        .select(
-          "id,title,image_url,link_url,placement,active,starts_at,ends_at,created_at"
-        )
-        .order("created_at", { ascending: false }),
-    ]);
-
-    if (sourceResult.error) {
-      setError(sourceResult.error.message);
+    if (error) {
+      setError(error.message);
     } else {
-      setSources((sourceResult.data || []) as Source[]);
-    }
-
-    if (adResult.error) {
-      setError(adResult.error.message);
-    } else {
-      setAds((adResult.data || []) as DirectAd[]);
+      setSources((data || []) as Source[]);
     }
 
     setLoading(false);
@@ -208,47 +180,9 @@ export default function AdminDashboard() {
       setAdImageUrl("");
       setAdLinkUrl("");
       setAdPlacement("homepage");
-      await loadData();
     }
 
     setAddingAd(false);
-  }
-
-  async function deleteAd(id: string) {
-    if (!confirm("Delete this personal advertisement?")) {
-      return;
-    }
-
-    setMessage("");
-    setError("");
-
-    const { error } = await supabase
-      .from("direct_ads")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      setError(error.message);
-    } else {
-      setMessage("Personal advertisement deleted.");
-      await loadData();
-    }
-  }
-
-  async function toggleAd(ad: DirectAd) {
-    setMessage("");
-    setError("");
-
-    const { error } = await supabase
-      .from("direct_ads")
-      .update({ active: !ad.active })
-      .eq("id", ad.id);
-
-    if (error) {
-      setError(error.message);
-    } else {
-      await loadData();
-    }
   }
 
   async function runNewsImport() {
@@ -280,14 +214,6 @@ export default function AdminDashboard() {
   async function logout() {
     await supabase.auth.signOut();
     router.push("/admin/login");
-  }
-
-  function getPlacementLabel(placement: string) {
-    const found = AD_PLACEMENTS.find(
-      (item) => item.value === placement
-    );
-
-    return found?.label || placement;
   }
 
   return (
@@ -563,65 +489,6 @@ export default function AdminDashboard() {
                 : "Add Personal Ad"}
             </button>
           </form>
-
-          {/* EXISTING ADS */}
-          {ads.length > 0 && (
-            <div className="sourceList">
-              {ads.map((ad) => (
-                <div
-                  className="sourceItem"
-                  key={ad.id}
-                >
-                  <div>
-                    <h3>{ad.title}</h3>
-
-                    <p>
-                      Placement:{" "}
-                      {getPlacementLabel(
-                        ad.placement
-                      )}
-                    </p>
-
-                    <p>{ad.link_url}</p>
-
-                    <span
-                      className={
-                        ad.active
-                          ? "statusBadge active"
-                          : "statusBadge"
-                      }
-                    >
-                      {ad.active
-                        ? "Active"
-                        : "Inactive"}
-                    </span>
-                  </div>
-
-                  <div className="adminActions">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        toggleAd(ad)
-                      }
-                    >
-                      {ad.active
-                        ? "Disable"
-                        : "Enable"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        deleteAd(ad.id)
-                      }
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </section>
       </div>
     </main>
