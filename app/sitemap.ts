@@ -23,45 +23,39 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "hourly",
       priority: 1,
     },
-
-    {
-      url: `${baseUrl}/search`,
-      lastModified: now,
-      changeFrequency: "daily",
-      priority: 0.7,
-    },
-
     {
       url: `${baseUrl}/about`,
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.5,
     },
-
     {
       url: `${baseUrl}/contact`,
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.5,
     },
-
     {
       url: `${baseUrl}/privacy`,
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.3,
     },
-
     {
       url: `${baseUrl}/terms`,
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.3,
     },
+    {
+      url: `${baseUrl}/search`,
+      lastModified: now,
+      changeFrequency: "daily",
+      priority: 0.6,
+    },
   ];
 
   const categories = [
-    "news",
     "nigeria",
     "world",
     "business",
@@ -82,32 +76,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
   }
 
-  const { data: stories, error } = await supabase
+  const { data: stories } = await supabase
     .from("news")
-    .select("slug,created_at,image_url")
+    .select("slug,created_at")
     .eq("Published", true)
     .not("image_url", "is", null)
     .neq("image_url", "")
-    .order("created_at", {
-      ascending: false,
-    })
+    .order("created_at", { ascending: false })
     .limit(5000);
 
-  if (!error) {
-    for (const story of stories || []) {
-      if (!story.slug) {
-        continue;
-      }
+  for (const story of stories || []) {
+    if (!story.slug) continue;
 
-      urls.push({
-        url: `${baseUrl}/news/${story.slug}`,
-        lastModified: story.created_at
-          ? new Date(story.created_at)
-          : now,
-        changeFrequency: "daily",
-        priority: 0.7,
-      });
-    }
+    urls.push({
+      url: `${baseUrl}/news/${story.slug}`,
+      lastModified: story.created_at
+        ? new Date(story.created_at)
+        : now,
+      changeFrequency: "daily",
+      priority: 0.7,
+    });
   }
 
   return urls;
