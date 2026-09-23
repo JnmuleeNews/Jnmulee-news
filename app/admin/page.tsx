@@ -5,32 +5,38 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
+const NEWS_CATEGORIES = [
+  "Top Stories",
+  "Nigeria",
+  "World",
+  "Business",
+  "Technology",
+  "Sports",
+  "Gossip",
+  "Entertainment",
+  "Politics",
+  "Crypto",
+];
+
 type Source = {
-  id: number;
+  id: string;
   name: string;
   feed_url: string;
   category: string;
   active: boolean;
+  created_at?: string;
 };
 
 type DirectAd = {
   id: string;
   title: string;
   image_url: string;
-  link_url: string;
-  placement:
-    | "home_top"
-    | "home_between"
-    | "home_bottom"
-    | "article_top"
-    | "article_middle"
-    | "article_bottom";
+  target_url: string;
   active: boolean;
-  starts_at: string | null;
-  ends_at: string | null;
+  created_at?: string;
 };
 
-export default function AdminPage() {
+export default function AdminDashboard() {
   const router = useRouter();
 
   const [sources, setSources] = useState<Source[]>([]);
@@ -42,57 +48,61 @@ export default function AdminPage() {
 
   const [adTitle, setAdTitle] = useState("");
   const [adImageUrl, setAdImageUrl] = useState("");
-  const [adLinkUrl, setAdLinkUrl] = useState("");
-  const [adPlacement, setAdPlacement] =
-    useState<DirectAd["placement"]>("home_top");
+  const [adTargetUrl, setAdTargetUrl] = useState("");
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [adSaving, setAdSaving] = useState(false);
+  const [addingSource, setAddingSource] = useState(false);
+  const [addingAd, setAddingAd] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-  async function loadDashboard() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  async function loadData() {
+    setLoading(true);
+    setError("");
 
-    if (!user) {
-      router.replace("/admin/login");
-      return;
+    const [sourceResult, adResult] = await Promise.all([
+      supabase
+        .from("sources")
+        .select("id,name,feed_url,category,active,created_at")
+        .order("created_at", { ascending: false }),
+
+      supabase
+        .from("direct_ads")
+        .select("id,title,image_url,target_url,active,created_at")
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (sourceResult.error) {
+      setError(sourceResult.error.message);
+    } else {
+      setSources((sourceResult.data || []) as Source[]);
     }
 
-    const { data: sourceData, error: sourceError } = await supabase
-      .from("sources")
-      .select("id,name,feed_url,category,active")
-      .order("id", { ascending: false });
-
-    if (sourceError) {
-      alert(sourceError.message);
+    if (adResult.error) {
+      setError(adResult.error.message);
+    } else {
+      setAds((adResult.data || []) as DirectAd[]);
     }
 
-    setSources(sourceData ?? []);
-
-    const { data: adData, error: adError } = await supabase
-      .from("direct_ads")
-      .select(
-        "id,title,image_url,link_url,placement,active,starts_at,ends_at"
-      )
-      .order("created_at", { ascending: false });
-
-    if (adError) {
-      alert(adError.message);
-    }
-
-    setAds((adData as DirectAd[]) ?? []);
     setLoading(false);
   }
 
   useEffect(() => {
-    loadDashboard();
+    loadData();
   }, []);
 
   async function addSource(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
+
+    setAddingSource(true);
+    setMessage("");
+    setError("");
+
+    if (!name.trim() || !feedUrl.trim()) {
+      setError("Please enter the source name and RSS feed URL.");
+      setAddingSource(false);
+      return;
+    }
 
     const { error } = await supabase.from("sources").insert({
       name: name.trim(),
@@ -101,88 +111,26 @@ export default function AdminPage() {
       active: true,
     });
 
-    setSaving(false);
-
     if (error) {
-      alert(error.message);
+      setError(error.message);
+    } else {
+      setMessage("News source added successfully.");
+      setName("");
+      setFeedUrl("");
+      setCategory("Top Stories");
+      await loadData();
+    }
+
+    setAddingSource(false);
+  }
+
+  async function deleteSource(id: string) {
+    if (!confirm("Delete this news source?")) {
       return;
     }
 
-    setName("");
-    setFeedUrl("");
-
-    await loadDashboard();
-  }
-
-  async function addAd(e: React.FormEvent) {
-    e.preventDefault();
-    setAdSaving(true);
-
-    const { error } = await supabase.from("direct_ads").insert({
-      title: adTitle.trim(),
-      image_url: adImageUrl.trim(),
-      link_url: adLinkUrl.trim(),
-      placement: adPlacement,
-      active: true,
-    });
-
-    setAdSaving(false);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    setAdTitle("");
-    setAdImageUrl("");
-    setAdLinkUrl("");
-    setAdPlacement("home_top");
-
-    await loadDashboard();
-  }
-
-  async function toggleAd(id: string, active: boolean) {
-    const { error } = await supabase
-      .from("direct_ads")
-      .update({
-        active: !active,
-      })
-      .eq("id", id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    await loadDashboard();
-  }
-
-  async function deleteAd(id: string) {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this advert?"
-    );
-
-    if (!confirmed) return;
-
-    const { error } = await supabase
-      .from("direct_ads")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    await loadDashboard();
-  }
-
-  async function deleteSource(id: number) {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this source?"
-    );
-
-    if (!confirmed) return;
+    setMessage("");
+    setError("");
 
     const { error } = await supabase
       .from("sources")
@@ -190,259 +138,365 @@ export default function AdminPage() {
       .eq("id", id);
 
     if (error) {
-      alert(error.message);
+      setError(error.message);
+    } else {
+      setMessage("News source deleted.");
+      await loadData();
+    }
+  }
+
+  async function toggleSource(source: Source) {
+    setMessage("");
+    setError("");
+
+    const { error } = await supabase
+      .from("sources")
+      .update({ active: !source.active })
+      .eq("id", source.id);
+
+    if (error) {
+      setError(error.message);
+    } else {
+      await loadData();
+    }
+  }
+
+  async function addAd(e: React.FormEvent) {
+    e.preventDefault();
+
+    setAddingAd(true);
+    setMessage("");
+    setError("");
+
+    if (!adTitle.trim() || !adImageUrl.trim() || !adTargetUrl.trim()) {
+      setError("Please fill in all advertisement fields.");
+      setAddingAd(false);
       return;
     }
 
-    await loadDashboard();
+    const { error } = await supabase.from("direct_ads").insert({
+      title: adTitle.trim(),
+      image_url: adImageUrl.trim(),
+      target_url: adTargetUrl.trim(),
+      active: true,
+    });
+
+    if (error) {
+      setError(error.message);
+    } else {
+      setMessage("Advertisement added successfully.");
+      setAdTitle("");
+      setAdImageUrl("");
+      setAdTargetUrl("");
+      await loadData();
+    }
+
+    setAddingAd(false);
   }
 
-  async function signOut() {
+  async function deleteAd(id: string) {
+    if (!confirm("Delete this advertisement?")) {
+      return;
+    }
+
+    setMessage("");
+    setError("");
+
+    const { error } = await supabase
+      .from("direct_ads")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      setError(error.message);
+    } else {
+      setMessage("Advertisement deleted.");
+      await loadData();
+    }
+  }
+
+  async function toggleAd(ad: DirectAd) {
+    setMessage("");
+    setError("");
+
+    const { error } = await supabase
+      .from("direct_ads")
+      .update({ active: !ad.active })
+      .eq("id", ad.id);
+
+    if (error) {
+      setError(error.message);
+    } else {
+      await loadData();
+    }
+  }
+
+  async function runNewsImport() {
+    setMessage("");
+    setError("");
+
+    try {
+      const response = await fetch("/api/fetch-news", {
+        method: "GET",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data?.error || "News import failed.");
+        return;
+      }
+
+      setMessage(
+        data?.message || "RSS news import completed successfully."
+      );
+    } catch {
+      setError("Unable to start the news import.");
+    }
+  }
+
+  async function logout() {
     await supabase.auth.signOut();
-    router.replace("/admin/login");
+    router.push("/admin/login");
   }
 
   return (
     <main className="dashboardPage">
       <header className="dashboardHeader">
-        <div className="container">
-          <Link className="brand" href="/">
-            JNMulee <span>News</span>
-          </Link>
+        <div className="container dashboardHeaderInner">
+          <div>
+            <Link href="/admin" className="dashboardBrand">
+              JNMulee News Admin
+            </Link>
+            <p className="dashboardSubtitle">
+              Manage news sources, RSS feeds and advertisements
+            </p>
+          </div>
 
-          <button onClick={signOut}>Sign out</button>
+          <button type="button" onClick={logout}>
+            Logout
+          </button>
         </div>
       </header>
 
-      <section className="container section">
-        <h1>News Dashboard</h1>
+      <div className="container">
+        {message && <div className="success">{message}</div>}
+        {error && <div className="error">{error}</div>}
 
-        <div className="adminActions">
-          <Link href="/admin/news/new">
-            <button type="button">+ Create News</button>
-          </Link>
+        <section className="section">
+          <div className="sectionHeader">
+            <div>
+              <h1>News Sources</h1>
+              <p>
+                Connect RSS feeds and choose the category where imported
+                stories should appear.
+              </p>
+            </div>
 
-          <Link href="/">
-            <button type="button">View Website</button>
-          </Link>
-        </div>
-
-        <h2>Personal Advertisers</h2>
-
-        <p>
-          Add adverts from businesses or personal advertisers. Once added,
-          the advert will appear automatically in the selected position.
-        </p>
-
-        <form className="form" onSubmit={addAd}>
-          <label>Advertiser / Advert Title</label>
-
-          <input
-            value={adTitle}
-            onChange={(e) => setAdTitle(e.target.value)}
-            placeholder="Example: ABC Fashion"
-            required
-          />
-
-          <label>Advert Image URL</label>
-
-          <input
-            type="url"
-            value={adImageUrl}
-            onChange={(e) => setAdImageUrl(e.target.value)}
-            placeholder="https://example.com/banner.jpg"
-            required
-          />
-
-          <label>Advertiser Website / Destination URL</label>
-
-          <input
-            type="url"
-            value={adLinkUrl}
-            onChange={(e) => setAdLinkUrl(e.target.value)}
-            placeholder="https://example.com"
-            required
-          />
-
-          <label>Where should the advert appear?</label>
-
-          <select
-            value={adPlacement}
-            onChange={(e) =>
-              setAdPlacement(
-                e.target.value as DirectAd["placement"]
-              )
-            }
-          >
-            <option value="home_top">
-              Homepage — Top
-            </option>
-
-            <option value="home_between">
-              Homepage — Between Stories
-            </option>
-
-            <option value="home_bottom">
-              Homepage — Bottom
-            </option>
-
-            <option value="article_top">
-              Article — Top
-            </option>
-
-            <option value="article_middle">
-              Article — Middle
-            </option>
-
-            <option value="article_bottom">
-              Article — Bottom
-            </option>
-          </select>
-
-          <button type="submit" disabled={adSaving}>
-            {adSaving ? "Saving Advert..." : "Add Advert"}
-          </button>
-        </form>
-
-        <h2>Current Personal Adverts</h2>
-
-        {loading ? (
-          <p>Loading adverts...</p>
-        ) : ads.length === 0 ? (
-          <p>No personal adverts added yet.</p>
-        ) : (
-          <div className="form">
-            {ads.map((ad) => (
-              <div key={ad.id}>
-                <strong>{ad.title}</strong>
-
-                <p>
-                  Placement:{" "}
-                  {ad.placement.replaceAll("_", " ")}
-                </p>
-
-                <p>
-                  Status:{" "}
-                  {ad.active ? "Active" : "Inactive"}
-                </p>
-
-                <img
-                  src={ad.image_url}
-                  alt={ad.title}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    maxWidth: 500,
-                    maxHeight: 180,
-                    objectFit: "cover",
-                    borderRadius: 8,
-                    margin: "10px 0",
-                  }}
-                />
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    toggleAd(ad.id, ad.active)
-                  }
-                >
-                  {ad.active
-                    ? "Deactivate"
-                    : "Activate"}
-                </button>
-
-                {" "}
-
-                <button
-                  type="button"
-                  onClick={() => deleteAd(ad.id)}
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
+            <button type="button" onClick={runNewsImport}>
+              Import News Now
+            </button>
           </div>
-        )}
 
-        <h2>News Sources</h2>
+          <form onSubmit={addSource} className="form">
+            <label>
+              Source Name
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Example: Crypto News"
+              />
+            </label>
 
-        <form className="form" onSubmit={addSource}>
-          <label>Source name</label>
+            <label>
+              RSS Feed URL
+              <input
+                type="url"
+                value={feedUrl}
+                onChange={(e) => setFeedUrl(e.target.value)}
+                placeholder="https://example.com/feed/"
+              />
+            </label>
 
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Example News"
-            required
-          />
+            <label>
+              Category
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                {NEWS_CATEGORIES.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          <label>RSS / Feed URL</label>
+            <button type="submit" disabled={addingSource}>
+              {addingSource ? "Adding..." : "Add News Source"}
+            </button>
+          </form>
+        </section>
 
-          <input
-            value={feedUrl}
-            onChange={(e) => setFeedUrl(e.target.value)}
-            placeholder="https://example.com/feed"
-            required
-          />
+        <section className="section">
+          <h2>Connected News Sources</h2>
 
-          <label>Category</label>
+          {loading ? (
+            <p>Loading sources...</p>
+          ) : sources.length === 0 ? (
+            <p>No news sources connected yet.</p>
+          ) : (
+            <div className="sourceList">
+              {sources.map((source) => (
+                <div className="sourceItem" key={source.id}>
+                  <div>
+                    <h3>{source.name}</h3>
+                    <p>{source.feed_url}</p>
 
-          <select
-            value={category}
-            onChange={(e) =>
-              setCategory(e.target.value)
-            }
-          >
-            <option>Top Stories</option>
-            <option>Nigeria</option>
-            <option>World</option>
-            <option>Business</option>
-            <option>Technology</option>
-            <option>Sports</option>
-            <option>Entertainment</option>
-          </select>
+                    <span className="categoryBadge">
+                      {source.category}
+                    </span>
 
-          <button type="submit" disabled={saving}>
-            {saving ? "Saving..." : "Add Source"}
-          </button>
-        </form>
+                    <span
+                      className={
+                        source.active
+                          ? "statusBadge active"
+                          : "statusBadge"
+                      }
+                    >
+                      {source.active ? "Active" : "Inactive"}
+                    </span>
+                  </div>
 
-        <h2>Connected Sources</h2>
+                  <div className="adminActions">
+                    <button
+                      type="button"
+                      onClick={() => toggleSource(source)}
+                    >
+                      {source.active ? "Disable" : "Enable"}
+                    </button>
 
-        {loading ? (
-          <p>Loading sources...</p>
-        ) : sources.length === 0 ? (
-          <p>No sources connected yet.</p>
-        ) : (
-          <div className="form">
-            {sources.map((source) => (
-              <div key={source.id}>
-                <strong>{source.name}</strong>
+                    <button
+                      type="button"
+                      onClick={() => deleteSource(source.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
-                <p>{source.feed_url}</p>
+        <section className="section">
+          <div className="sectionHeader">
+            <div>
+              <h2>News Management</h2>
+              <p>Create and manage articles manually.</p>
+            </div>
 
-                <p>{source.category}</p>
+            <Link href="/admin/news" className="adminLink">
+              Manage News
+            </Link>
 
-                <p>
-                  Status:{" "}
-                  {source.active
-                    ? "Active"
-                    : "Inactive"}
-                </p>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    deleteSource(source.id)
-                  }
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
+            <Link href="/admin/news/new" className="adminLink">
+              Create News
+            </Link>
           </div>
-        )}
-      </section>
+        </section>
+
+        <section className="section">
+          <h2>Direct Advertisements</h2>
+          <p>
+            Add advertisements that can be displayed on the website.
+          </p>
+
+          <form onSubmit={addAd} className="form">
+            <label>
+              Advertisement Title
+              <input
+                type="text"
+                value={adTitle}
+                onChange={(e) => setAdTitle(e.target.value)}
+                placeholder="Advertisement title"
+              />
+            </label>
+
+            <label>
+              Advertisement Image URL
+              <input
+                type="url"
+                value={adImageUrl}
+                onChange={(e) => setAdImageUrl(e.target.value)}
+                placeholder="https://example.com/ad.jpg"
+              />
+            </label>
+
+            <label>
+              Advertisement Target URL
+              <input
+                type="url"
+                value={adTargetUrl}
+                onChange={(e) => setAdTargetUrl(e.target.value)}
+                placeholder="https://example.com"
+              />
+            </label>
+
+            <button type="submit" disabled={addingAd}>
+              {addingAd ? "Adding..." : "Add Advertisement"}
+            </button>
+          </form>
+        </section>
+
+        <section className="section">
+          <h2>Current Advertisements</h2>
+
+          {loading ? (
+            <p>Loading advertisements...</p>
+          ) : ads.length === 0 ? (
+            <p>No advertisements added yet.</p>
+          ) : (
+            <div className="sourceList">
+              {ads.map((ad) => (
+                <div className="sourceItem" key={ad.id}>
+                  <div>
+                    <h3>{ad.title}</h3>
+                    <p>{ad.target_url}</p>
+
+                    <span
+                      className={
+                        ad.active
+                          ? "statusBadge active"
+                          : "statusBadge"
+                      }
+                    >
+                      {ad.active ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+
+                  <div className="adminActions">
+                    <button
+                      type="button"
+                      onClick={() => toggleAd(ad)}
+                    >
+                      {ad.active ? "Disable" : "Enable"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => deleteAd(ad.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
