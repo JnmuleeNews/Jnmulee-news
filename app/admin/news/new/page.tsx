@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -43,7 +44,7 @@ export default function NewNewsPage() {
     let imageUrl = "";
 
     if (imageFile) {
-      const fileExt = imageFile.name.split(".").pop();
+      const fileExt = imageFile.name.split(".").pop() || "jpg";
 
       const fileName = `${Date.now()}-${Math.random()
         .toString(36)
@@ -76,7 +77,7 @@ export default function NewNewsPage() {
         content: content.trim(),
         category,
         image_url: imageUrl || null,
-        published,
+        Published: published,
       });
 
     setSaving(false);
@@ -130,6 +131,7 @@ export default function NewNewsPage() {
             <option>Business</option>
             <option>Technology</option>
             <option>Sports</option>
+            <option>Gossip</option>
             <option>Entertainment</option>
             <option>Politics</option>
           </select>
