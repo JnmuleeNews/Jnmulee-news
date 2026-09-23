@@ -57,16 +57,30 @@ function formatDate(date: string) {
 async function postComment(formData: FormData) {
   "use server";
 
-  const newsId = String(formData.get("news_id") || "");
-  const slug = String(formData.get("slug") || "");
-  const name = String(formData.get("name") || "").trim();
-  const comment = String(formData.get("comment") || "").trim();
+  const newsId = String(
+    formData.get("news_id") || ""
+  );
+
+  const slug = String(
+    formData.get("slug") || ""
+  );
+
+  const name = String(
+    formData.get("name") || ""
+  ).trim();
+
+  const comment = String(
+    formData.get("comment") || ""
+  ).trim();
 
   if (!newsId || !slug || !name || !comment) {
     redirect(`/news/${slug}#comments`);
   }
 
-  if (name.length > 80 || comment.length > 2000) {
+  if (
+    name.length > 80 ||
+    comment.length > 2000
+  ) {
     redirect(`/news/${slug}#comments`);
   }
 
@@ -84,7 +98,10 @@ async function postComment(formData: FormData) {
     });
 
   if (error) {
-    console.error("Comment insert error:", error);
+    console.error(
+      "Comment insert error:",
+      error
+    );
   }
 
   redirect(`/news/${slug}#comments`);
@@ -97,7 +114,9 @@ export default async function NewsArticlePage({
 
   const { data: story, error } = await supabase
     .from("news")
-    .select("*")
+    .select(
+      "id,title,slug,content,image_url,Published,source_url,category,created_at"
+    )
     .eq("slug", slug)
     .single();
 
@@ -105,32 +124,37 @@ export default async function NewsArticlePage({
     notFound();
   }
 
-  const title = story.title || "JNMulee News";
+  const title =
+    story.title || "JNMulee News";
 
   const content =
-    story.content || story.description || "";
+    story.content || "";
 
   const description = cleanText(
-    story.description || story.content || ""
+    content
   ).substring(0, 160);
 
   const image =
     story.image_url ||
-    story.image ||
     getImageFromContent(content);
 
   const publishedAt =
-    story.published_at ||
     story.created_at ||
     new Date().toISOString();
 
-  const articleUrl = `${SITE_URL}/news/${story.slug}`;
+  const articleUrl =
+    `${SITE_URL}/news/${story.slug}`;
 
-  const { data: comments } = await supabase
-    .from("comments")
-    .select("id, name, comment, created_at")
-    .eq("news_id", story.id)
-    .order("created_at", { ascending: false });
+  const { data: comments } =
+    await supabase
+      .from("comments")
+      .select(
+        "id,name,comment,created_at"
+      )
+      .eq("news_id", story.id)
+      .order("created_at", {
+        ascending: false,
+      });
 
   return (
     <>
@@ -254,7 +278,8 @@ export default async function NewsArticlePage({
             </form>
 
             <div className="space-y-6">
-              {comments && comments.length > 0 ? (
+              {comments &&
+              comments.length > 0 ? (
                 comments.map((comment) => (
                   <div
                     key={comment.id}
@@ -262,12 +287,15 @@ export default async function NewsArticlePage({
                   >
                     <div className="mb-2 flex items-center justify-between gap-4">
                       <strong>
-                        {comment.name || "Anonymous"}
+                        {comment.name ||
+                          "Anonymous"}
                       </strong>
 
                       {comment.created_at ? (
                         <span className="text-xs text-gray-500">
-                          {formatDate(comment.created_at)}
+                          {formatDate(
+                            comment.created_at
+                          )}
                         </span>
                       ) : null}
                     </div>
@@ -279,7 +307,8 @@ export default async function NewsArticlePage({
                 ))
               ) : (
                 <p className="text-gray-500">
-                  No comments yet. Be the first to comment.
+                  No comments yet. Be the first
+                  to comment.
                 </p>
               )}
             </div>
@@ -291,12 +320,17 @@ export default async function NewsArticlePage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "NewsArticle",
+            "@context":
+              "https://schema.org",
+            "@type":
+              "NewsArticle",
             headline: title,
             description,
-            image: image ? [image] : undefined,
-            datePublished: publishedAt,
+            image: image
+              ? [image]
+              : undefined,
+            datePublished:
+              publishedAt,
             url: articleUrl,
             mainEntityOfPage: {
               "@type": "WebPage",
