@@ -19,18 +19,40 @@ const supabase = createClient(
 );
 
 export default async function DirectAd({ placement }: Props) {
-  const { data: ad } = await supabase
+  /*
+   * All homepage ad positions use either:
+   * - homepage
+   * - homepage_ads
+   *
+   * Ads Page uses:
+   * - ads_page
+   * - homepage_ads
+   */
+
+  const isHomepage =
+    placement === "home_top" ||
+    placement === "home_between" ||
+    placement === "home_bottom";
+
+  const placements = isHomepage
+    ? ["homepage", "homepage_ads"]
+    : ["ads_page", "homepage_ads"];
+
+  const { data: ads } = await supabase
     .from("direct_ads")
-    .select("id, title, image_url, link_url")
-    .eq("placement", placement)
+    .select("id, title, image_url, link_url, placement")
+    .in("placement", placements)
     .eq("active", true)
     .or("starts_at.is.null,starts_at.lte.now()")
     .or("ends_at.is.null,ends_at.gte.now()")
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
 
-  if (!ad) return null;
+  const ad = ads?.[0];
+
+  if (!ad) {
+    return null;
+  }
 
   return (
     <div
