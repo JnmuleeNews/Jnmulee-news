@@ -4,6 +4,7 @@ type Placement =
   | "home_top"
   | "home_between"
   | "home_bottom"
+  | "article"
   | "article_top"
   | "article_middle"
   | "article_bottom";
