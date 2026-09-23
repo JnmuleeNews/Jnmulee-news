@@ -2,140 +2,185 @@ import Link from "next/link";
 
 export const metadata = {
   title: "Terms of Use | JNMulee News",
-  description: "Terms of Use for JNMulee News.",
+  description:
+    "Terms of Use governing access to and use of JNMulee News.",
 };
 
 export default function TermsPage() {
   return (
     <main>
-      <header className="siteHeader">
-        <div className="container headerInner">
-          <Link href="/" className="logo">
-            JNMulee News
+      <header className="header">
+        <div className="container nav">
+          <Link href="/" className="brand">
+            JNMulee<span>News</span>
           </Link>
 
-          <nav>
+          <nav className="mainNav">
             <Link href="/">Home</Link>
-            <Link href="/search">Search</Link>
-            <Link href="/category/news">News</Link>
-            <Link href="/category/sport">Sports</Link>
+            <Link href="/category/nigeria">Nigeria</Link>
+            <Link href="/category/world">World</Link>
+            <Link href="/category/business">Business</Link>
+            <Link href="/category/technology">
+              Technology
+            </Link>
+            <Link href="/category/sports">Sports</Link>
             <Link href="/category/entertainment">
               Entertainment
             </Link>
-            <Link href="/category/gossip">Gossip</Link>
-            <Link href="/category/business">Business</Link>
+            <Link href="/category/politics">Politics</Link>
             <Link href="/category/crypto">Crypto</Link>
           </nav>
         </div>
       </header>
 
-      <div className="container pageContainer">
-        <h1>Terms of Use</h1>
+      <section className="section">
+        <div className="container">
+          <div className="pageContainer">
+            <p className="sectionKicker">
+              Legal
+            </p>
 
-        <p>
-          By accessing or using JNMulee News, you agree to these
-          Terms of Use. If you do not agree with these terms, please
-          do not use the website.
-        </p>
+            <h1>Terms of Use</h1>
 
-        <h2>Use of the Website</h2>
+            <p>
+              By accessing or using JNMulee News, you agree
+              to these Terms of Use. If you do not agree,
+              please do not use the website.
+            </p>
 
-        <p>
-          JNMulee News provides news, information, commentary, and
-          other content for general informational purposes.
-        </p>
+            <h2>Use of the Website</h2>
 
-        <p>
-          You agree to use the website lawfully and not to interfere
-          with the operation or security of the website.
-        </p>
+            <p>
+              JNMulee News provides news, information,
+              commentary, and related content for general
+              informational purposes.
+            </p>
 
-        <h2>News and Information</h2>
+            <p>
+              You agree to use the website lawfully and not
+              to interfere with its operation, security, or
+              availability.
+            </p>
 
-        <p>
-          We work to provide useful and accurate information, but
-          news and other information may change or contain errors.
-          Content should not be treated as professional legal,
-          financial, medical, or other professional advice.
-        </p>
+            <h2>News Content</h2>
 
-        <h2>User Comments</h2>
+            <p>
+              We make reasonable efforts to provide useful
+              and accurate information. However, news and
+              other information can change, may contain
+              errors, and should be independently verified
+              when important decisions depend on it.
+            </p>
 
-        <p>
-          Users may be permitted to submit comments on articles.
-          Comments must not contain unlawful, threatening,
-          defamatory, abusive, misleading, or otherwise inappropriate
-          material.
-        </p>
+            <p>
+              Content on JNMulee News is not a substitute for
+              professional legal, financial, medical, or
+              other professional advice.
+            </p>
 
-        <p>
-          JNMulee News may review, moderate, reject, or remove
-          comments that violate these terms or applicable rules.
-        </p>
+            <h2>User Comments</h2>
 
-        <h2>Intellectual Property</h2>
+            <p>
+              Users may be allowed to submit comments on
+              articles. You are responsible for the content
+              of comments you submit.
+            </p>
 
-        <p>
-          Unless otherwise stated, website design, branding,
-          original text, graphics, and other materials created by
-          JNMulee News belong to JNMulee News or their respective
-          rights holders.
-        </p>
+            <p>
+              Comments must not contain unlawful,
+              threatening, abusive, defamatory, fraudulent,
+              hateful, or otherwise inappropriate material.
+            </p>
 
-        <p>
-          You may not reproduce or redistribute protected material
-          from this website without appropriate permission or legal
-          authorization.
-        </p>
+            <p>
+              JNMulee News may moderate, reject, edit where
+              appropriate, or remove comments that violate
+              these terms or applicable law.
+            </p>
 
-        <h2>External Links</h2>
+            <h2>Intellectual Property</h2>
 
-        <p>
-          JNMulee News may link to websites operated by third
-          parties. We do not control and are not responsible for
-          third-party websites or their content.
-        </p>
+            <p>
+              Unless otherwise stated, original JNMulee News
+              branding, website design, original text,
+              graphics, and other materials created by
+              JNMulee News are protected by applicable
+              intellectual-property laws.
+            </p>
 
-        <h2>Advertising</h2>
+            <p>
+              Third-party material remains the property of
+              its respective rights holders.
+            </p>
 
-        <p>
-          The website may display advertisements from JNMulee News
-          or third-party advertising providers.
-        </p>
+            <h2>External Websites</h2>
 
-        <h2>Website Availability</h2>
+            <p>
+              JNMulee News may contain links to third-party
+              websites. We do not control those websites and
+              are not responsible for their content,
+              availability, security, or privacy practices.
+            </p>
 
-        <p>
-          We may modify, suspend, or discontinue portions of the
-          website or individual features when necessary for
-          maintenance, security, improvements, or other reasons.
-        </p>
+            <h2>Advertising</h2>
 
-        <h2>Changes to These Terms</h2>
+            <p>
+              JNMulee News may display advertisements from
+              JNMulee News or third-party advertising
+              providers.
+            </p>
 
-        <p>
-          We may update these Terms of Use from time to time. Any
-          updated version will be published on this page.
-        </p>
+            <h2>Website Availability</h2>
 
-        <h2>Contact</h2>
+            <p>
+              We may change, suspend, restrict, or discontinue
+              parts of the website when necessary for
+              maintenance, security, improvements, or other
+              operational reasons.
+            </p>
 
-        <p>
-          If you have questions about these Terms of Use, please
-          visit our contact page.
-        </p>
+            <h2>Prohibited Activities</h2>
 
-        <p>
-          <Link href="/contact">Contact JNMulee News</Link>
-        </p>
-      </div>
+            <p>
+              You must not attempt to gain unauthorized access
+              to the website, interfere with website
+              security, introduce malicious code, abuse
+              website features, or use the website for
+              unlawful purposes.
+            </p>
+
+            <h2>Changes to These Terms</h2>
+
+            <p>
+              These Terms of Use may be updated from time to
+              time. Updated terms will be published on this
+              page.
+            </p>
+
+            <h2>Contact</h2>
+
+            <p>
+              If you have questions about these Terms of Use,
+              please contact JNMulee News.
+            </p>
+
+            <p>
+              <Link href="/contact">
+                Contact JNMulee News →
+              </Link>
+            </p>
+          </div>
+        </div>
+      </section>
 
       <footer className="siteFooter">
         <div className="container">
           <div className="footerLinks">
             <Link href="/about">About</Link>
             <Link href="/contact">Contact</Link>
-            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/privacy">
+              Privacy Policy
+            </Link>
             <Link href="/terms">Terms</Link>
           </div>
 
