@@ -1,260 +1,149 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
 
-type Props = {
-  params: Promise<{ slug: string }>;
-};
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-const categoryMap: Record<string, string> = {
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+const CATEGORY_NAMES: Record<string, string> = {
   news: "Top Stories",
   sport: "Sports",
   sports: "Sports",
   entertainment: "Entertainment",
   gossip: "Gossip",
   business: "Business",
+  technology: "Technology",
+  politics: "Politics",
   crypto: "Crypto",
+  nigeria: "Nigeria",
+  world: "World",
 };
 
-const categoryLinks = [
-  { slug: "news", name: "News" },
-  { slug: "sport", name: "Sport" },
-  { slug: "entertainment", name: "Entertainment" },
-  { slug: "gossip", name: "Gossip" },
-  { slug: "business", name: "Business" },
-  { slug: "crypto", name: "Crypto" },
-];
-
-function cleanText(value: string | null) {
-  if (!value) return "";
-
-  return value
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&#x27;/gi, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-export const revalidate = 60;
-
-export default async function Category({ params }: Props) {
+export default async function CategoryPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
   const { slug } = await params;
 
-  const slugKey = slug.toLowerCase();
-  const databaseCategory = categoryMap[slugKey];
+  const categoryName =
+    CATEGORY_NAMES[slug.toLowerCase()] || slug;
 
-  if (!databaseCategory) {
-    notFound();
-  }
-
-  const displayCategory =
-    categoryLinks.find(
-      (category) => category.slug === slugKey
-    )?.name || databaseCategory;
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-
-  /*
-   * IMPORTANT:
-   * The Supabase news table does NOT have a description column
-   * or a published_at column.
-   *
-   * The real columns are:
-   * id
-   * title
-   * slug
-   * content
-   * image_url
-   * Published
-   * source_url
-   * category
-   * created_at
-   */
-
-  const { data: posts, error } = await supabase
+  const { data: stories, error } = await supabase
     .from("news")
     .select(
-      "id, title, slug, content, image_url, category, created_at"
+      "id,title,slug,content,image_url,category,created_at"
     )
     .eq("Published", true)
-    .eq("category", databaseCategory)
+    .not("image_url", "is", null)
+    .neq("image_url", "")
+    .eq("category", categoryName)
     .order("created_at", { ascending: false })
-    .limit(100);
-
-  if (error) {
-    console.error("Category query error:", error);
-  }
+    .limit(50);
 
   return (
     <main>
-      <header className="header">
-        <div className="container nav">
-          <Link className="brand" href="/">
-            JNMulee <span>News</span>
+      <header className="siteHeader">
+        <div className="container headerInner">
+          <Link href="/" className="logo">
+            JNMulee News
           </Link>
 
-          <nav className="mainNav">
+          <nav>
             <Link href="/">Home</Link>
-
-            {categoryLinks.map((category) => {
-              const active =
-                category.slug === slugKey ||
-                (category.slug === "sport" &&
-                  slugKey === "sports");
-
-              return (
-                <Link
-                  key={category.slug}
-                  href={`/category/${category.slug}`}
-                  className={active ? "active" : ""}
-                >
-                  {category.name}
-                </Link>
-              );
-            })}
+            <Link href="/category/news">News</Link>
+            <Link href="/category/sport">Sports</Link>
+            <Link href="/category/entertainment">
+              Entertainment
+            </Link>
+            <Link href="/category/gossip">Gossip</Link>
+            <Link href="/category/business">Business</Link>
+            <Link href="/category/crypto">Crypto</Link>
           </nav>
         </div>
       </header>
 
-      <section className="container section">
-        <p className="eyebrow">Category</p>
-
-        <div className="sectionTitle">
-          <div>
-            <p className="sectionKicker">
-              JNMULEE NEWS
-            </p>
-
-            <h1>
-              {displayCategory} News
-            </h1>
-          </div>
-        </div>
-
-        <p className="categoryDescription">
-          Latest {displayCategory.toLowerCase()} news and
-          stories from JNMulee News.
-        </p>
-
-        <nav className="categoryNav">
-          {categoryLinks.map((category) => {
-            const active =
-              category.slug === slugKey ||
-              (category.slug === "sport" &&
-                slugKey === "sports");
-
-            return (
-              <Link
-                key={category.slug}
-                href={`/category/${category.slug}`}
-                className={
-                  active
-                    ? "categoryNavLink active"
-                    : "categoryNavLink"
-                }
-              >
-                {category.name}
-              </Link>
-            );
-          })}
-        </nav>
+      <div className="container pageContainer">
+        <h1>{categoryName}</h1>
 
         {error ? (
           <div className="emptyState">
-            <h2>Unable to load this category</h2>
-
+            <h2>Unable to load stories</h2>
             <p>
-              There was a problem loading the latest
-              {displayCategory.toLowerCase()} stories.
-              Please try again shortly.
+              There was a problem loading this category.
             </p>
           </div>
-        ) : !posts || posts.length === 0 ? (
-          <div className="emptyState">
-            <h2>
-              No {displayCategory} news yet
-            </h2>
-
-            <p>
-              New {displayCategory.toLowerCase()} stories
-              will appear here when they are published.
-            </p>
-          </div>
-        ) : (
-          <div className="grid">
-            {posts.map((post) => {
-              const text = cleanText(
-                post.content || ""
-              );
-
-              return (
-                <article
-                  className="card"
-                  key={post.id}
-                >
-                  {post.image_url ? (
-                    <Link
-                      href={`/news/${post.slug}`}
-                      className="cardImage"
-                    >
-                      <img
-                        src={post.image_url}
-                        alt={post.title}
+        ) : stories && stories.length > 0 ? (
+          <div className="newsGrid">
+            {stories.map((story) => (
+              <article
+                className="newsCard"
+                key={story.id}
+              >
+                <Link href={`/news/${story.slug}`}>
+                  {story.image_url && (
+                    <div className="newsImage">
+                      <Image
+                        src={story.image_url}
+                        alt={story.title}
+                        fill
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                       />
-                    </Link>
-                  ) : (
-                    <Link
-                      href={`/news/${post.slug}`}
-                      className="cardImage imagePlaceholder"
-                    >
-                      JNMulee News
-                    </Link>
+                    </div>
                   )}
 
-                  <div className="cardBody">
-                    <p className="category">
-                      {post.category ||
-                        displayCategory}
-                    </p>
+                  <div className="newsCardBody">
+                    <span className="categoryLabel">
+                      {story.category || categoryName}
+                    </span>
 
-                    <h3>
-                      <Link
-                        href={`/news/${post.slug}`}
-                      >
-                        {post.title}
-                      </Link>
-                    </h3>
+                    <h2>{story.title}</h2>
 
-                    {text && (
-                      <p className="excerpt">
-                        {text.length > 150
-                          ? `${text.slice(0, 150)}...`
-                          : text}
+                    {story.content && (
+                      <p>
+                        {story.content.slice(0, 160)}
+                        {story.content.length > 160
+                          ? "..."
+                          : ""}
                       </p>
                     )}
-
-                    <Link
-                      href={`/news/${post.slug}`}
-                      className="readMore"
-                    >
-                      Read More →
-                    </Link>
                   </div>
-                </article>
-              );
-            })}
+                </Link>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="emptyState">
+            <h2>No stories yet</h2>
+            <p>
+              There are currently no published stories in
+              this category.
+            </p>
           </div>
         )}
-      </section>
+      </div>
+
+      <footer className="siteFooter">
+        <div className="container">
+          <div className="footerLinks">
+            <Link href="/about">About</Link>
+            <Link href="/contact">Contact</Link>
+            <Link href="/privacy">
+              Privacy Policy
+            </Link>
+            <Link href="/terms">Terms</Link>
+          </div>
+
+          <p>
+            © {new Date().getFullYear()} JNMulee News
+          </p>
+        </div>
+      </footer>
     </main>
   );
 }
