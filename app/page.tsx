@@ -9,16 +9,33 @@ const supabase = createClient(
 
 export const revalidate = 60;
 
+const categories = [
+  { name: "News", slug: "news" },
+  { name: "Sport", slug: "sport" },
+  { name: "Entertainment", slug: "entertainment" },
+  { name: "Gossip", slug: "gossip" },
+  { name: "Business", slug: "business" },
+  { name: "Crypto", slug: "crypto" },
+];
+
 export default async function Home() {
   const { data: news, error } = await supabase
     .from("news")
     .select("id, title, slug, content, image_url, category, created_at")
     .eq("Published", true)
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(40);
 
   const featured = news?.[0];
-  const latest = news?.slice(1) ?? [];
+  const latest = news?.slice(1, 13) ?? [];
+
+  const getCategoryStories = (category: string) =>
+    news
+      ?.filter(
+        (story) =>
+          story.category?.toLowerCase() === category.toLowerCase()
+      )
+      .slice(0, 4) ?? [];
 
   return (
     <main>
@@ -32,9 +49,15 @@ export default async function Home() {
             <Link className="active" href="/">
               Home
             </Link>
-            <Link href="/category/world">World</Link>
-            <Link href="/category/business">Business</Link>
-            <Link href="/category/technology">Technology</Link>
+
+            {categories.map((category) => (
+              <Link
+                key={category.slug}
+                href={`/category/${category.slug}`}
+              >
+                {category.name}
+              </Link>
+            ))}
           </nav>
         </div>
       </header>
@@ -53,7 +76,7 @@ export default async function Home() {
             </h1>
 
             <p className="lead">
-              Breaking stories, world news, business and technology —
+              News, sport, entertainment, gossip, business and crypto —
               presented clearly and updated regularly.
             </p>
           </div>
@@ -71,6 +94,18 @@ export default async function Home() {
       </section>
 
       <section className="container section">
+        <div className="categoryBar">
+          {categories.map((category) => (
+            <Link
+              key={category.slug}
+              href={`/category/${category.slug}`}
+              className="categoryPill"
+            >
+              {category.name}
+            </Link>
+          ))}
+        </div>
+
         <div className="sectionTitle">
           <div>
             <p className="sectionKicker">TOP STORIES</p>
@@ -160,72 +195,4 @@ export default async function Home() {
                         alt={story.title}
                       />
                     ) : (
-                      <div className="imagePlaceholder">
-                        JNMulee News
-                      </div>
-                    )}
-                  </Link>
-
-                  <div className="cardBody">
-                    <p className="category">
-                      {story.category || "News"}
-                    </p>
-
-                    <h3>
-                      <Link href={`/news/${story.slug}`}>
-                        {story.title}
-                      </Link>
-                    </h3>
-
-                    <p className="cardExcerpt">
-                      {story.content
-                        ? story.content.substring(0, 120)
-                        : "Read the latest story from JNMulee News."}
-                      …
-                    </p>
-
-                    <Link
-                      className="readMore"
-                      href={`/news/${story.slug}`}
-                    >
-                      Read more <span>→</span>
-                    </Link>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            <DirectAd placement="home_bottom" />
-          </>
-        )}
-      </section>
-
-      <footer>
-        <div className="container footerInner">
-          <div>
-            <Link
-              className="brand footerBrand"
-              href="/"
-            >
-              JNMulee <span>News</span>
-            </Link>
-
-            <p>News that keeps you informed.</p>
-          </div>
-
-          <div className="footerLinks">
-            <Link href="/category/world">World</Link>
-            <Link href="/category/business">Business</Link>
-            <Link href="/category/technology">
-              Technology
-            </Link>
-          </div>
-
-          <small>
-            © {new Date().getFullYear()} JNMulee News. All rights reserved.
-          </small>
-        </div>
-      </footer>
-    </main>
-  );
-}
+                     
