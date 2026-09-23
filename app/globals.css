@@ -450,4 +450,31 @@ img {
   color: var(--red);
 }
 
-.cardBody .excerpt
+.cardBody .excerpt {
+  font-size: 14px;
+}
+
+/* =========================
+   CATEGORY SECTIONS
+========================= */
+
+.categorySection {
+  margin-top: 60px;
+}
+
+.categorySectionHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.categorySectionHeader h2 {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: -1px;
+}
+
+.viewCategory {
+ 
