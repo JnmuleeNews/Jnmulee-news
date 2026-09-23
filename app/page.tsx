@@ -18,6 +18,15 @@ const categories = [
   { name: "Crypto", slug: "crypto" },
 ];
 
+function cleanText(value: string | null) {
+  return (value || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export default async function Home() {
   const { data: news, error } = await supabase
     .from("news")
@@ -28,17 +37,19 @@ export default async function Home() {
     .order("created_at", { ascending: false })
     .limit(40);
 
-  const stories = news ?? [];
+  const stories = news || [];
   const featured = stories[0];
   const latest = stories.slice(1, 13);
 
-  const getCategoryStories = (category: string) =>
-    stories
+  const getCategoryStories = (category: string) => {
+    return stories
       .filter(
         (story) =>
-          story.category?.toLowerCase() === category.toLowerCase()
+          (story.category || "").toLowerCase() ===
+          category.toLowerCase()
       )
       .slice(0, 4);
+  };
 
   return (
     <main>
@@ -161,12 +172,10 @@ export default async function Home() {
                 </h3>
 
                 <p className="excerpt">
-                  {featured.content
-                    ? featured.content
-                        .replace(/<[^>]+>/g, " ")
-                        .substring(0, 260)
-                    : "Read the latest story from JNMulee News."}
-                  …
+                  {cleanText(featured.content).substring(0, 260)}
+                  {cleanText(featured.content).length > 260
+                    ? "…"
+                    : ""}
                 </p>
 
                 <Link
@@ -216,12 +225,10 @@ export default async function Home() {
                     </h3>
 
                     <p className="excerpt">
-                      {story.content
-                        ? story.content
-                            .replace(/<[^>]+>/g, " ")
-                            .substring(0, 150)
-                        : "Read more from JNMulee News."}
-                      …
+                      {cleanText(story.content).substring(0, 150)}
+                      {cleanText(story.content).length > 150
+                        ? "…"
+                        : ""}
                     </p>
 
                     <Link
@@ -239,7 +246,7 @@ export default async function Home() {
               const categoryStories =
                 getCategoryStories(category.name);
 
-              if (!categoryStories.length) {
+              if (categoryStories.length === 0) {
                 return null;
               }
 
