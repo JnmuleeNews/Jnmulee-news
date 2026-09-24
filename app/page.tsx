@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import DirectAd from "@/components/DirectAd";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 60;
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -122,22 +122,6 @@ function excerpt(
     : text;
 }
 
-function dateText(date: string | null) {
-  if (!date) return "";
-
-  const parsed = new Date(date);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-
-  return parsed.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 function timeAgo(date: string | null) {
   if (!date) return "";
 
@@ -173,13 +157,23 @@ function timeAgo(date: string | null) {
     return `${days}d ago`;
   }
 
-  return dateText(date);
+  const parsed = new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
-function imageUrl(url: string | null) {
-  if (!url) return null;
+function validImage(url: string | null) {
+  if (!url) return false;
 
-  return `/api/image?url=${encodeURIComponent(url)}`;
+  return /^https?:\/\//i.test(url);
 }
 
 function StoryCard({
@@ -191,6 +185,8 @@ function StoryCard({
   large?: boolean;
   showExcerpt?: boolean;
 }) {
+  const hasImage = validImage(story.image_url);
+
   return (
     <article
       className={
@@ -203,17 +199,28 @@ function StoryCard({
         href={`/news/${story.slug}`}
         className="jnmulee-story-link"
       >
-        {story.image_url ? (
-          <img
-            src={imageUrl(story.image_url) || ""}
-            alt={story.title}
-            loading={large ? "eager" : "lazy"}
+        {hasImage ? (
+          <div
             className={
               large
-                ? "jnmulee-story-image jnmulee-story-image-large"
-                : "jnmulee-story-image"
+                ? "jnmulee-image-wrap jnmulee-image-wrap-large"
+                : "jnmulee-image-wrap"
             }
-          />
+          >
+            <Image
+              src={story.image_url!}
+              alt={story.title}
+              fill
+              priority={large}
+              loading={large ? "eager" : "lazy"}
+              sizes={
+                large
+                  ? "(max-width: 900px) 100vw, 70vw"
+                  : "(max-width: 650px) 100vw, (max-width: 900px) 50vw, 33vw"
+              }
+              className="jnmulee-story-image"
+            />
+          </div>
         ) : (
           <div className="jnmulee-image-placeholder">
             JNMulee News
@@ -243,7 +250,10 @@ function StoryCard({
 
           {(large || showExcerpt) && (
             <p className="jnmulee-story-excerpt">
-              {excerpt(story.content, large ? 220 : 150)}
+              {excerpt(
+                story.content,
+                large ? 220 : 150
+              )}
             </p>
           )}
 
@@ -276,18 +286,24 @@ function CompactStory({
 }: {
   story: Story;
 }) {
+  const hasImage = validImage(story.image_url);
+
   return (
     <Link
       href={`/news/${story.slug}`}
       className="jnmulee-compact-story"
     >
-      {story.image_url ? (
-        <img
-          src={imageUrl(story.image_url) || ""}
-          alt={story.title}
-          loading="lazy"
-          className="jnmulee-compact-image"
-        />
+      {hasImage ? (
+        <div className="jnmulee-compact-image-wrap">
+          <Image
+            src={story.image_url!}
+            alt={story.title}
+            fill
+            loading="lazy"
+            sizes="86px"
+            className="jnmulee-compact-image"
+          />
+        </div>
       ) : (
         <div className="jnmulee-compact-placeholder">
           News
@@ -318,6 +334,8 @@ function MostReadItem({
   story: Story;
   number: number;
 }) {
+  const hasImage = validImage(story.image_url);
+
   return (
     <Link
       href={`/news/${story.slug}`}
@@ -327,13 +345,17 @@ function MostReadItem({
         {String(number).padStart(2, "0")}
       </strong>
 
-      {story.image_url ? (
-        <img
-          src={imageUrl(story.image_url) || ""}
-          alt={story.title}
-          loading="lazy"
-          className="jnmulee-most-read-image"
-        />
+      {hasImage ? (
+        <div className="jnmulee-most-read-image-wrap">
+          <Image
+            src={story.image_url!}
+            alt={story.title}
+            fill
+            loading="lazy"
+            sizes="82px"
+            className="jnmulee-most-read-image"
+          />
+        </div>
       ) : (
         <div className="jnmulee-most-read-placeholder" />
       )}
@@ -393,35 +415,45 @@ export default async function HomePage() {
   const storySelect =
     "id,title,slug,content,image_url,category,created_at,view_count";
 
-  const [
-    latestResult,
-    mostReadResult,
-  ] = await Promise.all([
-    supabase
-      .from("news")
-      .select(storySelect)
-      .eq("Published", true)
-      .not("image_url", "is", null)
-      .neq("image_url", "")
-      .order("created_at", {
-        ascending: false,
-      })
-      .limit(30),
+  /*
+   * PERFORMANCE:
+   *
+   * Only two database requests are made:
+   *
+   * 1. Latest stories
+   * 2. Most-read stories
+   *
+   * Category sections are created from the latest-story
+   * result instead of making a separate database request
+   * for every category.
+   */
+  const [latestResult, mostReadResult] =
+    await Promise.all([
+      supabase
+        .from("news")
+        .select(storySelect)
+        .eq("Published", true)
+        .not("image_url", "is", null)
+        .neq("image_url", "")
+        .order("created_at", {
+          ascending: false,
+        })
+        .limit(60),
 
-    supabase
-      .from("news")
-      .select(storySelect)
-      .eq("Published", true)
-      .not("image_url", "is", null)
-      .neq("image_url", "")
-      .order("view_count", {
-        ascending: false,
-      })
-      .order("created_at", {
-        ascending: false,
-      })
-      .limit(10),
-  ]);
+      supabase
+        .from("news")
+        .select(storySelect)
+        .eq("Published", true)
+        .not("image_url", "is", null)
+        .neq("image_url", "")
+        .order("view_count", {
+          ascending: false,
+        })
+        .order("created_at", {
+          ascending: false,
+        })
+        .limit(10),
+    ]);
 
   const latest =
     (latestResult.data || []) as Story[];
@@ -431,48 +463,28 @@ export default async function HomePage() {
 
   const featured = latest[0] || null;
 
-  const categoryStories:
-    Record<string, Story[]> = {};
+  /*
+   * Build category sections from the already-loaded
+   * latest stories. This avoids nine extra Supabase queries.
+   */
+  const categoryStories: Record<
+    string,
+    Story[]
+  > = {};
 
-  await Promise.all(
-    categories
-      .filter(
-        (category) =>
-          category.slug !== "news"
-      )
-      .map(async (category) => {
-        const { data } =
-          await supabase
-            .from("news")
-            .select(storySelect)
-            .eq("Published", true)
-            .eq(
-              "category",
-              category.name
-            )
-            .not(
-              "image_url",
-              "is",
-              null
-            )
-            .neq(
-              "image_url",
-              ""
-            )
-            .order(
-              "created_at",
-              {
-                ascending:
-                  false,
-              }
-            )
-            .limit(4);
+  for (const category of categories) {
+    if (category.slug === "news") {
+      continue;
+    }
 
-        categoryStories[
-          category.slug
-        ] = (data || []) as Story[];
-      })
-  );
+    categoryStories[category.slug] =
+      latest
+        .filter(
+          (story) =>
+            story.category === category.name
+        )
+        .slice(0, 4);
+  }
 
   const trending = latest
     .filter(
@@ -489,10 +501,6 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* =====================================================
-          HEADER
-      ====================================================== */}
-
       <header className="jnmulee-main-header">
         <div className="jnmulee-header-inner">
           <Link
@@ -515,34 +523,22 @@ export default async function HomePage() {
         </div>
       </header>
 
-      {/* =====================================================
-          CATEGORY NAVIGATION
-      ====================================================== */}
-
       <nav
         className="jnmulee-category-nav"
         aria-label="News categories"
       >
         <div className="jnmulee-category-nav-inner">
-          {categories.map(
-            (category) => (
-              <Link
-                key={
-                  category.slug
-                }
-                href={`/category/${category.slug}`}
-                className="jnmulee-nav-link"
-              >
-                {category.name}
-              </Link>
-            )
-          )}
+          {categories.map((category) => (
+            <Link
+              key={category.slug}
+              href={`/category/${category.slug}`}
+              className="jnmulee-nav-link"
+            >
+              {category.name}
+            </Link>
+          ))}
         </div>
       </nav>
-
-      {/* =====================================================
-          BREAKING NEWS BAR
-      ====================================================== */}
 
       <div className="jnmulee-breaking-bar">
         <div className="jnmulee-breaking-inner">
@@ -568,13 +564,7 @@ export default async function HomePage() {
         </div>
       </div>
 
-      {/* =====================================================
-          MAIN
-      ====================================================== */}
-
       <main className="jnmulee-home">
-        {/* HERO */}
-
         {featured && (
           <section className="jnmulee-hero-section">
             <div className="jnmulee-hero-grid">
@@ -586,6 +576,7 @@ export default async function HomePage() {
               <div className="jnmulee-hero-side">
                 <div className="jnmulee-side-heading">
                   <span>Latest</span>
+
                   <Link href="/category/news">
                     More →
                   </Link>
@@ -604,15 +595,9 @@ export default async function HomePage() {
           </section>
         )}
 
-        {/* TOP AD */}
-
         <div className="jnmulee-ad-wrap">
           <DirectAd placement="homepage" />
         </div>
-
-        {/* =====================================================
-            TRENDING
-        ====================================================== */}
 
         {trending.length > 0 && (
           <section className="jnmulee-section">
@@ -623,10 +608,7 @@ export default async function HomePage() {
 
             <div className="jnmulee-trending-grid">
               {trending.map(
-                (
-                  story,
-                  index
-                ) => (
+                (story, index) => (
                   <Link
                     href={`/news/${story.slug}`}
                     key={story.id}
@@ -653,10 +635,6 @@ export default async function HomePage() {
           </section>
         )}
 
-        {/* =====================================================
-            MOST READ
-        ====================================================== */}
-
         <section className="jnmulee-section">
           <div className="jnmulee-most-read-box">
             <SectionHeader
@@ -667,39 +645,24 @@ export default async function HomePage() {
             <div className="jnmulee-most-read-grid">
               {mostRead.length > 0 ? (
                 mostRead.map(
-                  (
-                    story,
-                    index
-                  ) => (
+                  (story, index) => (
                     <MostReadItem
-                      key={
-                        story.id
-                      }
-                      story={
-                        story
-                      }
-                      number={
-                        index + 1
-                      }
+                      key={story.id}
+                      story={story}
+                      number={index + 1}
                     />
                   )
                 )
               ) : (
                 <p>
-                  Popular stories
-                  will appear
-                  here as readers
-                  visit the
-                  site.
+                  Popular stories will
+                  appear here as readers
+                  visit the site.
                 </p>
               )}
             </div>
           </div>
         </section>
-
-        {/* =====================================================
-            LATEST NEWS
-        ====================================================== */}
 
         <section className="jnmulee-section">
           <SectionHeader
@@ -710,29 +673,21 @@ export default async function HomePage() {
 
           {latestGrid.length > 0 ? (
             <div className="jnmulee-news-grid">
-              {latestGrid.map(
-                (story) => (
-                  <StoryCard
-                    key={
-                      story.id
-                    }
-                    story={
-                      story
-                    }
-                    showExcerpt
-                  />
-                )
-              )}
+              {latestGrid.map((story) => (
+                <StoryCard
+                  key={story.id}
+                  story={story}
+                  showExcerpt
+                />
+              ))}
             </div>
           ) : (
             <div className="jnmulee-empty">
-              No latest stories
-              available yet.
+              No latest stories available
+              yet.
             </div>
           )}
         </section>
-
-        {/* MID PAGE AD */}
 
         <div className="jnmulee-ad-wrap">
           <DirectAd
@@ -740,70 +695,42 @@ export default async function HomePage() {
           />
         </div>
 
-        {/* =====================================================
-            CATEGORY SECTIONS
-        ====================================================== */}
-
         {categories
           .filter(
             (category) =>
-              category.slug !==
-              "news"
+              category.slug !== "news"
           )
-          .map(
-            (category) => {
-              const stories =
-                categoryStories[
-                  category.slug
-                ] || [];
+          .map((category) => {
+            const stories =
+              categoryStories[
+                category.slug
+              ] || [];
 
-              if (
-                stories.length ===
-                0
-              ) {
-                return null;
-              }
-
-              return (
-                <section
-                  key={
-                    category.slug
-                  }
-                  className="jnmulee-section jnmulee-category-section"
-                >
-                  <SectionHeader
-                    title={
-                      category.name
-                    }
-                    slug={
-                      category.slug
-                    }
-                  />
-
-                  <div className="jnmulee-category-grid">
-                    {stories.map(
-                      (
-                        story
-                      ) => (
-                        <StoryCard
-                          key={
-                            story.id
-                          }
-                          story={
-                            story
-                          }
-                        />
-                      )
-                    )}
-                  </div>
-                </section>
-              );
+            if (stories.length === 0) {
+              return null;
             }
-          )}
 
-        {/* =====================================================
-            NEWSLETTER / FOLLOW CTA
-        ====================================================== */}
+            return (
+              <section
+                key={category.slug}
+                className="jnmulee-section jnmulee-category-section"
+              >
+                <SectionHeader
+                  title={category.name}
+                  slug={category.slug}
+                />
+
+                <div className="jnmulee-category-grid">
+                  {stories.map((story) => (
+                    <StoryCard
+                      key={story.id}
+                      story={story}
+                    />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
 
         <section className="jnmulee-newsletter">
           <div>
@@ -818,10 +745,10 @@ export default async function HomePage() {
             </h2>
 
             <p>
-              Follow JNMulee News
-              for breaking stories,
-              Nigeria news and
-              important updates.
+              Follow JNMulee News for
+              breaking stories, Nigeria
+              news and important
+              updates.
             </p>
           </div>
 
@@ -833,18 +760,12 @@ export default async function HomePage() {
           </Link>
         </section>
 
-        {/* BOTTOM AD */}
-
         <div className="jnmulee-ad-wrap jnmulee-bottom-ad">
           <DirectAd
             placement="home_bottom"
           />
         </div>
       </main>
-
-      {/* =====================================================
-          HOMEPAGE STYLES
-      ====================================================== */}
 
       <style>{`
         .jnmulee-main-header {
@@ -870,7 +791,7 @@ export default async function HomePage() {
         .jnmulee-logo {
           color: #fff;
           text-decoration: none;
-          font-size: clamp(1.55rem, 4vw, 2.15rem);
+          font-size: clamp(1.55rem,4vw,2.15rem);
           font-weight: 950;
           letter-spacing: -1.3px;
           line-height: 1;
@@ -898,11 +819,6 @@ export default async function HomePage() {
           padding: 8px 14px;
           font-size: 13px;
           font-weight: 800;
-          transition: .2s ease;
-        }
-
-        .jnmulee-search-button:hover {
-          background: rgba(255,255,255,.12);
         }
 
         .jnmulee-category-nav {
@@ -935,14 +851,10 @@ export default async function HomePage() {
           font-size: 13px;
           font-weight: 800;
           padding: 14px 0;
-          position: relative;
         }
 
+        .jnmulee-nav-link:first-child,
         .jnmulee-nav-link:hover {
-          color: #d7193f;
-        }
-
-        .jnmulee-nav-link:first-child {
           color: #d7193f;
         }
 
@@ -967,7 +879,6 @@ export default async function HomePage() {
           border-radius: 4px;
           font-size: 10px;
           font-weight: 950;
-          letter-spacing: .4px;
           white-space: nowrap;
         }
 
@@ -993,7 +904,6 @@ export default async function HomePage() {
           max-width: 1240px;
           margin: 0 auto;
           padding: 28px 18px 70px;
-          min-height: calc(100vh - 160px);
         }
 
         .jnmulee-hero-section {
@@ -1002,7 +912,7 @@ export default async function HomePage() {
 
         .jnmulee-hero-grid {
           display: grid;
-          grid-template-columns: minmax(0, 1.7fr) minmax(300px, .9fr);
+          grid-template-columns: minmax(0,1.7fr) minmax(300px,.9fr);
           gap: 22px;
         }
 
@@ -1012,12 +922,6 @@ export default async function HomePage() {
           border-radius: 14px;
           overflow: hidden;
           box-shadow: 0 3px 14px rgba(0,0,0,.055);
-          transition: transform .2s ease, box-shadow .2s ease;
-        }
-
-        .jnmulee-story-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 25px rgba(0,0,0,.10);
         }
 
         .jnmulee-story-link {
@@ -1026,16 +930,20 @@ export default async function HomePage() {
           text-decoration: none;
         }
 
-        .jnmulee-story-image {
-          display: block;
+        .jnmulee-image-wrap {
+          position: relative;
           width: 100%;
           aspect-ratio: 16 / 10;
-          object-fit: cover;
           background: #f3f4f6;
+          overflow: hidden;
         }
 
-        .jnmulee-story-image-large {
+        .jnmulee-image-wrap-large {
           aspect-ratio: 16 / 9;
+        }
+
+        .jnmulee-story-image {
+          object-fit: cover;
         }
 
         .jnmulee-image-placeholder {
@@ -1072,13 +980,11 @@ export default async function HomePage() {
           font-size: 1.08rem;
           line-height: 1.3;
           font-weight: 900;
-          letter-spacing: -.25px;
         }
 
         .jnmulee-story-title-large {
-          font-size: clamp(1.55rem, 3vw, 2.45rem);
+          font-size: clamp(1.55rem,3vw,2.45rem);
           line-height: 1.13;
-          letter-spacing: -.7px;
         }
 
         .jnmulee-story-excerpt {
@@ -1137,23 +1043,27 @@ export default async function HomePage() {
           text-decoration: none;
         }
 
-        .jnmulee-compact-story:last-child {
-          border-bottom: 0;
-        }
-
-        .jnmulee-compact-image,
-        .jnmulee-compact-placeholder {
+        .jnmulee-compact-image-wrap {
+          position: relative;
           width: 86px;
           height: 65px;
-          object-fit: cover;
           border-radius: 7px;
+          overflow: hidden;
           background: #f1f3f5;
+        }
+
+        .jnmulee-compact-image {
+          object-fit: cover;
         }
 
         .jnmulee-compact-placeholder {
           display: flex;
           align-items: center;
           justify-content: center;
+          width: 86px;
+          height: 65px;
+          border-radius: 7px;
+          background: #f1f3f5;
           color: #9ca3af;
           font-size: 10px;
           font-weight: 800;
@@ -1209,10 +1119,9 @@ export default async function HomePage() {
 
         .jnmulee-section-title {
           margin: 0;
-          font-size: clamp(1.45rem, 3vw, 1.8rem);
+          font-size: clamp(1.45rem,3vw,1.8rem);
           line-height: 1.1;
           font-weight: 950;
-          letter-spacing: -.5px;
         }
 
         .jnmulee-view-all {
@@ -1225,7 +1134,7 @@ export default async function HomePage() {
 
         .jnmulee-trending-grid {
           display: grid;
-          grid-template-columns: repeat(5, minmax(0,1fr));
+          grid-template-columns: repeat(5,minmax(0,1fr));
           gap: 12px;
         }
 
@@ -1240,19 +1149,12 @@ export default async function HomePage() {
           background: #fff;
           color: inherit;
           text-decoration: none;
-          transition: .2s ease;
-        }
-
-        .jnmulee-trending-card:hover {
-          border-color: #d7193f;
-          transform: translateY(-2px);
         }
 
         .jnmulee-trending-number {
           color: #d7193f;
           font-size: 22px;
           font-weight: 950;
-          line-height: 1;
         }
 
         .jnmulee-trending-category {
@@ -1301,11 +1203,22 @@ export default async function HomePage() {
           text-align: center;
         }
 
-        .jnmulee-most-read-image,
+        .jnmulee-most-read-image-wrap {
+          position: relative;
+          width: 82px;
+          height: 61px;
+          border-radius: 7px;
+          overflow: hidden;
+          background: #f1f3f5;
+        }
+
+        .jnmulee-most-read-image {
+          object-fit: cover;
+        }
+
         .jnmulee-most-read-placeholder {
           width: 82px;
           height: 61px;
-          object-fit: cover;
           border-radius: 7px;
           background: #f1f3f5;
         }
@@ -1325,13 +1238,13 @@ export default async function HomePage() {
 
         .jnmulee-news-grid {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0,1fr));
+          grid-template-columns: repeat(3,minmax(0,1fr));
           gap: 20px;
         }
 
         .jnmulee-category-grid {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0,1fr));
+          grid-template-columns: repeat(4,minmax(0,1fr));
           gap: 18px;
         }
 
@@ -1365,7 +1278,7 @@ export default async function HomePage() {
 
         .jnmulee-newsletter h2 {
           margin: 0;
-          font-size: clamp(1.7rem, 4vw, 2.4rem);
+          font-size: clamp(1.7rem,4vw,2.4rem);
           line-height: 1.05;
           font-weight: 950;
         }
@@ -1387,42 +1300,37 @@ export default async function HomePage() {
           padding: 12px 18px;
           font-size: 12px;
           font-weight: 900;
-          transition: .2s ease;
-        }
-
-        .jnmulee-newsletter-button:hover {
-          background: #b81234;
         }
 
         .jnmulee-bottom-ad {
           margin-top: 15px;
         }
 
-        @media (max-width: 1050px) {
+        @media (max-width:1050px) {
           .jnmulee-trending-grid {
-            grid-template-columns: repeat(3, minmax(0,1fr));
+            grid-template-columns: repeat(3,minmax(0,1fr));
           }
 
           .jnmulee-category-grid {
-            grid-template-columns: repeat(3, minmax(0,1fr));
+            grid-template-columns: repeat(3,minmax(0,1fr));
           }
         }
 
-        @media (max-width: 900px) {
+        @media (max-width:900px) {
           .jnmulee-hero-grid {
             grid-template-columns: 1fr;
           }
 
           .jnmulee-news-grid {
-            grid-template-columns: repeat(2, minmax(0,1fr));
+            grid-template-columns: repeat(2,minmax(0,1fr));
           }
 
           .jnmulee-category-grid {
-            grid-template-columns: repeat(2, minmax(0,1fr));
+            grid-template-columns: repeat(2,minmax(0,1fr));
           }
 
           .jnmulee-trending-grid {
-            grid-template-columns: repeat(2, minmax(0,1fr));
+            grid-template-columns: repeat(2,minmax(0,1fr));
           }
 
           .jnmulee-newsletter {
@@ -1431,7 +1339,7 @@ export default async function HomePage() {
           }
         }
 
-        @media (max-width: 650px) {
+        @media (max-width:650px) {
           .jnmulee-header-inner {
             padding: 12px 14px;
           }
@@ -1498,9 +1406,8 @@ export default async function HomePage() {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .jnmulee-story-card,
-          .jnmulee-trending-card {
-            transition: none;
+          * {
+            scroll-behavior: auto !important;
           }
         }
       `}</style>
