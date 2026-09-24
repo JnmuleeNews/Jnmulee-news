@@ -15,7 +15,8 @@ const supabase = createClient(
 );
 
 const CATEGORY_NAMES: Record<string, string> = {
-  news: "Top Stories",
+  news: "News",
+  "top-stories": "Top Stories",
   sport: "Sports",
   sports: "Sports",
   entertainment: "Entertainment",
@@ -29,7 +30,9 @@ const CATEGORY_NAMES: Record<string, string> = {
 };
 
 const CATEGORY_DESCRIPTIONS: Record<string, string> = {
-  news: "The latest top stories, breaking news and important developments.",
+  news: "The latest news, breaking stories and important developments.",
+  "top-stories":
+    "The latest top stories, breaking news and important developments.",
   sport: "Latest sports news, results, stories, transfers and updates.",
   sports: "Latest sports news, results, stories, transfers and updates.",
   entertainment:
@@ -71,7 +74,7 @@ type Story = {
   image_url: string | null;
   category: string | null;
   created_at: string;
-  views?: number | null;
+  view_count?: number | null;
 };
 
 function cleanText(text: string | null | undefined) {
@@ -126,7 +129,6 @@ function timeAgo(date: string) {
   if (!Number.isFinite(timestamp)) return "";
 
   const diff = Date.now() - timestamp;
-
   const minutes = Math.floor(diff / 60000);
 
   if (minutes < 1) return "Just now";
@@ -324,14 +326,17 @@ function AdPlaceholder({
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ category: string }>;
 }): Promise<Metadata> {
-  const { slug } = await params;
+  const { category } = await params;
 
-  const normalizedSlug = slug.toLowerCase();
+  const normalizedSlug = decodeURIComponent(category)
+    .trim()
+    .toLowerCase();
 
   const categoryName =
-    CATEGORY_NAMES[normalizedSlug] || slug;
+    CATEGORY_NAMES[normalizedSlug] ||
+    normalizedSlug.replace(/-/g, " ");
 
   const description = getCategoryDescription(
     normalizedSlug,
@@ -345,6 +350,7 @@ export async function generateMetadata({
   return {
     title: `${categoryName} News`,
     description,
+
     keywords: [
       categoryName,
       `${categoryName} news`,
@@ -352,13 +358,16 @@ export async function generateMetadata({
       `breaking ${categoryName} news`,
       "JNMulee News",
     ],
+
     alternates: {
       canonical: canonicalUrl,
     },
+
     robots: {
       index: true,
       follow: true,
     },
+
     openGraph: {
       title: `${categoryName} News | JNMulee News`,
       description,
@@ -366,6 +375,7 @@ export async function generateMetadata({
       siteName: "JNMulee News",
       type: "website",
     },
+
     twitter: {
       card: "summary_large_image",
       title: `${categoryName} News | JNMulee News`,
@@ -377,68 +387,100 @@ export async function generateMetadata({
 export default async function CategoryPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ category: string }>;
 }) {
-  const { slug } = await params;
+  const { category } = await params;
 
-  const normalizedSlug = slug.toLowerCase();
+  const normalizedSlug = decodeURIComponent(category)
+    .trim()
+    .toLowerCase();
 
   const categoryName =
-    CATEGORY_NAMES[normalizedSlug] || slug;
+    CATEGORY_NAMES[normalizedSlug] ||
+    normalizedSlug.replace(/-/g, " ");
 
   const description = getCategoryDescription(
     normalizedSlug,
     categoryName
   );
 
-  const [
-    storiesResult,
-    mostReadResult,
-    latestResult,
-  ] = await Promise.all([
-    supabase
-      .from("news")
-      .select(
-        "id,title,slug,content,image_url,category,created_at"
-      )
-      .eq("Published", true)
-      .not("image_url", "is", null)
-      .neq("image_url", "")
-      .eq("category", categoryName)
-      .order("created_at", { ascending: false })
-      .limit(50),
+  const storiesQuery = supabase
+    .from("news")
+    .select(
+      "id,title,slug,content,image_url,category,created_at"
+    )
+    .eq("Published", true)
+    .eq("category", categoryName)
+    .not("image_url", "is", null)
+    .neq("image_url", "")
+    .order("created_at", { ascending: false })
+    .limit(50);
 
-    supabase
-      .from("news")
-      .select(
-        "id,title,slug,content,image_url,category,created_at,views"
-      )
-      .eq("Published", true)
-      .not("image_url", "is", null)
-      .neq("image_url", "")
-      .order("views", { ascending: false, nullsFirst: false })
-      .limit(8),
+  const mostReadQuery = supabase
+    .from("news")
+    .select(
+      "id,title,slug,content,image_url,category,created_at,view_count"
+    )
+    .eq("Published", true)
+    .not("image_url", "is", null)
+    .neq("image_url", "")
+    .order("view_count", {
+      ascending: false,
+      nullsFirst: false,
+    })
+    .limit(8);
 
-    supabase
-      .from("news")
-      .select(
-        "id,title,slug,content,image_url,category,created_at"
-      )
-      .eq("Published", true)
-      .not("image_url", "is", null)
-      .neq("image_url", "")
-      .order("created_at", { ascending: false })
-      .limit(8),
-  ]);
+  const latestQuery = supabase
+    .from("news")
+    .select(
+      "id,title,slug,content,image_url,category,created_at"
+    )
+    .eq("Published", true)
+    .not("image_url", "is", null)
+    .neq("image_url", "")
+    .order("created_at", { ascending: false })
+    .limit(8);
+
+  const [storiesResult, mostReadResult, latestResult] =
+    await Promise.all([
+      storiesQuery,
+      mostReadQuery,
+      latestQuery,
+    ]);
+
+  if (storiesResult.error) {
+    console.error(
+      "JNMulee category stories error:",
+      storiesResult.error
+    );
+  }
+
+  if (mostReadResult.error) {
+    console.error(
+      "JNMulee category most-read error:",
+      mostReadResult.error
+    );
+  }
+
+  if (latestResult.error) {
+    console.error(
+      "JNMulee category latest error:",
+      latestResult.error
+    );
+  }
 
   const stories = (storiesResult.data || []) as Story[];
   const mostRead = (mostReadResult.data || []) as Story[];
   const latest = (latestResult.data || []) as Story[];
 
-  const error =
-    storiesResult.error ||
-    mostReadResult.error ||
-    latestResult.error;
+  /*
+   * Only treat the category query as fatal.
+   *
+   * Most-read and latest are supporting sections.
+   * If either one fails, the category itself should
+   * still be allowed to load.
+   */
+  const categoryError = storiesResult.error;
 
   const leadStory = stories[0] || null;
   const secondaryStories = stories.slice(1, 5);
@@ -461,10 +503,7 @@ export default async function CategoryPage({
           margin: 0;
           background: #f4f5f7;
           color: #111827;
-          font-family:
-            Arial,
-            Helvetica,
-            sans-serif;
+          font-family: Arial, Helvetica, sans-serif;
         }
 
         a {
@@ -475,8 +514,6 @@ export default async function CategoryPage({
         .jnm-page {
           min-height: 100vh;
         }
-
-        /* HEADER */
 
         .jnm-header {
           position: sticky;
@@ -533,8 +570,6 @@ export default async function CategoryPage({
           opacity: 0.7;
         }
 
-        /* BREAKING BAR */
-
         .breaking-bar {
           background: #fff;
           border-bottom: 1px solid #e5e7eb;
@@ -572,8 +607,6 @@ export default async function CategoryPage({
           font-weight: 600;
         }
 
-        /* PAGE */
-
         .jnm-container {
           width: 100%;
           max-width: 1280px;
@@ -583,13 +616,6 @@ export default async function CategoryPage({
 
         .category-heading {
           margin-bottom: 25px;
-        }
-
-        .category-heading-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 20px;
         }
 
         .category-heading h1 {
@@ -617,8 +643,6 @@ export default async function CategoryPage({
           border-radius: 10px;
         }
 
-        /* AD */
-
         .ad-box {
           min-height: 92px;
           margin: 24px 0;
@@ -632,8 +656,6 @@ export default async function CategoryPage({
           text-transform: uppercase;
           letter-spacing: 1.2px;
         }
-
-        /* TOP GRID */
 
         .top-grid {
           display: grid;
@@ -649,9 +671,7 @@ export default async function CategoryPage({
           border-radius: 12px;
           overflow: hidden;
           box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
-          transition:
-            transform 0.2s ease,
-            box-shadow 0.2s ease;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
 
         .lead-story:hover {
@@ -740,8 +760,6 @@ export default async function CategoryPage({
           gap: 7px;
         }
 
-        /* SECONDARY */
-
         .secondary-panel {
           min-width: 0;
           background: #fff;
@@ -813,8 +831,6 @@ export default async function CategoryPage({
           margin-top: 7px;
         }
 
-        /* SECTION */
-
         .section {
           margin-top: 38px;
         }
@@ -853,8 +869,6 @@ export default async function CategoryPage({
           font-size: 13px;
           font-weight: 800;
         }
-
-        /* TRENDING */
 
         .trending-grid {
           display: grid;
@@ -915,8 +929,6 @@ export default async function CategoryPage({
           font-weight: 800;
         }
 
-        /* CONTENT LAYOUT */
-
         .content-layout {
           display: grid;
           grid-template-columns: minmax(0, 1fr) 320px;
@@ -937,9 +949,7 @@ export default async function CategoryPage({
           border-radius: 10px;
           overflow: hidden;
           box-shadow: 0 2px 10px rgba(0, 0, 0, 0.045);
-          transition:
-            transform 0.2s ease,
-            box-shadow 0.2s ease;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
 
         .story-card:hover {
@@ -974,8 +984,6 @@ export default async function CategoryPage({
           font-size: 14px;
           line-height: 1.55;
         }
-
-        /* SIDEBAR */
 
         .sidebar {
           min-width: 0;
@@ -1050,8 +1058,6 @@ export default async function CategoryPage({
           margin-top: 20px;
         }
 
-        /* EMPTY */
-
         .empty-state {
           background: #fff;
           border: 1px solid #e5e7eb;
@@ -1070,8 +1076,6 @@ export default async function CategoryPage({
           color: #6b7280;
           line-height: 1.6;
         }
-
-        /* FOOTER */
 
         .jnm-footer {
           background: #111827;
@@ -1113,15 +1117,15 @@ export default async function CategoryPage({
           font-size: 13px;
         }
 
-        /* MOBILE */
-
         @media (max-width: 1050px) {
           .jnm-nav {
             gap: 16px;
           }
 
           .top-grid {
-            grid-template-columns: minmax(0, 1.45fr) minmax(290px, 1fr);
+            grid-template-columns:
+              minmax(0, 1.45fr)
+              minmax(290px, 1fr);
           }
 
           .trending-grid {
@@ -1265,7 +1269,10 @@ export default async function CategoryPage({
               JNMulee News
             </Link>
 
-            <nav className="jnm-nav" aria-label="Main navigation">
+            <nav
+              className="jnm-nav"
+              aria-label="Main navigation"
+            >
               {NAV_ITEMS.map((item) => (
                 <Link key={item.href} href={item.href}>
                   {item.label}
@@ -1290,24 +1297,21 @@ export default async function CategoryPage({
 
         <main className="jnm-container">
           <header className="category-heading">
-            <div className="category-heading-top">
-              <div>
-                <h1>{categoryName} News</h1>
+            <h1>{categoryName} News</h1>
 
-                <div className="category-line" />
+            <div className="category-line" />
 
-                <p className="category-description">
-                  {description}
-                </p>
-              </div>
-            </div>
+            <p className="category-description">
+              {description}
+            </p>
           </header>
 
           <AdPlaceholder label="Advertisement" />
 
-          {error ? (
+          {categoryError ? (
             <div className="empty-state">
               <h2>Unable to load stories</h2>
+
               <p>
                 There was a problem loading this category.
                 Please try again shortly.
@@ -1316,9 +1320,10 @@ export default async function CategoryPage({
           ) : stories.length === 0 ? (
             <div className="empty-state">
               <h2>No stories yet</h2>
+
               <p>
-                There are currently no published stories in
-                this category.
+                There are currently no published stories
+                in this category.
               </p>
             </div>
           ) : (
@@ -1342,7 +1347,7 @@ export default async function CategoryPage({
                             href={`/news/${story.slug}`}
                           >
                             <div className="secondary-image">
-                              {story.image_url ? (
+                              {story.image_url && (
                                 <img
                                   src={
                                     imageUrl(
@@ -1352,7 +1357,7 @@ export default async function CategoryPage({
                                   alt={story.title}
                                   loading="lazy"
                                 />
-                              ) : null}
+                              )}
                             </div>
 
                             <div>
@@ -1465,7 +1470,18 @@ export default async function CategoryPage({
                         Most Read
                       </div>
 
-                      {mostRead.length > 0 ? (
+                      {mostReadResult.error ? (
+                        <div
+                          style={{
+                            padding: "20px",
+                            color: "#6b7280",
+                            fontSize: "14px",
+                          }}
+                        >
+                          Most-read stories are
+                          temporarily unavailable.
+                        </div>
+                      ) : mostRead.length > 0 ? (
                         mostRead.map((story) => (
                           <StoryCard
                             key={story.id}
