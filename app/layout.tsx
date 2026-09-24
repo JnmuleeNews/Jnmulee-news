@@ -56,7 +56,6 @@ export default function RootLayout({
           onCopy={(e) => e.preventDefault()}
           onCut={(e) => e.preventDefault()}
           onDragStart={(e) => e.preventDefault()}
-          onSelectStart={(e) => e.preventDefault()}
         >
           {children}
 
