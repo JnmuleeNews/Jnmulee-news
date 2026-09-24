@@ -1,4 +1,4 @@
-import { NextResponse } from "next";
+import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 
@@ -289,11 +289,9 @@ function cleanText(value: string): string {
   );
 
   text = normalizeWhitespace(text);
-
   text = removeSourceBoilerplate(text);
   text = removeAuthorBiography(text);
   text = removeAdvertising(text);
-
   text = dedupeParagraphs(text);
 
   return normalizeWhitespace(text);
@@ -430,7 +428,8 @@ function parseFeed(xml: string): FeedItem[] {
         ])
       ) || null;
 
-    let imageUrl: string | null = null;
+    let imageUrl: string | null =
+      null;
 
     const mediaContent =
       block.match(
@@ -499,9 +498,7 @@ function parseFeed(xml: string): FeedItem[] {
 
     if (!imageUrl) {
       imageUrl =
-        extractImage(
-          content
-        );
+        extractImage(content);
     }
 
     if (
@@ -541,7 +538,7 @@ function classifyCategory(
   }
 
   if (
-    /\bfootball\b|\bsoccer\b|\bnba\b|\bnfl\b|\bnfl\b|\btennis\b|\bboxing\b|\bufc\b|\bformula 1\b|\bf1\b|\bsport\b|\bchampions league\b|\bpremier league\b/.test(
+    /\bfootball\b|\bsoccer\b|\bnba\b|\bnfl\b|\btennis\b|\bboxing\b|\bufc\b|\bformula 1\b|\bf1\b|\bsport\b|\bchampions league\b|\bpremier league\b/.test(
       value
     )
   ) {
@@ -581,7 +578,7 @@ function classifyCategory(
   }
 
   if (
-    /\bnigeria\b|\bnigerian\b|\blagos\b|\babujа\b|\babuja\b|\brivers state\b|\bkano\b|\bplateau\b|\bdelta state\b|\bimo state\b|\benugu\b|\bondo\b|\boyo\b/.test(
+    /\bnigeria\b|\bnigerian\b|\blagos\b|\babuja\b|\brivers state\b|\bkano\b|\bplateau\b|\bdelta state\b|\bimo state\b|\benugu\b|\bondo\b|\boyo\b/.test(
       value
     )
   ) {
@@ -644,7 +641,8 @@ function extractJsonLdArticleBody(
         if (
           obj &&
           typeof obj === "object" &&
-          typeof obj.articleBody === "string"
+          typeof obj.articleBody ===
+            "string"
         ) {
           return cleanText(
             obj.articleBody
@@ -720,9 +718,7 @@ function scoreCandidate(
     score += 20;
   }
 
-  if (
-    words > 500
-  ) {
+  if (words > 500) {
     score += 50;
   }
 
@@ -796,20 +792,14 @@ async function fetchArticlePage(
 
     if (!imageUrl) {
       imageUrl =
-        extractImage(
-          html
-        );
+        extractImage(html);
     }
 
     const jsonLd =
-      extractJsonLdArticleBody(
-        html
-      );
+      extractJsonLdArticleBody(html);
 
     const candidates =
-      extractArticleContainers(
-        html
-      );
+      extractArticleContainers(html);
 
     if (jsonLd) {
       candidates.push(jsonLd);
@@ -822,12 +812,11 @@ async function fetchArticlePage(
 
     if (bodyMatch?.[1]) {
       const fallback =
-        cleanText(
-          bodyMatch[1]
-        );
+        cleanText(bodyMatch[1]);
 
       if (
-        wordCount(fallback) >= 180
+        wordCount(fallback) >=
+        180
       ) {
         candidates.push(
           fallback
@@ -909,28 +898,18 @@ function cleanFinalArticle(
     );
 
   text =
-    removeSourceBoilerplate(
-      text
-    );
+    removeSourceBoilerplate(text);
 
   text =
-    removeAdvertising(
-      text
-    );
+    removeAdvertising(text);
 
   text =
-    removeAuthorBiography(
-      text
-    );
+    removeAuthorBiography(text);
 
   text =
-    dedupeParagraphs(
-      text
-    );
+    dedupeParagraphs(text);
 
-  return normalizeWhitespace(
-    text
-  );
+  return normalizeWhitespace(text);
 }
 
 function textToHtml(
@@ -1128,17 +1107,7 @@ Do not claim that JNMulee News personally interviewed anyone or independently wi
 
 Use only facts supported by the supplied material.
 
-Never invent:
-- facts
-- names
-- dates
-- locations
-- statistics
-- quotations
-- reactions
-- motives
-- background
-- events
+Never invent facts, names, dates, locations, statistics, quotations, reactions, motives, background or events.
 
 Preserve uncertainty where appropriate.
 
@@ -1204,26 +1173,20 @@ Return only the article.
       });
 
     const result =
-      completion.choices[0]?.message
-        ?.content
-        ?.trim();
+      completion.choices[0]?.message?.content?.trim();
 
     if (!result) {
       return null;
     }
 
     if (
-      result
-        .trim()
-        .toUpperCase() ===
+      result.trim().toUpperCase() ===
       "INSUFFICIENT_SOURCE_MATERIAL"
     ) {
       return null;
     }
 
-    return cleanFinalArticle(
-      result
-    );
+    return cleanFinalArticle(result);
   } catch (error) {
     console.error(
       "OpenAI article generation error:",
@@ -1242,10 +1205,8 @@ function isSafeUrl(
       new URL(value);
 
     return (
-      url.protocol ===
-        "https:" ||
-      url.protocol ===
-        "http:"
+      url.protocol === "https:" ||
+      url.protocol === "http:"
     );
   } catch {
     return false;
@@ -1308,19 +1269,13 @@ export async function GET(
 
   const batchParam =
     Number(
-      searchParams.get(
-        "batch"
-      ) || "0"
+      searchParams.get("batch") || "0"
     );
 
   const batch =
-    Number.isFinite(
-      batchParam
-    ) &&
+    Number.isFinite(batchParam) &&
     batchParam >= 0
-      ? Math.floor(
-          batchParam
-        )
+      ? Math.floor(batchParam)
       : 0;
 
   const stats = {
@@ -1336,29 +1291,21 @@ export async function GET(
     aiGenerated: 0,
   };
 
-  const errors: string[] =
-    [];
+  const errors: string[] = [];
 
   try {
     const {
       data: sources,
       error: sourcesError,
-    } =
-      await supabase
-        .from("sources")
-        .select(
-          "id,name,feed_url,active"
-        )
-        .eq(
-          "active",
-          true
-        )
-        .order(
-          "id",
-          {
-            ascending: true,
-          }
-        );
+    } = await supabase
+      .from("sources")
+      .select(
+        "id,name,feed_url,active"
+      )
+      .eq("active", true)
+      .order("id", {
+        ascending: true,
+      });
 
     if (sourcesError) {
       throw new Error(
@@ -1367,8 +1314,7 @@ export async function GET(
     }
 
     const allSources =
-      (sources ||
-        []) as SourceRow[];
+      (sources || []) as SourceRow[];
 
     const sourceStart =
       batch *
@@ -1382,8 +1328,7 @@ export async function GET(
       );
 
     if (
-      batchSources.length ===
-      0
+      batchSources.length === 0
     ) {
       return NextResponse.json(
         {
@@ -1454,9 +1399,7 @@ export async function GET(
           try {
             if (
               !item.link ||
-              !isSafeUrl(
-                item.link
-              )
+              !isSafeUrl(item.link)
             ) {
               stats.articlesSkipped++;
               continue;
@@ -1465,19 +1408,16 @@ export async function GET(
             const {
               data: existing,
               error: duplicateError,
-            } =
-              await supabase
-                .from("news")
-                .select("id")
-                .eq(
-                  "source_url",
-                  item.link
-                )
-                .limit(1);
+            } = await supabase
+              .from("news")
+              .select("id")
+              .eq(
+                "source_url",
+                item.link
+              )
+              .limit(1);
 
-            if (
-              duplicateError
-            ) {
+            if (duplicateError) {
               errors.push(
                 `${source.name || source.id}: duplicate check failed: ${duplicateError.message}`
               );
@@ -1488,8 +1428,7 @@ export async function GET(
 
             if (
               existing &&
-              existing.length >
-                0
+              existing.length > 0
             ) {
               stats.skippedDuplicate++;
               stats.articlesSkipped++;
@@ -1555,9 +1494,7 @@ export async function GET(
             stats.aiGenerated++;
 
             const finalWords =
-              wordCount(
-                article
-              );
+              wordCount(article);
 
             if (
               finalWords <
@@ -1579,27 +1516,19 @@ export async function GET(
             }
 
             const score =
-              qualityScore(
-                article
-              );
+              qualityScore(article);
 
-            if (
-              score < 55
-            ) {
+            if (score < 55) {
               stats.skippedPoorQuality++;
               stats.articlesSkipped++;
               continue;
             }
 
             const html =
-              textToHtml(
-                article
-              );
+              textToHtml(article);
 
             if (
-              wordCount(
-                html
-              ) <
+              wordCount(html) <
               MIN_FINAL_WORDS
             ) {
               stats.skippedPoorQuality++;
@@ -1618,20 +1547,18 @@ export async function GET(
 
             const {
               data: slugMatch,
-            } =
-              await supabase
-                .from("news")
-                .select("id")
-                .eq(
-                  "slug",
-                  slug
-                )
-                .limit(1);
+            } = await supabase
+              .from("news")
+              .select("id")
+              .eq(
+                "slug",
+                slug
+              )
+              .limit(1);
 
             if (
               slugMatch &&
-              slugMatch.length >
-                0
+              slugMatch.length > 0
             ) {
               slug =
                 `${baseSlug}-${Date.now()
@@ -1639,42 +1566,36 @@ export async function GET(
                   .slice(-6)}`;
             }
 
-            const insertPayload =
-              {
-                title:
-                  material.title,
-                slug,
-                content:
-                  html,
-                image_url:
-                  material.imageUrl,
-                Published: true,
-                source_url:
-                  material.url,
-                category,
-                content_type:
-                  "syndicated",
-                source_name:
-                  source.name ||
-                  null,
-                canonical_url:
-                  material.url,
-                attribution_text:
-                  "Published by JNMulee News",
-              };
+            const insertPayload = {
+              title:
+                material.title,
+              slug,
+              content: html,
+              image_url:
+                material.imageUrl,
+              Published: true,
+              source_url:
+                material.url,
+              category,
+              content_type:
+                "syndicated",
+              source_name:
+                source.name || null,
+              canonical_url:
+                material.url,
+              attribution_text:
+                "Published by JNMulee News",
+            };
 
             const {
               error: insertError,
-            } =
-              await supabase
-                .from("news")
-                .insert(
-                  insertPayload
-                );
+            } = await supabase
+              .from("news")
+              .insert(
+                insertPayload
+              );
 
-            if (
-              insertError
-            ) {
+            if (insertError) {
               if (
                 /duplicate|unique/i.test(
                   insertError.message
@@ -1696,9 +1617,7 @@ export async function GET(
             const message =
               itemError instanceof Error
                 ? itemError.message
-                : String(
-                    itemError
-                  );
+                : String(itemError);
 
             errors.push(
               `${source.name || source.id}: ${item.title}: ${message}`
@@ -1711,9 +1630,7 @@ export async function GET(
         const message =
           sourceError instanceof Error
             ? sourceError.message
-            : String(
-                sourceError
-              );
+            : String(sourceError);
 
         errors.push(
           `${source.name || source.id}: ${message}`
@@ -1724,31 +1641,20 @@ export async function GET(
     return NextResponse.json(
       {
         success: true,
-
         message:
           "JNMulee News batch completed. Articles were reconstructed in original JNMulee News wording and published only when they met the image and 180-word quality requirements.",
-
         batch,
-
         totalSources:
           allSources.length,
-
         sourceStart,
-
         batchSourcesProcessed:
           batchSources.length,
-
         ...stats,
-
         durationMs:
           Date.now() -
           startedAt,
-
         errors:
-          errors.slice(
-            0,
-            20
-          ),
+          errors.slice(0, 20),
       },
       {
         status: 200,
