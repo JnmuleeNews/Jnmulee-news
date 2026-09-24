@@ -1,335 +1,305 @@
+import Link from "next/link";
+import Image from "next/image";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
-import DirectAd from "@/components/DirectAd";
+
 import ShareButtons from "@/components/ShareButtons";
 import ArticleViewTracker from "@/components/ArticleViewTracker";
+import DirectAd from "@/components/DirectAd";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type Props = {
-  params: Promise<{ slug: string }>;
-  searchParams: Promise<{ comment?: string }>;
-};
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  "https://jnmulee-news-jnnation.vercel.app";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  "https://jnmulee-news-jnnation.vercel.app";
+type ArticleStory = {
+  id: string;
+  title: string | null;
+  slug: string;
+  content: string | null;
+  image_url: string | null;
+  Published: boolean;
+  category: string | null;
+  created_at: string;
+  view_count: number | null;
+  content_type: string | null;
+  source_name: string | null;
+  canonical_url: string | null;
+  attribution_text: string | null;
+};
 
-const NAV_ITEMS = [
-  ["Home", "/"],
-  ["Nigeria", "/category/nigeria"],
-  ["Politics", "/category/politics"],
-  ["Sports", "/category/sports"],
-  ["Entertainment", "/category/entertainment"],
-  ["Gossip", "/category/gossip"],
-  ["Business", "/category/business"],
-  ["Technology", "/category/technology"],
-  ["Crypto", "/category/crypto"],
-  ["World", "/category/world"],
-];
+type RelatedStory = {
+  id: string;
+  title: string | null;
+  slug: string;
+  image_url: string | null;
+  category: string | null;
+  created_at: string;
+};
 
-function decodeHtml(value: string) {
+type Comment = {
+  id: string;
+  name: string | null;
+  comment: string | null;
+  created_at: string;
+};
+
+function decodeHtml(value: string): string {
   return value
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/gi, "'")
-    .replace(/&#x27;/gi, "'")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&");
+    .replace(/&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
 }
 
-/*
- * Keep article formatting while removing dangerous elements/attributes.
- * This is intentionally conservative because article content is rendered
- * with dangerouslySetInnerHTML.
- */
-function sanitizeArticleHtml(value: string) {
+function sanitizeArticleHtml(value: string): string {
   let html = decodeHtml(value);
 
+  /*
+   * Remove dangerous document-level elements.
+   */
   html = html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/<iframe[\s\S]*?<\/iframe>/gi, "")
     .replace(/<object[\s\S]*?<\/object>/gi, "")
-    .replace(/<embed[^>]*>/gi, "")
+    .replace(/<embed[\s\S]*?>/gi, "")
     .replace(/<form[\s\S]*?<\/form>/gi, "")
-    .replace(/<base[^>]*>/gi, "")
-    .replace(/<meta[^>]*>/gi, "")
-    .replace(/<link[^>]*>/gi, "")
-    .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, "")
-    .replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, "")
-    .replace(
-      /\s(href|src)\s*=\s*(['"])\s*javascript:[\s\S]*?\2/gi,
-      ""
-    )
-    .replace(
-      /\s(href|src)\s*=\s*javascript:[^\s>]+/gi,
-      ""
-    )
-    .replace(/javascript\s*:/gi, "");
+    .replace(/<link[\s\S]*?>/gi, "")
+    .replace(/<meta[\s\S]*?>/gi, "")
+    .replace(/<base[\s\S]*?>/gi, "");
+
+  /*
+   * Remove inline JavaScript event handlers.
+   */
+  html = html.replace(
+    /\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,
+    ""
+  );
+
+  /*
+   * Remove javascript:, vbscript:, and data:text/html URLs.
+   */
+  html = html.replace(
+    /\s+(href|src|action|formaction)\s*=\s*(["'])\s*(javascript:|vbscript:|data:text\/html)[\s\S]*?\2/gi,
+    ""
+  );
+
+  html = html.replace(
+    /\s+(href|src|action|formaction)\s*=\s*(javascript:|vbscript:|data:text\/html)[^\s>]*/gi,
+    ""
+  );
 
   return html.trim();
 }
 
-function cleanText(value: string) {
-  return decodeHtml(value)
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
+function getDescription(content: string | null): string {
+  if (!content) {
+    return "Read the latest story on JNMulee News.";
+  }
+
+  const text = content
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function getDescription(value: string) {
-  const text = cleanText(value);
-
-  if (!text) {
-    return "Latest news from JNMulee News.";
-  }
 
   if (text.length <= 160) {
     return text;
   }
 
-  return `${text.substring(0, 157).trim()}...`;
+  return `${text.slice(0, 157).replace(/\s+\S*$/, "")}...`;
 }
 
-function getImageFromContent(value: string) {
-  const decoded = decodeHtml(value);
+function getImageFromContent(
+  content: string | null
+): string | null {
+  if (!content) return null;
 
-  const match = decoded.match(
-    /<img[^>]+src=["']([^"']+)["']/i
+  const match = content.match(
+    /<img[^>]+(?:src|data-src|data-original)=["']([^"']+)["']/i
   );
 
-  return match?.[1] ?? null;
+  return match?.[1] || null;
 }
 
-function formatDate(date: string) {
+function formatDate(value: string): string {
   try {
     return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
       month: "long",
       day: "numeric",
-    }).format(new Date(date));
+      year: "numeric",
+    }).format(new Date(value));
   } catch {
     return "";
   }
 }
 
-function formatDateTime(date: string) {
+function formatDateTime(value: string): string {
   try {
     return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
       month: "short",
       day: "numeric",
+      year: "numeric",
       hour: "numeric",
       minute: "2-digit",
-    }).format(new Date(date));
+    }).format(new Date(value));
   } catch {
     return "";
   }
 }
 
-function timeAgo(date: string) {
-  const timestamp = new Date(date).getTime();
+function formatCategory(category: string | null): string {
+  if (!category) return "News";
 
-  if (!Number.isFinite(timestamp)) {
-    return "";
-  }
-
-  const difference = Date.now() - timestamp;
-  const minutes = Math.floor(difference / 60000);
-
-  if (minutes < 1) {
-    return "Just now";
-  }
-
-  if (minutes < 60) {
-    return `${minutes}m ago`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-
-  if (hours < 24) {
-    return `${hours}h ago`;
-  }
-
-  const days = Math.floor(hours / 24);
-
-  if (days < 7) {
-    return `${days}d ago`;
-  }
-
-  return formatDate(date);
+  return category
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function imageProxy(url: string | null) {
-  if (!url) return "";
+function categoryHref(category: string | null): string {
+  if (!category) return "/category/news";
 
-  return `/api/image?url=${encodeURIComponent(url)}`;
+  const normalized = category.toLowerCase();
+
+  if (normalized === "sports") {
+    return "/category/sport";
+  }
+
+  return `/category/${encodeURIComponent(normalized)}`;
 }
 
-function getWordCount(value: string) {
-  const text = cleanText(value);
+function estimateReadingTime(content: string | null): number {
+  if (!content) return 1;
 
-  if (!text) return 0;
+  const plainText = content
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  return text.split(/\s+/).filter(Boolean).length;
+  const words = plainText
+    ? plainText.split(/\s+/).length
+    : 0;
+
+  return Math.max(1, Math.ceil(words / 220));
 }
 
-async function postComment(formData: FormData) {
-  "use server";
+function getWordCount(content: string | null): number {
+  if (!content) return 0;
 
-  const newsId = String(
-    formData.get("news_id") || ""
-  ).trim();
+  const plainText = content
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  const slug = String(
-    formData.get("slug") || ""
-  ).trim();
-
-  const name = String(
-    formData.get("name") || ""
-  ).trim();
-
-  const comment = String(
-    formData.get("comment") || ""
-  ).trim();
-
-  if (!slug) {
-    redirect("/");
-  }
-
-  if (!newsId || !name || !comment) {
-    redirect(`/news/${slug}?comment=error#comments`);
-  }
-
-  if (name.length > 80 || comment.length > 2000) {
-    redirect(`/news/${slug}?comment=error#comments`);
-  }
-
-  const supabaseServer = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-
-  const { data: article, error: articleError } =
-    await supabaseServer
-      .from("news")
-      .select("id,slug")
-      .eq("id", newsId)
-      .eq("slug", slug)
-      .eq("Published", true)
-      .single();
-
-  if (articleError || !article) {
-    console.error(
-      "Comment article validation error:",
-      articleError
-    );
-
-    redirect(`/news/${slug}?comment=error#comments`);
-  }
-
-  /*
-   * Supabase handles the final moderation decision through
-   * the database trigger already configured for comments.
-   */
-  const { error: commentError } =
-    await supabaseServer
-      .from("comments")
-      .insert({
-        news_id: article.id,
-        name,
-        comment,
-        approved: false,
-      });
-
-  if (commentError) {
-    console.error(
-      "Comment insert error:",
-      commentError
-    );
-
-    redirect(`/news/${slug}?comment=error#comments`);
-  }
-
-  redirect(
-    `/news/${slug}?comment=success#comments`
-  );
+  return plainText ? plainText.split(/\s+/).length : 0;
 }
 
 export async function generateMetadata({
   params,
-}: Props): Promise<Metadata> {
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
   const { slug } = await params;
 
-  const { data: story } = await supabase
+  const { data } = await supabase
     .from("news")
     .select(
-      "title,content,image_url,slug,category,created_at"
+      `
+        title,
+        slug,
+        content,
+        image_url,
+        category,
+        created_at,
+        content_type,
+        source_name,
+        canonical_url
+      `
     )
     .eq("slug", slug)
     .eq("Published", true)
-    .single();
+    .maybeSingle();
 
-  if (!story) {
+  if (!data) {
     return {
-      title: "News | JNMulee News",
-      description:
-        "Latest news from JNMulee News.",
+      title: "Article Not Found | JNMulee News",
+      description: "The requested article could not be found.",
+      robots: {
+        index: false,
+        follow: true,
+      },
     };
   }
 
-  const title =
-    story.title || "JNMulee News";
+  const story = data as unknown as ArticleStory;
 
-  const description = getDescription(
-    story.content || ""
-  );
+  const title = story.title || "JNMulee News";
+  const description = getDescription(story.content);
+  const canonicalUrl = `${SITE_URL}/news/${story.slug}`;
 
   const image =
     story.image_url ||
-    getImageFromContent(
-      story.content || ""
-    );
-
-  const articleUrl =
-    `${SITE_URL}/news/${story.slug}`;
+    getImageFromContent(story.content || "");
 
   return {
-    title,
-    description,
-
     metadataBase: new URL(SITE_URL),
 
+    title: `${title} | JNMulee News`,
+
+    description,
+
+    keywords: [
+      "JNMulee News",
+      "news",
+      formatCategory(story.category),
+      ...(story.source_name ? [story.source_name] : []),
+    ],
+
     alternates: {
-      canonical: articleUrl,
+      canonical: canonicalUrl,
+    },
+
+    robots: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
     },
 
     openGraph: {
       title,
       description,
-      url: articleUrl,
+      url: canonicalUrl,
       siteName: "JNMulee News",
       type: "article",
-      publishedTime:
-        story.created_at || undefined,
-      section:
-        story.category || "News",
+      publishedTime: story.created_at,
+      section: formatCategory(story.category),
       images: image
         ? [
             {
               url: image,
+              width: 1200,
+              height: 675,
               alt: title,
             },
           ]
@@ -337,26 +307,10 @@ export async function generateMetadata({
     },
 
     twitter: {
-      card: image
-        ? "summary_large_image"
-        : "summary",
+      card: image ? "summary_large_image" : "summary",
       title,
       description,
-      images: image
-        ? [image]
-        : undefined,
-    },
-
-    robots: {
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-        "max-image-preview": "large",
-        "max-snippet": -1,
-        "max-video-preview": -1,
-      },
+      images: image ? [image] : undefined,
     },
   };
 }
@@ -364,121 +318,141 @@ export async function generateMetadata({
 export default async function NewsArticlePage({
   params,
   searchParams,
-}: Props) {
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ comment?: string }>;
+}) {
   const { slug } = await params;
-  const { comment: commentStatus } =
-    await searchParams;
+  const query = await searchParams;
 
-  const { data: story, error } = await supabase
+  const { data, error } = await supabase
     .from("news")
     .select(
-      [
-        "id",
-        "title",
-        "slug",
-        "content",
-        "image_url",
-        "Published",
-        "category",
-        "created_at",
-        "view_count",
-        "content_type",
-        "source_name",
-        "canonical_url",
-        "attribution_text",
-      ].join(",")
+      `
+        id,
+        title,
+        slug,
+        content,
+        image_url,
+        Published,
+        category,
+        created_at,
+        view_count,
+        content_type,
+        source_name,
+        canonical_url,
+        attribution_text
+      `
     )
     .eq("slug", slug)
     .eq("Published", true)
-    .single();
+    .maybeSingle();
 
-  if (error || !story) {
+  if (error || !data) {
     notFound();
   }
 
-  const title =
-    story.title || "JNMulee News";
+  const story = data as unknown as ArticleStory;
 
-  const content =
-    story.content || "";
+  if (!story) {
+    notFound();
+  }
 
-  const description =
-    getDescription(content);
+  const title = story.title || "JNMulee News";
+  const content = story.content || "";
+  const category = formatCategory(story.category);
 
-  const image =
-    story.image_url ||
-    getImageFromContent(content);
+  const safeContent = sanitizeArticleHtml(content);
 
-  const publishedAt =
-    story.created_at ||
-    new Date().toISOString();
+  const readingTime = estimateReadingTime(content);
+  const wordCount = getWordCount(content);
 
-  const articleUrl =
-    `${SITE_URL}/news/${story.slug}`;
+  const articleUrl = `${SITE_URL}/news/${story.slug}`;
 
-  const category =
-    story.category || "News";
+  /*
+   * Comments
+   */
+  const { data: commentsData } = await supabase
+    .from("comments")
+    .select("id,name,comment,created_at")
+    .eq("news_id", story.id)
+    .eq("approved", true)
+    .order("created_at", { ascending: false })
+    .limit(100);
 
-  const articleHtml =
-    sanitizeArticleHtml(content);
+  const comments = (commentsData || []) as Comment[];
 
-  const wordCount =
-    getWordCount(content);
+  /*
+   * Related stories.
+   */
+  let relatedStories: RelatedStory[] = [];
 
-  const { data: comments } =
-    await supabase
-      .from("comments")
-      .select(
-        "id,name,comment,created_at"
-      )
-      .eq("news_id", story.id)
-      .eq("approved", true)
-      .order("created_at", {
-        ascending: false,
-      })
-      .limit(100);
-
-  const { data: relatedStories } =
-    await supabase
+  if (story.category) {
+    const { data: relatedData } = await supabase
       .from("news")
       .select(
         "id,title,slug,image_url,category,created_at"
       )
       .eq("Published", true)
-      .eq("category", category)
+      .eq("category", story.category)
       .neq("id", story.id)
       .not("image_url", "is", null)
       .neq("image_url", "")
-      .order("created_at", {
-        ascending: false,
-      })
+      .order("created_at", { ascending: false })
       .limit(6);
 
-  const { data: mostReadStories } =
-    await supabase
+    relatedStories = (relatedData || []) as RelatedStory[];
+  }
+
+  /*
+   * If the category does not have enough stories, fill the
+   * remaining slots with the latest published stories.
+   */
+  if (relatedStories.length < 6) {
+    const existingIds = new Set(
+      relatedStories.map((item) => item.id)
+    );
+
+    existingIds.add(story.id);
+
+    const { data: latestData } = await supabase
       .from("news")
       .select(
-        "id,title,slug,image_url,category,created_at,view_count"
+        "id,title,slug,image_url,category,created_at"
       )
       .eq("Published", true)
       .not("image_url", "is", null)
       .neq("image_url", "")
-      .neq("id", story.id)
-      .order("view_count", {
-        ascending: false,
-        nullsFirst: false,
-      })
-      .limit(6);
+      .order("created_at", { ascending: false })
+      .limit(12);
 
+    for (const item of (latestData || []) as RelatedStory[]) {
+      if (existingIds.has(item.id)) continue;
+
+      relatedStories.push(item);
+      existingIds.add(item.id);
+
+      if (relatedStories.length >= 6) break;
+    }
+  }
+
+  const commentStatus =
+    query.comment === "success"
+      ? "success"
+      : query.comment === "error"
+        ? "error"
+        : null;
+
+  /*
+   * NewsArticle structured data.
+   */
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "NewsArticle",
     headline: title,
-    description,
-    image: image ? [image] : undefined,
-    datePublished: publishedAt,
-    dateModified: publishedAt,
-    url: articleUrl,
+    description: getDescription(content),
+    datePublished: story.created_at,
+    dateModified: story.created_at,
     mainEntityOfPage: {
       "@type": "WebPage",
       "@id": articleUrl,
@@ -487,1251 +461,1142 @@ export default async function NewsArticlePage({
       "@type": "Organization",
       name: "JNMulee News",
       url: SITE_URL,
-      logo: {
-        "@type": "ImageObject",
-        url: `${SITE_URL}/icon.png`,
-      },
     },
-    author: {
-      "@type": "Organization",
-      name: "JNMulee News",
-      url: SITE_URL,
-    },
+    image: story.image_url
+      ? [story.image_url]
+      : undefined,
     articleSection: category,
     wordCount,
-    inLanguage: "en-US",
+    isAccessibleForFree: true,
+    ...(story.source_name
+      ? {
+          isBasedOn: {
+            "@type": "NewsArticle",
+            publisher: {
+              "@type": "Organization",
+              name: story.source_name,
+            },
+            url: story.canonical_url || undefined,
+          },
+        }
+      : {}),
   };
 
-  const breadcrumbData = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      {
-        "@type": "ListItem",
-        position: 1,
-        name: "Home",
-        item: SITE_URL,
-      },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: category,
-        item: `${SITE_URL}/category/${category
-          .toLowerCase()
-          .replace(/\s+/g, "-")}`,
-      },
-      {
-        "@type": "ListItem",
-        position: 3,
-        name: title,
-        item: articleUrl,
-      },
-    ],
-  };
+  async function postComment(formData: FormData) {
+    "use server";
+
+    const name = String(formData.get("name") || "").trim();
+    const comment = String(
+      formData.get("comment") || ""
+    ).trim();
+
+    if (!name || name.length > 80) {
+      redirect(`/news/${slug}?comment=error`);
+    }
+
+    if (!comment || comment.length > 2000) {
+      redirect(`/news/${slug}?comment=error`);
+    }
+
+    const commentClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    const { data: article } = await commentClient
+      .from("news")
+      .select("id")
+      .eq("slug", slug)
+      .eq("Published", true)
+      .maybeSingle();
+
+    if (!article?.id) {
+      redirect(`/news/${slug}?comment=error`);
+    }
+
+    const { error: insertError } = await commentClient
+      .from("comments")
+      .insert({
+        news_id: article.id,
+        name,
+        comment,
+        approved: false,
+      });
+
+    /*
+     * The database trigger handles automatic approval of
+     * acceptable comments and blocks prohibited content.
+     */
+    if (insertError) {
+      redirect(`/news/${slug}?comment=error`);
+    }
+
+    redirect(`/news/${slug}?comment=success`);
+  }
 
   return (
-    <>
-      <ArticleViewTracker
-        newsId={story.id}
-      />
-
+    <main className="articlePage">
       <style>{`
         * {
           box-sizing: border-box;
         }
 
-        html {
-          scroll-behavior: smooth;
-        }
-
-        body {
-          margin: 0;
+        .articlePage {
+          min-height: 100vh;
           background: #f5f6f8;
           color: #111827;
-          font-family:
-            Arial,
-            Helvetica,
-            sans-serif;
         }
 
-        a {
-          text-decoration: none;
-          color: inherit;
+        .container {
+          width: min(1200px, calc(100% - 32px));
+          margin: 0 auto;
         }
 
-        .article-header {
+        .siteHeader {
           position: sticky;
           top: 0;
-          z-index: 100;
-          background: #d7193f;
-          color: #fff;
-          box-shadow: 0 3px 15px rgba(0,0,0,.16);
+          z-index: 50;
+          background: #c8102e;
+          color: white;
+          box-shadow: 0 2px 12px rgba(0,0,0,.12);
         }
 
-        .article-header-inner {
-          max-width: 1280px;
+        .headerTop {
           min-height: 68px;
-          margin: 0 auto;
-          padding: 0 22px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 25px;
+          gap: 20px;
         }
 
-        .article-logo {
-          color: #fff;
+        .logo {
+          color: white;
+          text-decoration: none;
           font-size: 25px;
           font-weight: 900;
-          letter-spacing: -.7px;
+          letter-spacing: -.8px;
           white-space: nowrap;
         }
 
-        .header-search {
-          display: flex;
-          align-items: center;
-          gap: 10px;
+        .headerSearch {
+          width: min(380px, 100%);
         }
 
-        .header-search a {
-          color: #fff;
-          border: 1px solid rgba(255,255,255,.35);
-          border-radius: 7px;
-          padding: 8px 13px;
-          font-size: 13px;
-          font-weight: 800;
+        .headerSearch input {
+          width: 100%;
+          height: 40px;
+          border: 0;
+          border-radius: 999px;
+          padding: 0 18px;
+          font-size: 14px;
+          outline: none;
         }
 
-        .article-nav {
-          background: #fff;
-          border-bottom: 1px solid #e5e7eb;
+        .categoryNav {
+          background: #a90d27;
+          border-top: 1px solid rgba(255,255,255,.12);
           overflow-x: auto;
+          scrollbar-width: none;
+        }
+
+        .categoryNav::-webkit-scrollbar {
+          display: none;
+        }
+
+        .categoryNavInner {
+          display: flex;
+          align-items: center;
+          min-height: 42px;
           white-space: nowrap;
         }
 
-        .article-nav-inner {
-          max-width: 1280px;
-          margin: 0 auto;
-          padding: 10px 22px;
-          display: flex;
-          gap: 21px;
-        }
-
-        .article-nav a {
-          color: #374151;
+        .categoryNav a {
+          color: rgba(255,255,255,.95);
+          text-decoration: none;
+          padding: 11px 14px;
           font-size: 13px;
-          font-weight: 800;
-        }
-
-        .article-nav a:hover {
-          color: #d7193f;
-        }
-
-        .breaking-bar {
-          background: #fff;
-          border-bottom: 1px solid #eee;
-        }
-
-        .breaking-inner {
-          max-width: 1280px;
-          margin: 0 auto;
-          min-height: 40px;
-          padding: 0 22px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .breaking-label {
-          background: #d7193f;
-          color: #fff;
-          border-radius: 3px;
-          padding: 4px 8px;
-          font-size: 10px;
-          font-weight: 900;
-          text-transform: uppercase;
-        }
-
-        .breaking-text {
-          color: #555e6b;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          font-size: 12px;
-          font-weight: 600;
-        }
-
-        .article-container {
-          max-width: 1280px;
-          margin: 0 auto;
-          padding: 30px 22px 70px;
-        }
-
-        .article-layout {
-          display: grid;
-          grid-template-columns: minmax(0, 850px) 310px;
-          gap: 32px;
-          align-items: start;
-          justify-content: center;
-        }
-
-        .article-main {
-          min-width: 0;
-        }
-
-        .article-card {
-          background: #fff;
-          border: 1px solid #e5e7eb;
-          border-radius: 12px;
-          padding: 28px;
-          box-shadow: 0 3px 14px rgba(0,0,0,.045);
-        }
-
-        .breadcrumb {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          gap: 7px;
-          margin-bottom: 15px;
-          color: #7b8490;
-          font-size: 12px;
           font-weight: 700;
         }
 
-        .breadcrumb a {
-          color: #d7193f;
+        .categoryNav a:hover {
+          background: rgba(255,255,255,.12);
         }
 
-        .article-category {
-          display: inline-flex;
+        .breakingBar {
+          background: #111827;
+          color: white;
+        }
+
+        .breakingInner {
+          min-height: 38px;
+          display: flex;
           align-items: center;
-          gap: 7px;
-          color: #d7193f;
-          font-size: 12px;
+          gap: 10px;
+          font-size: 13px;
+        }
+
+        .breakingLabel {
+          background: #c8102e;
+          padding: 5px 9px;
+          border-radius: 4px;
+          font-size: 10px;
           font-weight: 900;
-          text-transform: uppercase;
-          letter-spacing: .65px;
-          margin-bottom: 10px;
+          letter-spacing: .7px;
         }
 
-        .category-dot {
-          width: 7px;
-          height: 7px;
-          border-radius: 50%;
-          background: #d7193f;
+        .articleLayout {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 320px;
+          gap: 30px;
+          padding-top: 30px;
+          padding-bottom: 60px;
         }
 
-        .article-title {
-          margin: 0;
-          color: #111827;
-          font-size: clamp(34px, 5vw, 55px);
-          line-height: 1.06;
-          letter-spacing: -1.8px;
-          font-weight: 900;
+        .articleMain {
+          min-width: 0;
         }
 
-        .article-dek {
-          margin: 17px 0 0;
-          color: #5f6875;
-          font-size: 18px;
-          line-height: 1.6;
+        .articleCard {
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 16px;
+          overflow: hidden;
         }
 
-        .article-meta {
-          margin-top: 19px;
-          padding: 15px 0;
-          border-top: 1px solid #edf0f2;
-          border-bottom: 1px solid #edf0f2;
+        .breadcrumb {
+          padding: 20px 24px 0;
           display: flex;
           align-items: center;
           flex-wrap: wrap;
-          gap: 9px 15px;
-          color: #737c87;
-          font-size: 12px;
-          font-weight: 600;
-        }
-
-        .article-meta strong {
-          color: #252b33;
-        }
-
-        .article-hero {
-          width: 100%;
-          max-height: 590px;
-          margin: 23px 0 27px;
-          display: block;
-          object-fit: cover;
-          border-radius: 10px;
-        }
-
-        .article-caption {
-          margin: -18px 0 25px;
-          color: #858d97;
-          font-size: 11px;
-          line-height: 1.5;
-        }
-
-        .article-content {
-          color: #20242a;
-          font-size: 18px;
-          line-height: 1.85;
-          overflow-wrap: anywhere;
-        }
-
-        .article-content p {
-          margin: 0 0 22px;
-        }
-
-        .article-content h2 {
-          margin: 35px 0 14px;
-          color: #111827;
-          font-size: 29px;
-          line-height: 1.2;
-          font-weight: 900;
-        }
-
-        .article-content h3 {
-          margin: 30px 0 12px;
-          color: #111827;
-          font-size: 23px;
-          line-height: 1.25;
-          font-weight: 900;
-        }
-
-        .article-content img {
-          display: block;
-          width: 100%;
-          max-width: 100%;
-          height: auto;
-          margin: 25px auto;
-          border-radius: 9px;
-        }
-
-        .article-content a {
-          color: #c41438;
-          text-decoration: underline;
-          text-underline-offset: 2px;
-        }
-
-        .article-content ul,
-        .article-content ol {
-          margin: 0 0 23px;
-          padding-left: 25px;
-        }
-
-        .article-content li {
-          margin-bottom: 9px;
-        }
-
-        .article-content blockquote {
-          margin: 28px 0;
-          padding: 17px 20px;
-          border-left: 5px solid #d7193f;
-          background: #f8f9fa;
-          color: #4b5563;
-          font-size: 19px;
-          font-style: italic;
-        }
-
-        .article-content strong {
-          color: #111827;
-        }
-
-        .share-box {
-          margin-top: 30px;
-          padding-top: 22px;
-          border-top: 1px solid #e8eaed;
-        }
-
-        .share-title {
-          margin-bottom: 10px;
+          gap: 7px;
+          color: #6b7280;
           font-size: 13px;
-          font-weight: 900;
+        }
+
+        .breadcrumb a {
+          color: #c8102e;
+          text-decoration: none;
+          font-weight: 700;
+        }
+
+        .articleHeader {
+          padding: 18px 24px 24px;
+        }
+
+        .categoryBadge {
+          display: inline-flex;
+          align-items: center;
+          padding: 6px 10px;
+          border-radius: 5px;
+          background: #fef2f2;
+          color: #c8102e;
+          text-decoration: none;
           text-transform: uppercase;
           letter-spacing: .5px;
-          color: #555e69;
+          font-size: 11px;
+          font-weight: 900;
+          margin-bottom: 13px;
         }
 
-        .attribution {
-          margin-top: 23px;
-          padding: 15px 17px;
-          border-left: 4px solid #d7193f;
-          background: #f8f9fa;
-          color: #59616d;
-          font-size: 13px;
+        .articleTitle {
+          margin: 0;
+          font-size: clamp(32px, 5vw, 52px);
+          line-height: 1.04;
+          letter-spacing: -1.8px;
+          font-weight: 950;
+          color: #111827;
+        }
+
+        .articleDescription {
+          margin: 18px 0 0;
+          color: #596273;
+          font-size: 18px;
           line-height: 1.6;
         }
 
-        .ad-space {
-          margin: 25px 0;
+        .articleMeta {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 9px;
+          margin-top: 20px;
+          color: #6b7280;
+          font-size: 13px;
+        }
+
+        .articleMeta strong {
+          color: #374151;
+        }
+
+        .articleHero {
+          position: relative;
+          aspect-ratio: 16 / 9;
+          background: #e5e7eb;
+        }
+
+        .articleHero img {
+          object-fit: cover;
+        }
+
+        .attribution {
+          margin: 0;
+          padding: 12px 24px;
+          background: #f9fafb;
+          border-top: 1px solid #e5e7eb;
+          border-bottom: 1px solid #e5e7eb;
+          color: #596273;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        .attribution a {
+          color: #c8102e;
+          font-weight: 800;
+          text-decoration: none;
+        }
+
+        .articleBody {
+          padding: 28px 30px 36px;
+          font-family: Georgia, "Times New Roman", serif;
+          color: #20242b;
+          font-size: 19px;
+          line-height: 1.82;
+        }
+
+        .articleBody :global(p) {
+          margin: 0 0 1.35em;
+        }
+
+        .articleBody h2,
+        .articleBody h3 {
+          font-family: Arial, Helvetica, sans-serif;
+          line-height: 1.25;
+          color: #111827;
+          margin: 1.5em 0 .65em;
+        }
+
+        .articleBody h2 {
+          font-size: 30px;
+        }
+
+        .articleBody h3 {
+          font-size: 24px;
+        }
+
+        .articleBody strong {
+          color: #111827;
+        }
+
+        .articleBody a {
+          color: #c8102e;
+          text-decoration: underline;
+        }
+
+        .articleBody ul,
+        .articleBody ol {
+          margin: 0 0 1.35em;
+          padding-left: 1.5em;
+        }
+
+        .articleBody blockquote {
+          margin: 1.5em 0;
+          padding: 16px 20px;
+          border-left: 4px solid #c8102e;
+          background: #f9fafb;
+          color: #4b5563;
+          font-style: italic;
+        }
+
+        .articleBody img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          margin: 25px auto;
+          border-radius: 8px;
+        }
+
+        .shareArea {
+          padding: 20px 24px;
+          border-top: 1px solid #e5e7eb;
+        }
+
+        .shareTitle {
+          margin: 0 0 12px;
+          font-size: 14px;
+          font-weight: 900;
+          font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .sourceBox {
+          margin: 0 24px 24px;
+          padding: 16px;
+          border: 1px solid #e5e7eb;
+          border-radius: 10px;
+          background: #fafafa;
+          font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .sourceBoxTitle {
+          margin: 0 0 6px;
+          font-size: 12px;
+          color: #6b7280;
+          text-transform: uppercase;
+          letter-spacing: .6px;
+          font-weight: 900;
+        }
+
+        .sourceBoxText {
+          margin: 0;
+          font-size: 14px;
+          line-height: 1.5;
+          color: #374151;
+        }
+
+        .sourceBox a {
+          color: #c8102e;
+          font-weight: 800;
+          text-decoration: none;
         }
 
         .sidebar {
           min-width: 0;
         }
 
-        .sidebar-box {
-          background: #fff;
-          border: 1px solid #e5e7eb;
-          border-radius: 11px;
-          overflow: hidden;
-          box-shadow: 0 3px 13px rgba(0,0,0,.045);
+        .sidebarSticky {
+          position: sticky;
+          top: 130px;
         }
 
-        .sidebar-title {
-          padding: 16px 17px;
-          border-bottom: 1px solid #e8eaed;
-          display: flex;
-          align-items: center;
-          gap: 9px;
+        .sideBox {
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          overflow: hidden;
+          margin-bottom: 20px;
+        }
+
+        .sideTitle {
+          margin: 0;
+          padding: 15px 17px;
+          border-bottom: 1px solid #e5e7eb;
           font-size: 17px;
           font-weight: 900;
         }
 
-        .sidebar-title::before {
-          content: "";
-          width: 4px;
-          height: 20px;
-          background: #d7193f;
-          border-radius: 3px;
+        .sideStory {
+          display: grid;
+          grid-template-columns: 88px minmax(0, 1fr);
+          gap: 12px;
+          padding: 13px 15px;
+          border-bottom: 1px solid #eef0f3;
+          text-decoration: none;
+          color: inherit;
         }
 
-        .sidebar-story {
-          padding: 13px;
-          border-bottom: 1px solid #edf0f2;
-        }
-
-        .sidebar-story:last-child {
+        .sideStory:last-child {
           border-bottom: 0;
         }
 
-        .sidebar-story a {
-          display: grid;
-          grid-template-columns: 91px minmax(0, 1fr);
-          gap: 11px;
-        }
-
-        .sidebar-image {
-          width: 91px;
-          height: 70px;
+        .sideStoryImage {
+          position: relative;
+          width: 88px;
+          height: 62px;
           overflow: hidden;
           border-radius: 7px;
           background: #e5e7eb;
         }
 
-        .sidebar-image img {
-          width: 100%;
-          height: 100%;
-          display: block;
+        .sideStoryImage img {
           object-fit: cover;
         }
 
-        .sidebar-category {
-          color: #d7193f;
+        .sideStoryCategory {
+          display: block;
+          margin-bottom: 4px;
+          color: #c8102e;
           font-size: 10px;
-          font-weight: 900;
           text-transform: uppercase;
+          font-weight: 900;
         }
 
-        .sidebar-story h3 {
-          margin: 4px 0 0;
+        .sideStoryTitle {
+          margin: 0;
           font-size: 13px;
-          line-height: 1.34;
+          line-height: 1.35;
           font-weight: 800;
         }
 
-        .sidebar-time {
-          margin-top: 6px;
-          color: #9299a2;
-          font-size: 10px;
+        .commentsSection {
+          margin-top: 28px;
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 16px;
+          padding: 25px;
         }
 
-        .sidebar-ad {
-          margin-top: 20px;
-        }
-
-        .comments {
-          margin-top: 45px;
-        }
-
-        .comments-heading {
-          margin: 0 0 18px;
-          font-size: 27px;
+        .sectionTitle {
+          margin: 0 0 6px;
+          font-size: 24px;
           font-weight: 900;
         }
 
-        .comment-message {
-          border-radius: 9px;
-          padding: 13px 15px;
-          margin-bottom: 17px;
-          font-size: 13px;
-          font-weight: 700;
+        .sectionSubtitle {
+          margin: 0 0 20px;
+          color: #6b7280;
+          font-size: 14px;
+          line-height: 1.5;
         }
 
-        .comment-success {
-          background: #eaf8ee;
-          color: #176b2c;
-          border: 1px solid #b9e6c4;
-        }
-
-        .comment-error {
-          background: #fff1f1;
-          color: #a40000;
-          border: 1px solid #f0b7b7;
-        }
-
-        .comment-form {
-          padding: 20px;
-          background: #fafafa;
-          border: 1px solid #e5e7eb;
-          border-radius: 11px;
+        .commentForm {
+          display: grid;
+          gap: 12px;
           margin-bottom: 28px;
         }
 
-        .form-label {
-          display: block;
-          margin-bottom: 7px;
-          color: #242932;
-          font-size: 13px;
-          font-weight: 800;
-        }
-
-        .form-input,
-        .form-textarea {
+        .commentForm input,
+        .commentForm textarea {
           width: 100%;
-          border: 1px solid #d9dde2;
-          border-radius: 8px;
-          padding: 12px;
-          outline: none;
+          border: 1px solid #d1d5db;
+          border-radius: 9px;
+          padding: 12px 14px;
           font: inherit;
-          background: #fff;
-          color: #111827;
+          outline: none;
+          background: white;
         }
 
-        .form-input:focus,
-        .form-textarea:focus {
-          border-color: #d7193f;
-          box-shadow: 0 0 0 2px rgba(215,25,63,.08);
+        .commentForm input:focus,
+        .commentForm textarea:focus {
+          border-color: #c8102e;
+          box-shadow: 0 0 0 3px rgba(200,16,46,.08);
         }
 
-        .form-input {
-          margin-bottom: 16px;
-        }
-
-        .form-textarea {
-          min-height: 135px;
+        .commentForm textarea {
+          min-height: 130px;
           resize: vertical;
-          margin-bottom: 14px;
         }
 
-        .comment-submit {
+        .commentButton {
+          justify-self: start;
           border: 0;
           border-radius: 8px;
-          background: #d7193f;
-          color: #fff;
-          padding: 12px 20px;
-          font-size: 13px;
+          background: #c8102e;
+          color: white;
+          padding: 11px 18px;
+          font-size: 14px;
           font-weight: 900;
           cursor: pointer;
         }
 
-        .comment-note {
-          margin: 9px 0 0;
-          color: #858c95;
-          font-size: 11px;
+        .commentButton:hover {
+          background: #a90d27;
+        }
+
+        .commentStatus {
+          padding: 12px 14px;
+          border-radius: 8px;
+          margin-bottom: 15px;
+          font-size: 14px;
           line-height: 1.5;
         }
 
-        .comment-item {
+        .commentSuccess {
+          background: #ecfdf5;
+          color: #065f46;
+          border: 1px solid #a7f3d0;
+        }
+
+        .commentError {
+          background: #fef2f2;
+          color: #991b1b;
+          border: 1px solid #fecaca;
+        }
+
+        .commentItem {
           padding: 17px 0;
-          border-bottom: 1px solid #e5e7eb;
+          border-top: 1px solid #e5e7eb;
         }
 
-        .comment-name {
-          color: #171b20;
-          font-size: 14px;
+        .commentName {
+          margin: 0 0 4px;
           font-weight: 900;
+          font-size: 14px;
         }
 
-        .comment-date {
-          margin-top: 4px;
-          color: #8a929d;
+        .commentDate {
+          margin: 0 0 9px;
+          color: #9ca3af;
           font-size: 11px;
         }
 
-        .comment-text {
-          margin-top: 9px;
-          color: #454c55;
+        .commentText {
+          margin: 0;
+          color: #4b5563;
           font-size: 14px;
-          line-height: 1.65;
+          line-height: 1.6;
           white-space: pre-wrap;
+          overflow-wrap: anywhere;
         }
 
-        .related {
-          margin-top: 48px;
+        .noComments {
+          padding: 15px 0 5px;
+          color: #6b7280;
+          font-size: 14px;
         }
 
-        .section-heading {
-          margin: 0 0 17px;
-          display: flex;
-          align-items: center;
-          gap: 9px;
-          font-size: 25px;
-          font-weight: 900;
+        .relatedSection {
+          margin-top: 30px;
         }
 
-        .section-heading::before {
-          content: "";
-          width: 5px;
-          height: 25px;
-          background: #d7193f;
-          border-radius: 4px;
-        }
-
-        .related-grid {
+        .relatedGrid {
           display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 17px;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 18px;
+          margin-top: 16px;
         }
 
-        .related-card {
-          background: #fff;
+        .relatedCard {
+          background: white;
           border: 1px solid #e5e7eb;
-          border-radius: 9px;
+          border-radius: 12px;
           overflow: hidden;
-          transition:
-            transform .2s ease,
-            box-shadow .2s ease;
+          text-decoration: none;
+          color: inherit;
         }
 
-        .related-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 20px rgba(0,0,0,.08);
+        .relatedImage {
+          position: relative;
+          aspect-ratio: 16 / 9;
+          background: #e5e7eb;
         }
 
-        .related-card img {
-          width: 100%;
-          height: 145px;
-          display: block;
+        .relatedImage img {
           object-fit: cover;
         }
 
-        .related-body {
+        .relatedBody {
           padding: 13px;
         }
 
-        .related-category {
-          color: #d7193f;
+        .relatedCategory {
+          display: block;
+          color: #c8102e;
           font-size: 10px;
           font-weight: 900;
           text-transform: uppercase;
+          margin-bottom: 6px;
         }
 
-        .related-title {
-          margin-top: 6px;
+        .relatedTitle {
+          margin: 0;
           font-size: 15px;
           line-height: 1.35;
           font-weight: 850;
         }
 
-        .related-time {
-          margin-top: 8px;
-          color: #9097a0;
-          font-size: 10px;
-        }
-
-        .footer {
+        .siteFooter {
           background: #111827;
-          color: #fff;
-          padding: 38px 22px;
+          color: white;
+          padding: 40px 0;
         }
 
-        .footer-inner {
-          max-width: 1280px;
-          margin: 0 auto;
-        }
-
-        .footer-brand {
-          font-size: 23px;
-          font-weight: 900;
-          margin-bottom: 17px;
-        }
-
-        .footer-links {
+        .footerLinks {
           display: flex;
           flex-wrap: wrap;
-          gap: 20px;
+          gap: 18px;
           margin-bottom: 20px;
         }
 
-        .footer-links a {
-          color: #fff;
-          font-size: 13px;
-          font-weight: 700;
+        .footerLinks a {
+          color: #d1d5db;
+          text-decoration: none;
+          font-size: 14px;
         }
 
-        .footer-copy {
+        .footerLinks a:hover {
+          color: white;
+        }
+
+        .footerCopyright {
+          margin: 0;
           color: #9ca3af;
-          font-size: 12px;
+          font-size: 13px;
         }
 
-        @media (max-width: 1050px) {
-          .article-layout {
-            grid-template-columns: minmax(0, 1fr) 280px;
-            gap: 22px;
-          }
-        }
-
-        @media (max-width: 850px) {
-          .article-header-inner {
-            min-height: auto;
-            padding: 14px 16px;
+        @media (max-width: 950px) {
+          .articleLayout {
+            grid-template-columns: 1fr;
           }
 
-          .article-nav-inner {
-            padding: 10px 16px;
-          }
-
-          .article-container {
-            padding: 22px 15px 55px;
-          }
-
-          .article-layout {
-            display: block;
+          .sidebarSticky {
+            position: static;
           }
 
           .sidebar {
-            margin-top: 30px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
           }
 
-          .article-card {
-            padding: 21px;
+          .sidebar .sideBox {
+            margin-bottom: 0;
           }
         }
 
-        @media (max-width: 600px) {
-          .article-logo {
-            font-size: 22px;
+        @media (max-width: 700px) {
+          .container {
+            width: min(100% - 22px, 1200px);
           }
 
-          .header-search a {
-            padding: 7px 10px;
-            font-size: 12px;
+          .headerTop {
+            min-height: 58px;
           }
 
-          .article-title {
+          .logo {
+            font-size: 21px;
+          }
+
+          .headerSearch {
+            display: none;
+          }
+
+          .articleLayout {
+            padding-top: 16px;
+          }
+
+          .articleHeader {
+            padding: 15px 17px 20px;
+          }
+
+          .breadcrumb {
+            padding: 17px 17px 0;
+          }
+
+          .articleTitle {
             font-size: 34px;
             letter-spacing: -1px;
           }
 
-          .article-dek {
+          .articleDescription {
             font-size: 16px;
           }
 
-          .article-content {
-            font-size: 17px;
-            line-height: 1.78;
+          .articleHero {
+            aspect-ratio: 16 / 10;
           }
 
-          .article-content h2 {
-            font-size: 25px;
+          .attribution {
+            padding: 11px 17px;
           }
 
-          .article-content h3 {
-            font-size: 21px;
+          .articleBody {
+            padding: 23px 18px 28px;
+            font-size: 18px;
+            line-height: 1.75;
           }
 
-          .article-card {
-            border-radius: 9px;
-            padding: 17px;
+          .shareArea {
+            padding: 18px;
           }
 
-          .article-hero {
-            margin-top: 18px;
-            border-radius: 8px;
+          .sourceBox {
+            margin-left: 18px;
+            margin-right: 18px;
           }
 
-          .related-grid {
+          .sidebar {
+            display: block;
+          }
+
+          .sidebar .sideBox {
+            margin-bottom: 18px;
+          }
+
+          .relatedGrid {
             grid-template-columns: 1fr;
           }
 
-          .related-card img {
-            height: 180px;
-          }
-
-          .article-meta {
-            gap: 8px 11px;
-          }
-
-          .footer {
-            padding: 30px 15px;
+          .commentsSection {
+            padding: 19px;
           }
         }
       `}</style>
 
-      <header className="article-header">
-        <div className="article-header-inner">
-          <Link
-            href="/"
-            className="article-logo"
-          >
+      <header className="siteHeader">
+        <div className="container headerTop">
+          <Link href="/" className="logo">
             JNMulee News
           </Link>
 
-          <div className="header-search">
-            <Link href="/search">
-              Search
-            </Link>
-          </div>
+          <form
+            action="/search"
+            method="GET"
+            className="headerSearch"
+          >
+            <input
+              type="search"
+              name="q"
+              placeholder="Search JNMulee News..."
+              aria-label="Search JNMulee News"
+            />
+          </form>
         </div>
+
+        <nav className="categoryNav" aria-label="Main navigation">
+          <div className="container categoryNavInner">
+            <Link href="/">Home</Link>
+            <Link href="/category/news">News</Link>
+            <Link href="/category/sport">Sports</Link>
+            <Link href="/category/entertainment">
+              Entertainment
+            </Link>
+            <Link href="/category/gossip">Gossip</Link>
+            <Link href="/category/business">Business</Link>
+            <Link href="/category/technology">
+              Technology
+            </Link>
+            <Link href="/category/politics">Politics</Link>
+            <Link href="/category/crypto">Crypto</Link>
+          </div>
+        </nav>
       </header>
 
-      <nav className="article-nav">
-        <div className="article-nav-inner">
-          {NAV_ITEMS.map(([label, href]) => (
-            <Link
-              key={href}
-              href={href}
-            >
-              {label}
-            </Link>
-          ))}
-        </div>
-      </nav>
-
-      <div className="breaking-bar">
-        <div className="breaking-inner">
-          <span className="breaking-label">
-            Latest
-          </span>
-
-          <span className="breaking-text">
-            {title}
-          </span>
+      <div className="breakingBar">
+        <div className="container breakingInner">
+          <span className="breakingLabel">LATEST</span>
+          <span>JNMulee News — Latest stories and updates</span>
         </div>
       </div>
 
-      <main className="article-container">
-        <div className="article-layout">
-          <div className="article-main">
-            <article className="article-card">
-              <div className="breadcrumb">
-                <Link href="/">Home</Link>
-                <span>›</span>
-                <Link
-                  href={`/category/${category
-                    .toLowerCase()
-                    .replace(/\s+/g, "-")}`}
-                >
-                  {category}
-                </Link>
-                <span>›</span>
-                <span>Article</span>
-              </div>
-
-              <div className="article-category">
-                <span className="category-dot" />
+      <div className="container articleLayout">
+        <div className="articleMain">
+          <article className="articleCard">
+            <div className="breadcrumb">
+              <Link href="/">Home</Link>
+              <span>›</span>
+              <Link href={categoryHref(story.category)}>
                 {category}
-              </div>
+              </Link>
+              <span>›</span>
+              <span>Article</span>
+            </div>
 
-              <h1 className="article-title">
-                {title}
-              </h1>
+            <header className="articleHeader">
+              <Link
+                href={categoryHref(story.category)}
+                className="categoryBadge"
+              >
+                {category}
+              </Link>
 
-              <p className="article-dek">
-                {description}
+              <h1 className="articleTitle">{title}</h1>
+
+              <p className="articleDescription">
+                {getDescription(content)}
               </p>
 
-              <div className="article-meta">
+              <div className="articleMeta">
                 <span>
-                  <strong>JNMulee News</strong>
+                  Published <strong>{formatDate(story.created_at)}</strong>
                 </span>
 
                 <span>•</span>
 
-                <span>
-                  Published{" "}
-                  {formatDate(publishedAt)}
-                </span>
+                <span>{readingTime} min read</span>
 
                 <span>•</span>
 
-                <span>
-                  {timeAgo(publishedAt)}
-                </span>
+                <span>{wordCount.toLocaleString()} words</span>
 
-                {story.view_count !==
-                  null &&
-                  story.view_count !==
-                    undefined && (
+                {story.view_count !== null &&
+                  story.view_count !== undefined && (
                     <>
                       <span>•</span>
                       <span>
-                        {Number(
-                          story.view_count
-                        ).toLocaleString()}{" "}
-                        views
+                        {story.view_count.toLocaleString()} views
                       </span>
                     </>
                   )}
               </div>
+            </header>
 
-              {image && (
-                <>
-                  <img
-                    className="article-hero"
-                    src={imageProxy(image)}
-                    alt={title}
-                  />
+            {story.image_url && (
+              <div className="articleHero">
+                <Image
+                  src={story.image_url}
+                  alt={title}
+                  fill
+                  priority
+                  sizes="(max-width: 950px) 100vw, 820px"
+                />
+              </div>
+            )}
 
-                  <div className="article-caption">
-                    {category} news — JNMulee News
-                  </div>
-                </>
-              )}
-
-              <div
-                className="article-content"
-                dangerouslySetInnerHTML={{
-                  __html: articleHtml,
-                }}
-              />
-
-              {story.attribution_text && (
+            {story.content_type === "syndicated" &&
+              (story.source_name ||
+                story.attribution_text) && (
                 <div className="attribution">
-                  {story.attribution_text}
-                </div>
-              )}
-
-              <div className="share-box">
-                <div className="share-title">
-                  Share this story
-                </div>
-
-                <ShareButtons
-                  title={title}
-                  url={articleUrl}
-                />
-              </div>
-
-              <div className="ad-space">
-                <DirectAd
-                  placement="article"
-                />
-              </div>
-            </article>
-
-            {relatedStories &&
-              relatedStories.length > 0 && (
-                <section className="related">
-                  <h2 className="section-heading">
-                    Related Stories
-                  </h2>
-
-                  <div className="related-grid">
-                    {relatedStories.map(
-                      (related) => (
-                        <Link
-                          key={related.id}
-                          href={`/news/${related.slug}`}
-                          className="related-card"
-                        >
-                          {related.image_url && (
-                            <img
-                              src={imageProxy(
-                                related.image_url
-                              )}
-                              alt={
-                                related.title
-                              }
-                              loading="lazy"
-                            />
-                          )}
-
-                          <div className="related-body">
-                            <div className="related-category">
-                              {related.category ||
-                                "News"}
-                            </div>
-
-                            <div className="related-title">
-                              {related.title}
-                            </div>
-
-                            <div className="related-time">
-                              {timeAgo(
-                                related.created_at
-                              )}
-                            </div>
-                          </div>
-                        </Link>
-                      )
-                    )}
-                  </div>
-                </section>
-              )}
-
-            <section
-              id="comments"
-              className="comments"
-            >
-              <h2 className="comments-heading">
-                Comments
-              </h2>
-
-              {commentStatus ===
-                "success" && (
-                <div className="comment-message comment-success">
-                  Your comment was submitted
-                  successfully.
-                </div>
-              )}
-
-              {commentStatus ===
-                "error" && (
-                <div className="comment-message comment-error">
-                  We could not post your
-                  comment. Please check your
-                  information and try again.
-                </div>
-              )}
-
-              <form
-                action={postComment}
-                className="comment-form"
-              >
-                <input
-                  type="hidden"
-                  name="news_id"
-                  value={story.id}
-                />
-
-                <input
-                  type="hidden"
-                  name="slug"
-                  value={story.slug}
-                />
-
-                <label
-                  htmlFor="name"
-                  className="form-label"
-                >
-                  Name
-                </label>
-
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  required
-                  maxLength={80}
-                  autoComplete="name"
-                  placeholder="Your name"
-                  className="form-input"
-                />
-
-                <label
-                  htmlFor="comment"
-                  className="form-label"
-                >
-                  Comment
-                </label>
-
-                <textarea
-                  id="comment"
-                  name="comment"
-                  required
-                  maxLength={2000}
-                  placeholder="Write your comment..."
-                  className="form-textarea"
-                />
-
-                <button
-                  type="submit"
-                  className="comment-submit"
-                >
-                  Post Comment
-                </button>
-
-                <p className="comment-note">
-                  Comments containing prohibited
-                  or abusive content may be
-                  blocked automatically.
-                </p>
-              </form>
-
-              {comments &&
-              comments.length > 0 ? (
-                <div>
-                  {comments.map(
-                    (comment) => (
-                      <div
-                        key={comment.id}
-                        className="comment-item"
+                  {story.attribution_text ||
+                    `Originally published by ${story.source_name}`}
+                  {story.canonical_url && (
+                    <>
+                      {" "}
+                      <Link
+                        href={story.canonical_url}
+                        target="_blank"
+                        rel="noopener noreferrer nofollow"
                       >
-                        <div className="comment-name">
-                          {comment.name}
-                        </div>
-
-                        <div className="comment-date">
-                          {formatDateTime(
-                            comment.created_at
-                          )}
-                        </div>
-
-                        <div className="comment-text">
-                          {comment.comment}
-                        </div>
-                      </div>
-                    )
+                        View original
+                      </Link>
+                    </>
                   )}
                 </div>
-              ) : (
-                <p
-                  style={{
-                    color: "#7b838d",
-                    fontSize: "14px",
-                  }}
-                >
-                  No approved comments yet.
-                  Be the first to comment.
-                </p>
               )}
-            </section>
-          </div>
 
-          <aside className="sidebar">
-            <div className="sidebar-box">
-              <div className="sidebar-title">
-                Most Read
-              </div>
+            <div
+              className="articleBody"
+              dangerouslySetInnerHTML={{
+                __html: safeContent,
+              }}
+            />
 
-              {mostReadStories &&
-              mostReadStories.length > 0 ? (
-                mostReadStories.map(
-                  (mostRead) => (
-                    <div
-                      key={mostRead.id}
-                      className="sidebar-story"
-                    >
-                      <Link
-                        href={`/news/${mostRead.slug}`}
-                      >
-                        <div className="sidebar-image">
-                          {mostRead.image_url && (
-                            <img
-                              src={imageProxy(
-                                mostRead.image_url
-                              )}
-                              alt={
-                                mostRead.title
-                              }
-                              loading="lazy"
-                            />
-                          )}
-                        </div>
+            {story.content_type === "syndicated" &&
+              story.source_name && (
+                <div className="sourceBox">
+                  <p className="sourceBoxTitle">
+                    Source
+                  </p>
 
-                        <div>
-                          <div className="sidebar-category">
-                            {mostRead.category ||
-                              "News"}
-                          </div>
-
-                          <h3>
-                            {mostRead.title}
-                          </h3>
-
-                          <div className="sidebar-time">
-                            {timeAgo(
-                              mostRead.created_at
-                            )}
-                          </div>
-                        </div>
-                      </Link>
-                    </div>
-                  )
-                )
-              ) : (
-                <div
-                  style={{
-                    padding: "18px",
-                    color: "#777",
-                    fontSize: "13px",
-                  }}
-                >
-                  Most-read stories will
-                  appear here.
+                  <p className="sourceBoxText">
+                    This story was originally published by{" "}
+                    <strong>{story.source_name}</strong>.
+                    {story.canonical_url && (
+                      <>
+                        {" "}
+                        <Link
+                          href={story.canonical_url}
+                          target="_blank"
+                          rel="noopener noreferrer nofollow"
+                        >
+                          Read the original story
+                        </Link>
+                        .
+                      </>
+                    )}
+                  </p>
                 </div>
               )}
-            </div>
 
-            <div className="sidebar-ad">
-              <DirectAd
-                placement="article_sidebar"
+            <div className="shareArea">
+              <p className="shareTitle">
+                Share this story
+              </p>
+
+              <ShareButtons
+                title={title}
+                url={articleUrl}
               />
             </div>
+          </article>
 
-            <div className="sidebar-ad">
-              <DirectAd
-                placement="article_sidebar_2"
+          <DirectAd placement="article" />
+
+          <section className="commentsSection">
+            <h2 className="sectionTitle">
+              Comments
+            </h2>
+
+            <p className="sectionSubtitle">
+              Join the conversation. Comments containing
+              prohibited abusive or sexual content may be
+              blocked automatically.
+            </p>
+
+            {commentStatus === "success" && (
+              <div className="commentStatus commentSuccess">
+                Your comment was posted successfully.
+              </div>
+            )}
+
+            {commentStatus === "error" && (
+              <div className="commentStatus commentError">
+                Your comment could not be posted. Please check
+                your name and comment and try again.
+              </div>
+            )}
+
+            <form action={postComment} className="commentForm">
+              <input
+                type="text"
+                name="name"
+                placeholder="Your name"
+                maxLength={80}
+                required
               />
-            </div>
-          </aside>
+
+              <textarea
+                name="comment"
+                placeholder="Write your comment..."
+                maxLength={2000}
+                required
+              />
+
+              <button
+                type="submit"
+                className="commentButton"
+              >
+                Post Comment
+              </button>
+            </form>
+
+            {comments.length > 0 ? (
+              <div>
+                {comments.map((comment) => (
+                  <div
+                    className="commentItem"
+                    key={comment.id}
+                  >
+                    <p className="commentName">
+                      {comment.name || "Reader"}
+                    </p>
+
+                    <p className="commentDate">
+                      {formatDateTime(comment.created_at)}
+                    </p>
+
+                    <p className="commentText">
+                      {comment.comment || ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="noComments">
+                No comments yet. Be the first to join the
+                conversation.
+              </p>
+            )}
+          </section>
+
+          <DirectAd placement="article_middle" />
+
+          {relatedStories.length > 0 && (
+            <section className="relatedSection">
+              <h2 className="sectionTitle">
+                More Stories
+              </h2>
+
+              <div className="relatedGrid">
+                {relatedStories.slice(0, 6).map((related) => (
+                  <Link
+                    href={`/news/${related.slug}`}
+                    className="relatedCard"
+                    key={related.id}
+                  >
+                    {related.image_url && (
+                      <div className="relatedImage">
+                        <Image
+                          src={related.image_url}
+                          alt={related.title || "News story"}
+                          fill
+                          sizes="(max-width: 700px) 100vw, 33vw"
+                        />
+                      </div>
+                    )}
+
+                    <div className="relatedBody">
+                      <span className="relatedCategory">
+                        {formatCategory(related.category)}
+                      </span>
+
+                      <h3 className="relatedTitle">
+                        {related.title || "Read more"}
+                      </h3>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
 
-        <div className="ad-space">
-          <DirectAd
-            placement="article_middle"
-          />
-        </div>
-      </main>
+        <aside className="sidebar">
+          <div className="sidebarSticky">
+            <DirectAd placement="article" />
 
-      <footer className="footer">
-        <div className="footer-inner">
-          <div className="footer-brand">
-            JNMulee News
+            {relatedStories.length > 0 && (
+              <div className="sideBox">
+                <h2 className="sideTitle">
+                  Latest Stories
+                </h2>
+
+                {relatedStories
+                  .slice(0, 5)
+                  .map((related) => (
+                    <Link
+                      href={`/news/${related.slug}`}
+                      className="sideStory"
+                      key={`side-${related.id}`}
+                    >
+                      {related.image_url && (
+                        <div className="sideStoryImage">
+                          <Image
+                            src={related.image_url}
+                            alt={
+                              related.title ||
+                              "News story"
+                            }
+                            fill
+                            sizes="88px"
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <span className="sideStoryCategory">
+                          {formatCategory(
+                            related.category
+                          )}
+                        </span>
+
+                        <h3 className="sideStoryTitle">
+                          {related.title ||
+                            "Read story"}
+                        </h3>
+                      </div>
+                    </Link>
+                  ))}
+              </div>
+            )}
+
+            <DirectAd placement="article_middle" />
           </div>
+        </aside>
+      </div>
 
-          <div className="footer-links">
-            <Link href="/">Home</Link>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(structuredData),
+        }}
+      />
+
+      <ArticleViewTracker articleId={story.id} />
+
+      <footer className="siteFooter">
+        <div className="container">
+          <div className="footerLinks">
             <Link href="/about">About</Link>
-            <Link href="/contact">
-              Contact
-            </Link>
-            <Link href="/privacy">
-              Privacy Policy
-            </Link>
-            <Link href="/terms">
-              Terms
-            </Link>
+            <Link href="/contact">Contact</Link>
+            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/terms">Terms</Link>
           </div>
 
-          <div className="footer-copy">
-            © {new Date().getFullYear()} JNMulee
-            News. All rights reserved.
-          </div>
+          <p className="footerCopyright">
+            © {new Date().getFullYear()} JNMulee News. All rights
+            reserved.
+          </p>
         </div>
       </footer>
-
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html:
-            JSON.stringify(
-              structuredData
-            ),
-        }}
-      />
-
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html:
-            JSON.stringify(
-              breadcrumbData
-            ),
-        }}
-      />
-    </>
+    </main>
   );
 }
