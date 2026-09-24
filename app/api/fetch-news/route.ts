@@ -21,7 +21,6 @@ const AI_MODEL =
 
 const MAX_SOURCES_PER_BATCH = 5;
 const MAX_FEED_ITEMS_PER_SOURCE = 5;
-
 const ARTICLE_FETCH_TIMEOUT_MS = 15_000;
 
 const MIN_SOURCE_WORDS = 180;
@@ -336,7 +335,9 @@ function extractAttribute(
   return match?.[1] || "";
 }
 
-function extractImage(value: string): string | null {
+function extractImage(
+  value: string
+): string | null {
   if (!value) {
     return null;
   }
@@ -491,9 +492,7 @@ function parseFeed(xml: string): FeedItem[] {
 
     if (!imageUrl) {
       imageUrl =
-        extractImage(
-          description
-        );
+        extractImage(description);
     }
 
     if (!imageUrl) {
@@ -586,7 +585,7 @@ function classifyCategory(
   }
 
   if (
-    /\bpresident\b|\bgovernment\b|\belection\b|\belections\b|\bminister\b|\bparliament\b|\bcongress\b|\bsenate\b|\bpolitical\b|\bpolitics\b|\bparty\b|\bgovernor\b|\blegislation\b|\bpolicy\b/.test(
+    /\bpresident\b|\bgovernment\b|\belection\b|\bsenate\b|\bminister\b|\bpolitics\b|\bpolitical\b|\bcongress\b|\bparliament\b|\bparty\b|\bgovernor\b/.test(
       value
     )
   ) {
@@ -594,7 +593,7 @@ function classifyCategory(
   }
 
   if (
-    /\bworld\b|\binternational\b|\bukraine\b|\brussia\b|\bisrael\b|\bgaza\b|\bchina\b|\biran\b|\bamerica\b|\bunited states\b|\bunited kingdom\b|\beurope\b/.test(
+    /\bwar\b|\bconflict\b|\binternational\b|\bworld\b|\bunited states\b|\buk\b|\bunited kingdom\b|\beurope\b|\bmiddle east\b|\bafrica\b|\basia\b/.test(
       value
     )
   ) {
@@ -604,133 +603,25 @@ function classifyCategory(
   return "News";
 }
 
-function extractJsonLdArticleBody(
-  html: string
-): string {
-  const scripts =
-    html.match(
-      /<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi
-    ) || [];
+function isSafeUrl(
+  value: string
+): boolean {
+  try {
+    const url =
+      new URL(value);
 
-  for (const script of scripts) {
-    const raw =
-      script
-        .replace(
-          /<script[^>]*>/i,
-          ""
-        )
-        .replace(
-          /<\/script>$/i,
-          ""
-        )
-        .trim();
-
-    try {
-      const json =
-        JSON.parse(
-          decodeHtml(raw)
-        );
-
-      const objects = Array.isArray(json)
-        ? json
-        : json?.["@graph"]
-          ? json["@graph"]
-          : [json];
-
-      for (const obj of objects) {
-        if (
-          obj &&
-          typeof obj === "object" &&
-          typeof obj.articleBody ===
-            "string"
-        ) {
-          return cleanText(
-            obj.articleBody
-          );
-        }
-      }
-    } catch {
-      // Ignore malformed JSON-LD.
-    }
+    return (
+      url.protocol === "http:" ||
+      url.protocol === "https:"
+    );
+  } catch {
+    return false;
   }
-
-  return "";
 }
 
-function extractArticleContainers(
-  html: string
-): string[] {
-  const candidates: string[] = [];
-
-  const selectors = [
-    /<article\b[^>]*>([\s\S]*?)<\/article>/gi,
-    /<main\b[^>]*>([\s\S]*?)<\/main>/gi,
-    /<div[^>]+class=["'][^"']*(?:article-body|article-content|post-content|entry-content|story-body|story-content|single-post-content|content-body)[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi,
-    /<section[^>]+class=["'][^"']*(?:article-body|article-content|story-body|story-content)[^"']*["'][^>]*>([\s\S]*?)<\/section>/gi,
-  ];
-
-  for (const pattern of selectors) {
-    let match: RegExpExecArray | null;
-
-    while (
-      (match = pattern.exec(html))
-    ) {
-      if (match[1]) {
-        const cleaned =
-          cleanText(match[1]);
-
-        if (
-          wordCount(cleaned) >= 80
-        ) {
-          candidates.push(cleaned);
-        }
-      }
-    }
-  }
-
-  return candidates;
-}
-
-function scoreCandidate(
-  text: string
-): number {
-  const words = wordCount(text);
-
-  let score = words;
-
-  if (
-    /\baccording to\b/i.test(text)
-  ) {
-    score += 30;
-  }
-
-  if (
-    /\bsaid\b|\btold\b|\bannounced\b|\breported\b/i.test(
-      text
-    )
-  ) {
-    score += 30;
-  }
-
-  if (
-    text.split("\n\n").length >= 5
-  ) {
-    score += 20;
-  }
-
-  if (words > 500) {
-    score += 50;
-  }
-
-  return score;
-}
-
-async function fetchArticlePage(
+async function fetchExternalText(
   url: string
-): Promise<{
-  text: string;
-  imageUrl: string | null;
-}> {
+): Promise<string> {
   const controller =
     new AbortController();
 
@@ -748,131 +639,306 @@ async function fetchArticlePage(
           controller.signal,
         headers: {
           "User-Agent":
-            "Mozilla/5.0 (compatible; JNMuleeNewsBot/1.0)",
+            "JNMuleeNewsBot/1.0 (+https://jnmulee-news-jnnation.vercel.app)",
           Accept:
-            "text/html,application/xhtml+xml",
+            "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
         },
         cache: "no-store",
       });
 
     if (!response.ok) {
-      return {
-        text: "",
-        imageUrl: null,
-      };
+      return "";
     }
 
-    const html =
-      await response.text();
-
-    let imageUrl: string | null =
-      null;
-
-    const ogImage =
-      html.match(
-        /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i
-      );
-
-    if (ogImage?.[1]) {
-      imageUrl =
-        ogImage[1];
-    }
-
-    if (!imageUrl) {
-      const twitterImage =
-        html.match(
-          /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i
-        );
-
-      if (twitterImage?.[1]) {
-        imageUrl =
-          twitterImage[1];
-      }
-    }
-
-    if (!imageUrl) {
-      imageUrl =
-        extractImage(html);
-    }
-
-    const jsonLd =
-      extractJsonLdArticleBody(html);
-
-    const candidates =
-      extractArticleContainers(html);
-
-    if (jsonLd) {
-      candidates.push(jsonLd);
-    }
-
-    const bodyMatch =
-      html.match(
-        /<body\b[^>]*>([\s\S]*?)<\/body>/i
-      );
-
-    if (bodyMatch?.[1]) {
-      const fallback =
-        cleanText(bodyMatch[1]);
-
-      if (
-        wordCount(fallback) >=
-        180
-      ) {
-        candidates.push(
-          fallback
-        );
-      }
-    }
-
-    candidates.sort(
-      (a, b) =>
-        scoreCandidate(b) -
-        scoreCandidate(a)
-    );
-
-    return {
-      text:
-        candidates[0] || "",
-      imageUrl,
-    };
+    return await response.text();
   } catch {
-    return {
-      text: "",
-      imageUrl: null,
-    };
+    return "";
   } finally {
     clearTimeout(timeout);
   }
 }
 
-function buildSourceMaterial(
-  item: FeedItem,
-  articleText: string,
-  articleImage: string | null
-): Material {
-  const parts = [
-    item.title,
-    item.description,
-    item.content,
-    articleText,
-  ].filter(Boolean);
+async function fetchArticlePage(
+  url: string
+): Promise<{
+  text: string;
+  imageUrl: string | null;
+}> {
+  const html =
+    await fetchExternalText(url);
 
-  const text =
-    dedupeParagraphs(
-      parts.join("\n\n")
+  if (!html) {
+    return {
+      text: "",
+      imageUrl: null,
+    };
+  }
+
+  let imageUrl: string | null =
+    null;
+
+  const ogImage =
+    html.match(
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
+    )?.[1] || null;
+
+  if (ogImage) {
+    imageUrl = ogImage;
+  }
+
+  if (!imageUrl) {
+    const twitterImage =
+      html.match(
+        /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
+      )?.[1] || null;
+
+    if (twitterImage) {
+      imageUrl = twitterImage;
+    }
+  }
+
+  if (!imageUrl) {
+    const jsonLdMatches =
+      html.match(
+        /<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi
+      ) || [];
+
+    for (const block of jsonLdMatches) {
+      const jsonText =
+        block
+          .replace(
+            /<script[^>]*>/i,
+            ""
+          )
+          .replace(
+            /<\/script>$/i,
+            ""
+          )
+          .trim();
+
+      try {
+        const data =
+          JSON.parse(jsonText);
+
+        const candidates =
+          Array.isArray(data)
+            ? data
+            : [data];
+
+        for (const candidate of candidates) {
+          const image =
+            candidate?.image;
+
+          if (typeof image === "string") {
+            imageUrl = image;
+            break;
+          }
+
+          if (
+            image &&
+            typeof image === "object" &&
+            typeof image.url === "string"
+          ) {
+            imageUrl =
+              image.url;
+            break;
+          }
+
+          if (Array.isArray(image)) {
+            const first =
+              image.find(
+                (item) =>
+                  typeof item ===
+                  "string"
+              );
+
+            if (first) {
+              imageUrl = first;
+              break;
+            }
+          }
+        }
+
+        if (imageUrl) {
+          break;
+        }
+      } catch {
+        // Ignore malformed JSON-LD.
+      }
+    }
+  }
+
+  const articleCandidates: string[] = [];
+
+  const articleMatch =
+    html.match(
+      /<article\b[^>]*>([\s\S]*?)<\/article>/i
     );
 
+  if (articleMatch?.[1]) {
+    articleCandidates.push(
+      articleMatch[1]
+    );
+  }
+
+  const mainMatch =
+    html.match(
+      /<main\b[^>]*>([\s\S]*?)<\/main>/i
+    );
+
+  if (mainMatch?.[1]) {
+    articleCandidates.push(
+      mainMatch[1]
+    );
+  }
+
+  const commonContainers = [
+    /<div[^>]+class=["'][^"']*(?:article-body|article-content|post-content|entry-content|story-body|story-content)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+    /<div[^>]+id=["'][^"']*(?:article-body|article-content|post-content|entry-content|story-body|story-content)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+  ];
+
+  for (const pattern of commonContainers) {
+    const match =
+      html.match(pattern);
+
+    if (match?.[1]) {
+      articleCandidates.push(
+        match[1]
+      );
+    }
+  }
+
+  const cleanedCandidates =
+    articleCandidates
+      .map((candidate) =>
+        cleanText(candidate)
+      )
+      .filter(
+        (candidate) =>
+          wordCount(candidate) >=
+          MIN_SOURCE_WORDS
+      );
+
+  let bestText =
+    cleanedCandidates.sort(
+      (a, b) =>
+        wordCount(b) -
+        wordCount(a)
+    )[0] || "";
+
+  if (!bestText) {
+    const jsonLdMatches =
+      html.match(
+        /<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi
+      ) || [];
+
+    for (const block of jsonLdMatches) {
+      const jsonText =
+        block
+          .replace(
+            /<script[^>]*>/i,
+            ""
+          )
+          .replace(
+            /<\/script>$/i,
+            ""
+          )
+          .trim();
+
+      try {
+        const data =
+          JSON.parse(jsonText);
+
+        const candidates =
+          Array.isArray(data)
+            ? data
+            : [data];
+
+        for (const candidate of candidates) {
+          if (
+            typeof candidate?.articleBody ===
+            "string"
+          ) {
+            const candidateText =
+              cleanText(
+                candidate.articleBody
+              );
+
+            if (
+              wordCount(
+                candidateText
+              ) >
+              wordCount(bestText)
+            ) {
+              bestText =
+                candidateText;
+            }
+          }
+        }
+      } catch {
+        // Ignore malformed JSON-LD.
+      }
+    }
+  }
+
   return {
-    title: item.title,
-    url: item.link,
+    text: bestText,
+    imageUrl:
+      imageUrl &&
+      isSafeUrl(imageUrl)
+        ? imageUrl
+        : null,
+  };
+}
+
+function buildSourceMaterial(
+  item: FeedItem,
+  articlePageText: string,
+  articlePageImage: string | null
+): Material {
+  const textParts = [
+    articlePageText,
+    item.content,
+    item.description,
+  ].filter(Boolean);
+
+  let text =
+    dedupeParagraphs(
+      textParts.join("\n\n")
+    );
+
+  text =
+    removeSourceBoilerplate(text);
+
+  text =
+    removeAdvertising(text);
+
+  text =
+    removeAuthorBiography(text);
+
+  text =
+    dedupeParagraphs(text);
+
+  const imageUrl =
+    articlePageImage ||
+    item.imageUrl ||
+    extractImage(item.content) ||
+    extractImage(item.description);
+
+  return {
+    title:
+      normalizeWhitespace(item.title),
+    url:
+      item.link,
     publishedAt:
       item.pubDate,
     imageUrl:
-      articleImage ||
-      item.imageUrl ||
-      null,
+      imageUrl &&
+      isSafeUrl(imageUrl)
+        ? imageUrl
+        : null,
     text:
-      cleanText(text),
+      normalizeWhitespace(text),
   };
 }
 
@@ -882,7 +948,7 @@ function cleanFinalArticle(
   let text =
     value
       .replace(
-        /^```(?:html|markdown|text)?/i,
+        /^```(?:text|markdown)?/i,
         ""
       )
       .replace(
@@ -890,12 +956,6 @@ function cleanFinalArticle(
         ""
       )
       .trim();
-
-  text =
-    text.replace(
-      /^INSUFFICIENT_SOURCE_MATERIAL$/i,
-      "INSUFFICIENT_SOURCE_MATERIAL"
-    );
 
   text =
     removeSourceBoilerplate(text);
@@ -1197,65 +1257,68 @@ Return only the article.
   }
 }
 
-function isSafeUrl(
-  value: string
-): boolean {
-  try {
-    const url =
-      new URL(value);
-
-    return (
-      url.protocol === "https:" ||
-      url.protocol === "http:"
+async function insertArticle(
+  material: Material,
+  category: Category,
+  article: string,
+  source: SourceRow
+) {
+  const title =
+    normalizeWhitespace(
+      material.title
     );
-  } catch {
-    return false;
+
+  const slugBase =
+    slugify(title);
+
+  let slug =
+    slugBase ||
+    `jnmulee-${Date.now()}`;
+
+  const { data: existingSlug } =
+    await supabase
+      .from("news")
+      .select("id")
+      .eq("slug", slug)
+      .limit(1);
+
+  if (
+    existingSlug &&
+    existingSlug.length > 0
+  ) {
+    slug =
+      `${slugBase}-${Date.now()}`;
   }
-}
 
-async function fetchExternalText(
-  url: string
-): Promise<string> {
-  if (!isSafeUrl(url)) {
-    return "";
-  }
+  const content =
+    textToHtml(article);
 
-  try {
-    const controller =
-      new AbortController();
+  const payload = {
+    title,
+    slug,
+    content,
+    image_url:
+      material.imageUrl,
+    Published: true,
+    source_url:
+      material.url,
+    category,
+    content_type:
+      "syndicated",
+    source_name:
+      source.name || "Unknown Source",
+    canonical_url:
+      material.url,
+    attribution_text:
+      "Published by JNMulee News",
+  };
 
-    const timeout =
-      setTimeout(
-        () =>
-          controller.abort(),
-        ARTICLE_FETCH_TIMEOUT_MS
-      );
+  const { error } =
+    await supabase
+      .from("news")
+      .insert(payload);
 
-    try {
-      const response =
-        await fetch(url, {
-          signal:
-            controller.signal,
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (compatible; JNMuleeNewsBot/1.0)",
-            Accept:
-              "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html",
-          },
-          cache: "no-store",
-        });
-
-      if (!response.ok) {
-        return "";
-      }
-
-      return await response.text();
-    } finally {
-      clearTimeout(timeout);
-    }
-  } catch {
-    return "";
-  }
+  return error;
 }
 
 export async function GET(
@@ -1267,16 +1330,48 @@ export async function GET(
   const { searchParams } =
     new URL(request.url);
 
+  /*
+   * Manual testing:
+   *   /api/fetch-news?batch=0
+   *
+   * Vercel cron:
+   * The cron schedule is read from the
+   * x-vercel-cron-schedule header.
+   */
   const batchParam =
     Number(
-      searchParams.get("batch") || "0"
+      searchParams.get("batch")
     );
+
+  const cronSchedule =
+    request.headers.get(
+      "x-vercel-cron-schedule"
+    );
+
+  const cronBatchMap:
+    Record<string, number> = {
+    "0 */6 * * *": 0,
+    "10 */6 * * *": 1,
+    "20 */6 * * *": 2,
+    "30 */6 * * *": 3,
+    "40 */6 * * *": 4,
+    "50 */6 * * *": 5,
+  };
+
+  const batchFromCron =
+    cronSchedule &&
+    Object.prototype.hasOwnProperty.call(
+      cronBatchMap,
+      cronSchedule
+    )
+      ? cronBatchMap[cronSchedule]
+      : undefined;
 
   const batch =
     Number.isFinite(batchParam) &&
     batchParam >= 0
       ? Math.floor(batchParam)
-      : 0;
+      : batchFromCron ?? 0;
 
   const stats = {
     sourcesProcessed: 0,
@@ -1518,122 +1613,49 @@ export async function GET(
             const score =
               qualityScore(article);
 
-            if (score < 55) {
+            if (score < 70) {
               stats.skippedPoorQuality++;
               stats.articlesSkipped++;
               continue;
             }
 
-            const html =
-              textToHtml(article);
-
-            if (
-              wordCount(html) <
-              MIN_FINAL_WORDS
-            ) {
-              stats.skippedPoorQuality++;
-              stats.articlesSkipped++;
-              continue;
-            }
-
-            const baseSlug =
-              slugify(
-                material.title
-              ) ||
-              `news-${Date.now()}`;
-
-            let slug =
-              baseSlug;
-
-            const {
-              data: slugMatch,
-            } = await supabase
-              .from("news")
-              .select("id")
-              .eq(
-                "slug",
-                slug
-              )
-              .limit(1);
-
-            if (
-              slugMatch &&
-              slugMatch.length > 0
-            ) {
-              slug =
-                `${baseSlug}-${Date.now()
-                  .toString()
-                  .slice(-6)}`;
-            }
-
-            const insertPayload = {
-              title:
-                material.title,
-              slug,
-              content: html,
-              image_url:
-                material.imageUrl,
-              Published: true,
-              source_url:
-                material.url,
-              category,
-              content_type:
-                "syndicated",
-              source_name:
-                source.name || null,
-              canonical_url:
-                material.url,
-              attribution_text:
-                "Published by JNMulee News",
-            };
-
-            const {
-              error: insertError,
-            } = await supabase
-              .from("news")
-              .insert(
-                insertPayload
+            const insertError =
+              await insertArticle(
+                material,
+                category,
+                article,
+                source
               );
 
             if (insertError) {
-              if (
-                /duplicate|unique/i.test(
-                  insertError.message
-                )
-              ) {
-                stats.skippedDuplicate++;
-              } else {
-                errors.push(
-                  `${source.name || source.id}: ${material.title}: ${insertError.message}`
-                );
-              }
+              errors.push(
+                `${source.name || source.id}: insert failed: ${insertError.message}`
+              );
 
               stats.articlesSkipped++;
               continue;
             }
 
             stats.articlesPublished++;
-          } catch (itemError) {
-            const message =
-              itemError instanceof Error
-                ? itemError.message
-                : String(itemError);
+          } catch (error) {
+            stats.articlesSkipped++;
 
             errors.push(
-              `${source.name || source.id}: ${item.title}: ${message}`
+              `${source.name || source.id}: article processing failed: ${
+                error instanceof Error
+                  ? error.message
+                  : String(error)
+              }`
             );
-
-            stats.articlesSkipped++;
           }
         }
-      } catch (sourceError) {
-        const message =
-          sourceError instanceof Error
-            ? sourceError.message
-            : String(sourceError);
-
+      } catch (error) {
         errors.push(
-          `${source.name || source.id}: ${message}`
+          `${source.name || source.id}: source processing failed: ${
+            error instanceof Error
+              ? error.message
+              : String(error)
+          }`
         );
       }
     }
@@ -1653,8 +1675,7 @@ export async function GET(
         durationMs:
           Date.now() -
           startedAt,
-        errors:
-          errors.slice(0, 20),
+        errors,
       },
       {
         status: 200,
@@ -1665,19 +1686,19 @@ export async function GET(
       }
     );
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : String(error);
-
     return NextResponse.json(
       {
         success: false,
-        error: message,
+        message:
+          error instanceof Error
+            ? error.message
+            : String(error),
         batch,
+        ...stats,
         durationMs:
           Date.now() -
           startedAt,
+        errors,
       },
       {
         status: 500,
