@@ -59,6 +59,96 @@ function decodeHtml(value: string) {
     );
 }
 
+/* -------------------------------------------------------------------------- */
+/* Remove source / attribution text                                           */
+/* -------------------------------------------------------------------------- */
+
+function removeSourceAttributionText(value: string) {
+  if (!value) {
+    return "";
+  }
+
+  let text = value;
+
+  /*
+   * Remove common standalone attribution lines.
+   */
+  text = text.replace(
+    /^\s*(source|sources)\s*:\s*.*$/gim,
+    ""
+  );
+
+  text = text.replace(
+    /^\s*(original source|originally published by|originally published on)\s*:\s*.*$/gim,
+    ""
+  );
+
+  text = text.replace(
+    /^\s*(read more|read the full story|continue reading|continue reading at|read full story)\s*:?\s*.*$/gim,
+    ""
+  );
+
+  text = text.replace(
+    /^\s*(via|courtesy of|credit|image credit|photo credit)\s*:\s*.*$/gim,
+    ""
+  );
+
+  text = text.replace(
+    /^\s*(article source|story source|news source)\s*:\s*.*$/gim,
+    ""
+  );
+
+  /*
+   * Remove common website attribution sentences.
+   */
+  text = text.replace(
+    /\bthis (story|article|report|reporting) (was )?(originally )?(published|reported|posted) (by|on)\s+[^.!?\n]+[.!?]?/gi,
+    ""
+  );
+
+  text = text.replace(
+    /\boriginally published (by|on)\s+[^.!?\n]+[.!?]?/gi,
+    ""
+  );
+
+  text = text.replace(
+    /\b(read|continue reading|read more|read the full story)\s+(more|on|at)\s+[^.!?\n]+[.!?]?/gi,
+    ""
+  );
+
+  text = text.replace(
+    /\bfor more (information|details|news),?\s+(visit|see|read)\s+[^.!?\n]+[.!?]?/gi,
+    ""
+  );
+
+  /*
+   * Remove URLs.
+   */
+  text = text.replace(
+    /https?:\/\/[^\s<>"')]+/gi,
+    ""
+  );
+
+  text = text.replace(
+    /\bwww\.[^\s<>"')]+/gi,
+    ""
+  );
+
+  /*
+   * Remove common feed/footer attribution fragments.
+   */
+  text = text.replace(
+    /\b(subscribe to|follow us on|follow us|visit our website|visit us at|more from)\s+[^.!?\n]+[.!?]?/gi,
+    ""
+  );
+
+  return normalizeWhitespace(text);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Clean text                                                                 */
+/* -------------------------------------------------------------------------- */
+
 function cleanText(
   value: string | null | undefined
 ) {
@@ -66,7 +156,7 @@ function cleanText(
     return "";
   }
 
-  return decodeHtml(value)
+  let text = decodeHtml(value)
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
@@ -96,6 +186,10 @@ function cleanText(
     .replace(/\n[ \t]+/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+
+  text = removeSourceAttributionText(text);
+
+  return text;
 }
 
 function normalizeWhitespace(value: string) {
@@ -175,15 +269,10 @@ function xmlAttribute(
   return match?.[1]?.trim() || null;
 }
 
-/*
- * Handles both common RSS:
- *
- * <link>https://example.com/story</link>
- *
- * and Atom:
- *
- * <link href="https://example.com/story" />
- */
+/* -------------------------------------------------------------------------- */
+/* Article link                                                                */
+/* -------------------------------------------------------------------------- */
+
 function extractItemLink(rawItem: string) {
   const normalLink =
     xmlValue(rawItem, "link");
@@ -270,7 +359,10 @@ function extractImage(item: string) {
 
     item.match(
       /<img\b[^>]*\bsrcset=["']([^"']+)["']/i
-    )?.[1]?.split(",")[0]?.trim()?.split(" ")[0],
+    )?.[1]
+      ?.split(",")[0]
+      ?.trim()
+      ?.split(" ")[0],
   ];
 
   for (const image of images) {
@@ -288,7 +380,7 @@ function extractImage(item: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Category                                                                  */
+/* Category                                                                   */
 /* -------------------------------------------------------------------------- */
 
 function extractSourceCategory(
@@ -522,6 +614,10 @@ async function parseFeed(
   return items;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Feed content                                                                */
+/* -------------------------------------------------------------------------- */
+
 function extractFeedContent(
   rawItem: string
 ) {
@@ -545,7 +641,8 @@ function extractFeedContent(
   ];
 
   for (const value of possibleContent) {
-    const cleaned = cleanText(value);
+    const cleaned =
+      cleanText(value);
 
     if (cleaned) {
       return cleaned;
@@ -556,15 +653,9 @@ function extractFeedContent(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Article-page URL safety                                                     */
+/* URL safety                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/*
- * The importer follows the article URL supplied by the feed.
- *
- * We deliberately reject localhost and common private-network addresses.
- * This prevents the importer from being used to request internal services.
- */
 function isSafeExternalUrl(
   value: string
 ) {
@@ -614,7 +705,7 @@ function isSafeExternalUrl(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Full article-page extraction                                               */
+/* Remove unwanted HTML                                                       */
 /* -------------------------------------------------------------------------- */
 
 function removeUnwantedHtml(
@@ -667,6 +758,10 @@ function removeUnwantedHtml(
     );
 }
 
+/* -------------------------------------------------------------------------- */
+/* JSON-LD article body                                                        */
+/* -------------------------------------------------------------------------- */
+
 function extractJsonLdArticleBody(
   html: string
 ) {
@@ -696,9 +791,7 @@ function extractJsonLdArticleBody(
 
     try {
       const parsed =
-        JSON.parse(
-          raw
-        );
+        JSON.parse(raw);
 
       const visit = (
         value: unknown
@@ -713,6 +806,7 @@ function extractJsonLdArticleBody(
           for (const item of value) {
             visit(item);
           }
+
           return;
         }
 
@@ -765,11 +859,7 @@ function extractJsonLdArticleBody(
 
       visit(parsed);
     } catch {
-      /*
-       * Some websites put invalid JSON-LD
-       * on the page. Ignore it and continue
-       * with normal HTML extraction.
-       */
+      continue;
     }
   }
 
@@ -781,15 +871,13 @@ function extractJsonLdArticleBody(
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* Article container extraction                                                */
+/* -------------------------------------------------------------------------- */
+
 function extractArticleContainer(
   html: string
 ) {
-  /*
-   * Prefer actual article containers.
-   * This keeps navigation, comments,
-   * menus and unrelated page content
-   * away from OpenAI.
-   */
   const selectors = [
     /<article\b[^>]*>([\s\S]*?)<\/article>/i,
 
@@ -818,10 +906,6 @@ function extractArticleContainer(
     }
   }
 
-  /*
-   * If no obvious article container
-   * exists, use the body as a fallback.
-   */
   const body =
     html.match(
       /<body\b[^>]*>([\s\S]*?)<\/body>/i
@@ -840,6 +924,10 @@ function extractArticleContainer(
 
   return "";
 }
+
+/* -------------------------------------------------------------------------- */
+/* Fetch article page                                                          */
+/* -------------------------------------------------------------------------- */
 
 async function fetchArticlePage(
   articleUrl: string
@@ -890,13 +978,6 @@ async function fetchArticlePage(
         }
       );
 
-    /*
-     * Do not automatically follow redirects.
-     *
-     * This prevents a feed URL from silently
-     * redirecting the importer to an internal
-     * address.
-     */
     if (
       response.status >= 300 &&
       response.status < 400
@@ -944,13 +1025,6 @@ async function fetchArticlePage(
       };
     }
 
-    /*
-     * First try Schema.org JSON-LD.
-     *
-     * Many professional news sites expose
-     * their complete article text here even
-     * when the normal HTML structure is complex.
-     */
     const jsonLdContent =
       extractJsonLdArticleBody(
         html
@@ -959,10 +1033,6 @@ async function fetchArticlePage(
     let articleContent =
       jsonLdContent;
 
-    /*
-     * If JSON-LD was not useful, inspect
-     * the actual article/main content.
-     */
     if (
       wordCount(articleContent) <
       80
@@ -972,6 +1042,15 @@ async function fetchArticlePage(
           html
         );
     }
+
+    /*
+     * Extra cleanup after extracting
+     * the article page.
+     */
+    articleContent =
+      removeSourceAttributionText(
+        articleContent
+      );
 
     articleContent =
       normalizeWhitespace(
@@ -988,10 +1067,6 @@ async function fetchArticlePage(
       };
     }
 
-    /*
-     * Never send an unlimited webpage
-     * into the OpenAI request.
-     */
     if (
       articleContent.length >
       MAX_ARTICLE_PAGE_CHARS
@@ -1024,7 +1099,7 @@ async function fetchArticlePage(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Combine RSS + article page material                                        */
+/* Combine source material                                                     */
 /* -------------------------------------------------------------------------- */
 
 function buildSourceMaterial({
@@ -1090,6 +1165,10 @@ function sanitizeArticleHtml(
       ""
     )
     .replace(
+      /```json/gi,
+      ""
+    )
+    .replace(
       /```/g,
       ""
     )
@@ -1117,6 +1196,18 @@ function sanitizeArticleHtml(
       ""
     );
 
+  /*
+   * Remove all links completely.
+   */
+  html = html.replace(
+    /<a\b[^>]*>([\s\S]*?)<\/a>/gi,
+    "$1"
+  );
+
+  /*
+   * Keep only the HTML tags used by
+   * the article renderer.
+   */
   html = html.replace(
     /<(?!\/?(?:p|h2|h3|strong|em|ul|ol|li|blockquote|br)\b)[^>]*>/gi,
     ""
@@ -1132,7 +1223,80 @@ function sanitizeArticleHtml(
     "<$1>"
   );
 
+  /*
+   * Clean visible source-attribution text
+   * that may have survived inside HTML.
+   */
+  html = removeSourceAttributionHtml(
+    html
+  );
+
   return html.trim();
+}
+
+/* -------------------------------------------------------------------------- */
+/* Remove attribution from generated HTML                                     */
+/* -------------------------------------------------------------------------- */
+
+function removeSourceAttributionHtml(
+  html: string
+) {
+  let result = html;
+
+  /*
+   * Remove complete paragraphs that are
+   * obviously attribution/navigation.
+   */
+  result = result.replace(
+    /<p>\s*(?:source|sources|original source|article source|story source|news source|via|courtesy of|credit|image credit|photo credit)\s*:?\s*[\s\S]*?<\/p>/gi,
+    ""
+  );
+
+  result = result.replace(
+    /<p>\s*(?:read more|continue reading|read the full story|read full story|originally published by|originally published on)[\s\S]*?<\/p>/gi,
+    ""
+  );
+
+  /*
+   * Remove standalone attribution lines.
+   */
+  result = result.replace(
+    /\b(?:Source|Sources|Original Source|Article Source|Story Source|News Source)\s*:\s*[^<\n]+/gi,
+    ""
+  );
+
+  result = result.replace(
+    /\b(?:Originally published by|Originally published on)\s+[^<\n]+/gi,
+    ""
+  );
+
+  result = result.replace(
+    /\b(?:Read more|Continue reading|Read the full story|Read full story)\s*(?:at|on)?\s*[^<\n]*/gi,
+    ""
+  );
+
+  /*
+   * Remove URLs that might have survived.
+   */
+  result = result.replace(
+    /https?:\/\/[^\s<>"')]+/gi,
+    ""
+  );
+
+  result = result.replace(
+    /\bwww\.[^\s<>"')]+/gi,
+    ""
+  );
+
+  /*
+   * Remove empty paragraphs.
+   */
+  result = result.replace(
+    /<p>\s*<\/p>/gi,
+    ""
+  );
+
+  return result.trim();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1153,7 +1317,9 @@ function formatReadableArticleHtml(
     /<p>([\s\S]*?)<\/p>/gi,
     (_, paragraph: string) => {
       const text =
-        cleanText(paragraph);
+        removeSourceAttributionText(
+          cleanText(paragraph)
+        );
 
       if (!text) {
         return "";
@@ -1230,7 +1396,12 @@ function formatReadableArticleHtml(
 function textToHtml(
   value: string
 ) {
-  const paragraphs = value
+  const cleaned =
+    removeSourceAttributionText(
+      value
+    );
+
+  const paragraphs = cleaned
     .split(/\n\s*\n/)
     .map(
       (part) =>
@@ -1240,7 +1411,7 @@ function textToHtml(
 
   if (!paragraphs.length) {
     return `<p>${escapeHtml(
-      value
+      cleaned
     )}</p>`;
   }
 
@@ -1300,8 +1471,37 @@ The source material may contain:
 2. A short RSS description.
 3. Content from the linked original article page.
 
+IMPORTANT SOURCE-CLEANING RULE:
+The source material may contain the name of the original website, source labels, attribution lines, promotional text, links, "Read more" text, "Continue reading" text, newsletter promotions, social-media promotions, or instructions to visit another website.
+
+DO NOT copy those source-attribution or promotional elements into the final article.
+
+Do not mention the original publishing website merely as attribution.
+
+Do not include:
+- "Source:"
+- "Sources:"
+- "Original source:"
+- "Article source:"
+- "Story source:"
+- "News source:"
+- "Originally published by..."
+- "Originally published on..."
+- "Read more..."
+- "Continue reading..."
+- "Read the full story..."
+- "Via..."
+- "Courtesy of..."
+- "Visit..."
+- "Follow us..."
+- Website URLs
+- Links to the original article
+- The original website name as a promotional or attribution statement
+
 IMPORTANT:
-The linked article page is being supplied as additional source material. Use it to recover details that may not appear in the RSS feed.
+A person's name, company name, organization name, government agency, sports team, product, location, or other factual entity should NOT be removed merely because it is also associated with the original source.
+
+For example, if the source reports that "Microsoft announced..." the word Microsoft is factual information and should remain.
 
 FACTUAL RULES:
 - Use ONLY information contained in the supplied source material.
@@ -1317,7 +1517,7 @@ FACTUAL RULES:
 - Do not invent background information.
 - Do not assume facts that are not explicitly supported.
 - Preserve names, numbers, dates and quotations accurately.
-- If two pieces of supplied material appear to conflict, do not create a new fact. Use the information carefully and preserve the uncertainty.
+- If two pieces of supplied material appear to conflict, do not create a new fact.
 - Never manufacture information merely to reach the desired word count.
 
 ARTICLE LENGTH:
@@ -1362,12 +1562,14 @@ If the source material contains a quotation:
 - Do not invent quotations.
 - Do not attribute a statement to a person unless the supplied material does so.
 
-SOURCE ATTRIBUTION:
-Do not mention RSS.
-Do not mention artificial intelligence.
-Do not mention that the story was reconstructed or rewritten.
-Do not mention these instructions.
-Do not include the original source URL in the visible article.
+FINAL ARTICLE:
+The article should read as a standalone JNMulee News article.
+
+Do not tell readers where the source material came from.
+
+Do not include source attribution unless it is itself an important factual part of the news event.
+
+Do not include the original source URL.
 
 HTML:
 Return ONLY valid JSON.
@@ -1476,6 +1678,15 @@ ${content}
         articleHtml
       );
 
+    /*
+     * Second cleanup pass after
+     * OpenAI generation.
+     */
+    articleHtml =
+      removeSourceAttributionHtml(
+        articleHtml
+      );
+
     const articleText =
       cleanText(
         articleHtml
@@ -1484,15 +1695,6 @@ ${content}
     const count =
       wordCount(articleText);
 
-    /*
-     * IMPORTANT:
-     * Do NOT reject a factual article
-     * simply because it is under 850 words.
-     *
-     * The source may genuinely be short.
-     *
-     * We only reject extremely tiny output.
-     */
     if (count < 120) {
       console.error(
         `OpenAI article was too short: ${count} words`
@@ -1556,10 +1758,6 @@ export async function GET() {
             source.feed_url
           );
 
-        /*
-         * Process up to 20 stories
-         * from each active source.
-         */
         for (const rawItem of items.slice(
           0,
           MAX_FEED_ITEMS_PER_SOURCE
@@ -1587,10 +1785,6 @@ export async function GET() {
             continue;
           }
 
-          /*
-           * Every published article MUST
-           * have an image.
-           */
           const imageUrl =
             extractImage(
               rawItem
@@ -1607,9 +1801,8 @@ export async function GET() {
           }
 
           /*
-           * Check duplicate source URL
-           * before doing expensive article
-           * page and OpenAI work.
+           * Check duplicate before doing
+           * expensive article/OpenAI work.
            */
           const {
             data: duplicate,
@@ -1637,12 +1830,10 @@ export async function GET() {
             continue;
           }
 
-          /*
-           * --------------------------------------------------------------
-           * STEP 1:
-           * Get everything useful from the RSS feed.
-           * --------------------------------------------------------------
-           */
+          /* -------------------------------------------------------------- */
+          /* RSS content                                                      */
+          /* -------------------------------------------------------------- */
+
           const rssContent =
             extractFeedContent(
               rawItem
@@ -1655,14 +1846,10 @@ export async function GET() {
             source.category ||
             null;
 
-          /*
-           * --------------------------------------------------------------
-           * STEP 2:
-           * Fetch the actual article page.
-           *
-           * This is the major improvement over the old importer.
-           * --------------------------------------------------------------
-           */
+          /* -------------------------------------------------------------- */
+          /* Full article page                                                */
+          /* -------------------------------------------------------------- */
+
           const articlePage =
             await fetchArticlePage(
               link
@@ -1677,12 +1864,10 @@ export async function GET() {
             articlePagesFailed++;
           }
 
-          /*
-           * --------------------------------------------------------------
-           * STEP 3:
-           * Combine RSS + full article page.
-           * --------------------------------------------------------------
-           */
+          /* -------------------------------------------------------------- */
+          /* Source material                                                  */
+          /* -------------------------------------------------------------- */
+
           const sourceMaterial =
             buildSourceMaterial({
               title,
@@ -1691,13 +1876,10 @@ export async function GET() {
                 articlePage.content,
             });
 
-          /*
-           * --------------------------------------------------------------
-           * STEP 4:
-           * Determine category from ALL available
-           * source information.
-           * --------------------------------------------------------------
-           */
+          /* -------------------------------------------------------------- */
+          /* Category                                                         */
+          /* -------------------------------------------------------------- */
+
           const category =
             classifyCategory(
               title,
@@ -1711,12 +1893,10 @@ export async function GET() {
           let finalContent =
             "";
 
-          /*
-           * --------------------------------------------------------------
-           * STEP 5:
-           * OpenAI reconstructs the complete article.
-           * --------------------------------------------------------------
-           */
+          /* -------------------------------------------------------------- */
+          /* OpenAI reconstruction                                            */
+          /* -------------------------------------------------------------- */
+
           const generatedArticle =
             await createLongOriginalArticle({
               title,
@@ -1742,12 +1922,6 @@ export async function GET() {
           } else if (
             rssContent
           ) {
-            /*
-             * OpenAI unavailable or failed.
-             *
-             * Use factual RSS material rather
-             * than inventing content.
-             */
             finalContent =
               formatReadableArticleHtml(
                 textToHtml(
@@ -1757,11 +1931,6 @@ export async function GET() {
           } else if (
             articlePage.content
           ) {
-            /*
-             * If RSS is empty but article page
-             * was successfully extracted, use
-             * the article page content.
-             */
             finalContent =
               formatReadableArticleHtml(
                 textToHtml(
@@ -1803,10 +1972,26 @@ export async function GET() {
           }
 
           /*
-           * --------------------------------------------------------------
-           * FINAL IMAGE SAFETY CHECK
-           * --------------------------------------------------------------
+           * Final cleanup immediately before
+           * saving to Supabase.
+           *
+           * This is the last protection against
+           * unwanted attribution text.
            */
+          finalContent =
+            removeSourceAttributionHtml(
+              finalContent
+            );
+
+          finalContent =
+            formatReadableArticleHtml(
+              finalContent
+            );
+
+          /* -------------------------------------------------------------- */
+          /* Final image check                                                */
+          /* -------------------------------------------------------------- */
+
           if (
             !imageUrl ||
             !/^https?:\/\//i.test(
@@ -1817,11 +2002,10 @@ export async function GET() {
             continue;
           }
 
-          /*
-           * --------------------------------------------------------------
-           * FINAL CONTENT SAFETY CHECK
-           * --------------------------------------------------------------
-           */
+          /* -------------------------------------------------------------- */
+          /* Final content check                                              */
+          /* -------------------------------------------------------------- */
+
           if (
             wordCount(
               finalContent
@@ -1836,11 +2020,10 @@ export async function GET() {
             continue;
           }
 
-          /*
-           * --------------------------------------------------------------
-           * INSERT INTO SUPABASE
-           * --------------------------------------------------------------
-           */
+          /* -------------------------------------------------------------- */
+          /* Insert                                                           */
+          /* -------------------------------------------------------------- */
+
           const {
             error: insertError,
           } = await supabase
@@ -1863,6 +2046,13 @@ export async function GET() {
               Published:
                 true,
 
+              /*
+               * Kept in database for
+               * duplicate detection.
+               *
+               * It is NOT included in
+               * the visible article content.
+               */
               source_url:
                 link,
 
@@ -1870,13 +2060,6 @@ export async function GET() {
             });
 
           if (insertError) {
-            /*
-             * PostgreSQL unique violation.
-             *
-             * This protects against two importer
-             * runs processing the same story at
-             * nearly the same time.
-             */
             if (
               insertError.code ===
               "23505"
@@ -1928,7 +2111,7 @@ export async function GET() {
       errors,
 
       message:
-        "JNMulee News RSS → article page → OpenAI reconstruction import completed.",
+        "JNMulee News RSS → article page → cleaned content → OpenAI reconstruction import completed.",
     });
   } catch (error) {
     return NextResponse.json(
