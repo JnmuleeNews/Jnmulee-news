@@ -1,4 +1,3 @@
-
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
@@ -9,6 +8,7 @@ import ArticleViewTracker from "@/components/ArticleViewTracker";
 
 type Props = {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ comment?: string }>;
 };
 
 const supabase = createClient(
@@ -77,11 +77,11 @@ async function postComment(formData: FormData) {
 
   const newsId = String(
     formData.get("news_id") || ""
-  );
+  ).trim();
 
   const slug = String(
     formData.get("slug") || ""
-  );
+  ).trim();
 
   const name = String(
     formData.get("name") || ""
@@ -91,34 +91,25 @@ async function postComment(formData: FormData) {
     formData.get("comment") || ""
   ).trim();
 
-  if (!newsId || !slug || !name || !comment) {
-    redirect(`/news/${slug}#comments`);
+  if (!slug) {
+    redirect("/");
   }
 
-  if (
-    name.length > 80 ||
-    comment.length > 2000
-  ) {
-    redirect(`/news/${slug}#comments`);
+  if (!newsId || !name || !comment) {
+    redirect(`/news/${slug}?comment=error#comments`);
   }
 
-  const serviceRoleKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!serviceRoleKey) {
-    console.error(
-      "SUPABASE_SERVICE_ROLE_KEY is missing."
-    );
-
-    redirect(`/news/${slug}#comments`);
+  if (name.length > 80 || comment.length > 2000) {
+    redirect(`/news/${slug}?comment=error#comments`);
   }
 
   const supabaseServer = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    serviceRoleKey
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const { data: article } =
+  // Make sure the article exists and is published.
+  const { data: article, error: articleError } =
     await supabaseServer
       .from("news")
       .select("id,slug")
@@ -127,27 +118,40 @@ async function postComment(formData: FormData) {
       .eq("Published", true)
       .single();
 
-  if (!article) {
-    redirect("/");
+  if (articleError || !article) {
+    console.error(
+      "Comment article validation error:",
+      articleError
+    );
+
+    redirect(`/news/${slug}?comment=error#comments`);
   }
 
-  const { error } = await supabaseServer
-    .from("comments")
-    .insert({
-      news_id: newsId,
-      name,
-      comment,
-      approved: false,
-    });
+  // Insert as unapproved.
+  // Your Supabase RLS policy allows public users
+  // to insert comments only when approved=false.
+  const { error: commentError } =
+    await supabaseServer
+      .from("comments")
+      .insert({
+        news_id: article.id,
+        name,
+        comment,
+        approved: false,
+      });
 
-  if (error) {
+  if (commentError) {
     console.error(
       "Comment insert error:",
-      error
+      commentError
     );
+
+    redirect(`/news/${slug}?comment=error#comments`);
   }
 
-  redirect(`/news/${slug}#comments`);
+  redirect(
+    `/news/${slug}?comment=success#comments`
+  );
 }
 
 export async function generateMetadata({
@@ -236,8 +240,11 @@ export async function generateMetadata({
 
 export default async function NewsArticlePage({
   params,
+  searchParams,
 }: Props) {
   const { slug } = await params;
+  const { comment: commentStatus } =
+    await searchParams;
 
   const { data: story, error } = await supabase
     .from("news")
@@ -619,6 +626,43 @@ export default async function NewsArticlePage({
             Comments
           </h2>
 
+          {commentStatus === "success" && (
+            <div
+              style={{
+                background: "#eaf8ee",
+                color: "#176b2c",
+                border:
+                  "1px solid #b9e6c4",
+                borderRadius: "10px",
+                padding: "14px 16px",
+                marginBottom: "18px",
+                fontWeight: 600,
+              }}
+            >
+              Comment submitted successfully.
+              It will appear after review.
+            </div>
+          )}
+
+          {commentStatus === "error" && (
+            <div
+              style={{
+                background: "#fff1f1",
+                color: "#a40000",
+                border:
+                  "1px solid #f0b7b7",
+                borderRadius: "10px",
+                padding: "14px 16px",
+                marginBottom: "18px",
+                fontWeight: 600,
+              }}
+            >
+              We could not post your comment.
+              Please check your name and comment
+              and try again.
+            </div>
+          )}
+
           <form
             action={postComment}
             style={{
@@ -838,6 +882,7 @@ export default async function NewsArticlePage({
             <strong>
               JNMulee News
             </strong>
+
             <div
               style={{
                 color: "#bbb",
