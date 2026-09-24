@@ -14,8 +14,6 @@ export default function ArticleViewTracker({
       return;
     }
 
-    sessionStorage.setItem(key, "1");
-
     fetch("/api/news/view", {
       method: "POST",
       headers: {
@@ -24,9 +22,15 @@ export default function ArticleViewTracker({
       body: JSON.stringify({
         newsId,
       }),
-    }).catch(() => {
-      sessionStorage.removeItem(key);
-    });
+    })
+      .then((response) => {
+        if (response.ok) {
+          sessionStorage.setItem(key, "1");
+        }
+      })
+      .catch((error) => {
+        console.error("View tracking error:", error);
+      });
   }, [newsId]);
 
   return null;
