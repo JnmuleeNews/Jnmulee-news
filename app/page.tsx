@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical:
       process.env.NEXT_PUBLIC_SITE_URL ||
-      "https://jnmulee-news.vercel.app",
+      "https://jnmulee-news-jnnation.vercel.app",
   },
   robots: {
     index: true,
@@ -50,7 +50,10 @@ type Story = {
   view_count?: number | null;
 };
 
-function excerpt(content: string | null, length = 150) {
+function excerpt(
+  content: string | null,
+  length = 150
+) {
   if (!content) return "";
 
   const text = content
@@ -66,11 +69,14 @@ function excerpt(content: string | null, length = 150) {
 function dateText(date: string | null) {
   if (!date) return "";
 
-  return new Date(date).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return new Date(date).toLocaleDateString(
+    "en-US",
+    {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }
+  );
 }
 
 function StoryCard({
@@ -99,13 +105,17 @@ function StoryCard({
       >
         {story.image_url && (
           <img
-            src={story.image_url}
+            src={`/api/image?url=${encodeURIComponent(
+              story.image_url
+            )}`}
             alt={story.title}
             loading={large ? "eager" : "lazy"}
             style={{
               display: "block",
               width: "100%",
-              aspectRatio: large ? "16/9" : "16/10",
+              aspectRatio: large
+                ? "16/9"
+                : "16/10",
               objectFit: "cover",
             }}
           />
@@ -179,13 +189,15 @@ function MostReadItem({
       href={`/news/${story.slug}`}
       style={{
         display: "grid",
-        gridTemplateColumns: "35px 80px 1fr",
+        gridTemplateColumns:
+          "35px 80px 1fr",
         gap: 10,
         alignItems: "center",
         color: "inherit",
         textDecoration: "none",
         padding: "12px 0",
-        borderBottom: "1px solid #e5e7eb",
+        borderBottom:
+          "1px solid #e5e7eb",
       }}
     >
       <strong
@@ -200,7 +212,9 @@ function MostReadItem({
 
       {story.image_url ? (
         <img
-          src={story.image_url}
+          src={`/api/image?url=${encodeURIComponent(
+            story.image_url
+          )}`}
           alt={story.title}
           loading="lazy"
           style={{
@@ -240,7 +254,10 @@ function MostReadItem({
             marginTop: 4,
           }}
         >
-          {Number(story.view_count || 0).toLocaleString()} views
+          {Number(
+            story.view_count || 0
+          ).toLocaleString()}{" "}
+          views
         </div>
       </div>
     </Link>
@@ -260,7 +277,8 @@ function SectionHeader({
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        borderBottom: "3px solid #d7193f",
+        borderBottom:
+          "3px solid #d7193f",
         paddingBottom: 9,
         marginBottom: 18,
       }}
@@ -293,67 +311,93 @@ function SectionHeader({
 }
 
 export default async function HomePage() {
-  const { data: latestData } = await supabase
-    .from("news")
-    .select(
-      "id,title,slug,content,image_url,category,created_at,view_count"
-    )
-    .eq("Published", true)
-    .not("image_url", "is", null)
-    .neq("image_url", "")
-    .order("created_at", {
-      ascending: false,
-    })
-    .limit(24);
+  const { data: latestData } =
+    await supabase
+      .from("news")
+      .select(
+        "id,title,slug,content,image_url,category,created_at,view_count"
+      )
+      .eq("Published", true)
+      .not("image_url", "is", null)
+      .neq("image_url", "")
+      .order("created_at", {
+        ascending: false,
+      })
+      .limit(24);
 
-  const latest = (latestData || []) as Story[];
+  const latest =
+    (latestData || []) as Story[];
 
-  const { data: mostReadData } = await supabase
-    .from("news")
-    .select(
-      "id,title,slug,content,image_url,category,created_at,view_count"
-    )
-    .eq("Published", true)
-    .not("image_url", "is", null)
-    .neq("image_url", "")
-    .order("view_count", {
-      ascending: false,
-    })
-    .order("created_at", {
-      ascending: false,
-    })
-    .limit(6);
+  const { data: mostReadData } =
+    await supabase
+      .from("news")
+      .select(
+        "id,title,slug,content,image_url,category,created_at,view_count"
+      )
+      .eq("Published", true)
+      .not("image_url", "is", null)
+      .neq("image_url", "")
+      .order("view_count", {
+        ascending: false,
+      })
+      .order("created_at", {
+        ascending: false,
+      })
+      .limit(6);
 
-  const mostRead = (mostReadData || []) as Story[];
+  const mostRead =
+    (mostReadData || []) as Story[];
 
-  const featured = latest[0] || null;
+  const featured =
+    latest[0] || null;
 
-  const categoryStories: Record<string, Story[]> = {};
+  const categoryStories:
+    Record<string, Story[]> = {};
 
   await Promise.all(
     categories
-      .filter((category) => category.slug !== "news")
+      .filter(
+        (category) =>
+          category.slug !== "news"
+      )
       .map(async (category) => {
-        const { data } = await supabase
-          .from("news")
-          .select(
-            "id,title,slug,content,image_url,category,created_at"
-          )
-          .eq("Published", true)
-          .eq("category", category.name)
-          .not("image_url", "is", null)
-          .neq("image_url", "")
-          .order("created_at", {
-            ascending: false,
-          })
-          .limit(4);
+        const { data } =
+          await supabase
+            .from("news")
+            .select(
+              "id,title,slug,content,image_url,category,created_at"
+            )
+            .eq(
+              "Published",
+              true
+            )
+            .eq(
+              "category",
+              category.name
+            )
+            .not(
+              "image_url",
+              "is",
+              null
+            )
+            .neq(
+              "image_url",
+              ""
+            )
+            .order("created_at", {
+              ascending: false,
+            })
+            .limit(4);
 
-        categoryStories[category.slug] = (data || []) as Story[];
+        categoryStories[
+          category.slug
+        ] = (data || []) as Story[];
       })
   );
 
   return (
     <>
+      {/* HEADER */}
       <header
         style={{
           background: "#d7193f",
@@ -361,7 +405,8 @@ export default async function HomePage() {
           position: "sticky",
           top: 0,
           zIndex: 50,
-          boxShadow: "0 2px 10px rgba(0,0,0,.12)",
+          boxShadow:
+            "0 2px 10px rgba(0,0,0,.12)",
         }}
       >
         <div
@@ -371,15 +416,18 @@ export default async function HomePage() {
             padding: "14px 16px",
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
+            justifyContent:
+              "space-between",
           }}
         >
           <Link
             href="/"
             style={{
               color: "#fff",
-              textDecoration: "none",
-              fontSize: "clamp(1.4rem,4vw,2rem)",
+              textDecoration:
+                "none",
+              fontSize:
+                "clamp(1.4rem,4vw,2rem)",
               fontWeight: 900,
             }}
           >
@@ -390,7 +438,8 @@ export default async function HomePage() {
             href="/search"
             style={{
               color: "#fff",
-              textDecoration: "none",
+              textDecoration:
+                "none",
               fontWeight: 700,
             }}
           >
@@ -399,10 +448,12 @@ export default async function HomePage() {
         </div>
       </header>
 
+      {/* CATEGORY NAVIGATION */}
       <nav
         style={{
           background: "#fff",
-          borderBottom: "1px solid #e5e7eb",
+          borderBottom:
+            "1px solid #e5e7eb",
           overflowX: "auto",
         }}
       >
@@ -413,26 +464,33 @@ export default async function HomePage() {
             padding: "10px 16px",
             display: "flex",
             gap: 18,
-            whiteSpace: "nowrap",
+            whiteSpace:
+              "nowrap",
           }}
         >
-          {categories.map((category) => (
-            <Link
-              key={category.slug}
-              href={`/category/${category.slug}`}
-              style={{
-                color: "#333",
-                textDecoration: "none",
-                fontSize: 13,
-                fontWeight: 750,
-              }}
-            >
-              {category.name}
-            </Link>
-          ))}
+          {categories.map(
+            (category) => (
+              <Link
+                key={
+                  category.slug
+                }
+                href={`/category/${category.slug}`}
+                style={{
+                  color: "#333",
+                  textDecoration:
+                    "none",
+                  fontSize: 13,
+                  fontWeight: 750,
+                }}
+              >
+                {category.name}
+              </Link>
+            )
+          )}
         </div>
       </nav>
 
+      {/* BREAKING NEWS */}
       <div
         style={{
           background: "#111827",
@@ -446,16 +504,20 @@ export default async function HomePage() {
             padding: "9px 16px",
             display: "flex",
             gap: 12,
-            alignItems: "center",
+            alignItems:
+              "center",
           }}
         >
           <strong
             style={{
-              background: "#d7193f",
-              padding: "5px 8px",
+              background:
+                "#d7193f",
+              padding:
+                "5px 8px",
               borderRadius: 5,
               fontSize: 11,
-              whiteSpace: "nowrap",
+              whiteSpace:
+                "nowrap",
             }}
           >
             BREAKING NEWS
@@ -463,9 +525,12 @@ export default async function HomePage() {
 
           <span
             style={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              overflow:
+                "hidden",
+              textOverflow:
+                "ellipsis",
+              whiteSpace:
+                "nowrap",
               fontSize: 13,
             }}
           >
@@ -475,11 +540,16 @@ export default async function HomePage() {
         </div>
       </div>
 
+      {/* MAIN CONTENT */}
       <main
         style={{
+          width: "100%",
           maxWidth: 1200,
+          minHeight:
+            "calc(100vh - 180px)",
           margin: "0 auto",
-          padding: "24px 16px 60px",
+          padding:
+            "24px 16px 60px",
         }}
       >
         {featured && (
@@ -492,79 +562,108 @@ export default async function HomePage() {
               className="jnmulee-featured"
               style={{
                 display: "grid",
-                gridTemplateColumns: "2fr 1fr",
+                gridTemplateColumns:
+                  "2fr 1fr",
                 gap: 22,
               }}
             >
-              <StoryCard story={featured} large />
+              <StoryCard
+                story={featured}
+                large
+              />
 
               <div
                 style={{
                   background: "#fff",
-                  border: "1px solid #e5e7eb",
+                  border:
+                    "1px solid #e5e7eb",
                   borderRadius: 14,
                   padding: 18,
                 }}
               >
-                <SectionHeader title="Latest News" />
+                <SectionHeader
+                  title="Latest News"
+                />
 
-                {latest.slice(1, 5).map((story) => (
-                  <Link
-                    key={story.id}
-                    href={`/news/${story.slug}`}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "80px 1fr",
-                      gap: 10,
-                      textDecoration: "none",
-                      color: "inherit",
-                      paddingBottom: 12,
-                      marginBottom: 12,
-                      borderBottom: "1px solid #eee",
-                    }}
-                  >
-                    {story.image_url && (
-                      <img
-                        src={story.image_url}
-                        alt={story.title}
-                        loading="lazy"
-                        style={{
-                          width: 80,
-                          height: 60,
-                          objectFit: "cover",
-                          borderRadius: 7,
-                        }}
-                      />
-                    )}
+                {latest
+                  .slice(1, 5)
+                  .map((story) => (
+                    <Link
+                      key={story.id}
+                      href={`/news/${story.slug}`}
+                      style={{
+                        display:
+                          "grid",
+                        gridTemplateColumns:
+                          "80px 1fr",
+                        gap: 10,
+                        textDecoration:
+                          "none",
+                        color:
+                          "inherit",
+                        paddingBottom:
+                          12,
+                        marginBottom:
+                          12,
+                        borderBottom:
+                          "1px solid #eee",
+                      }}
+                    >
+                      {story.image_url && (
+                        <img
+                          src={`/api/image?url=${encodeURIComponent(
+                            story.image_url
+                          )}`}
+                          alt={
+                            story.title
+                          }
+                          loading="lazy"
+                          style={{
+                            width: 80,
+                            height: 60,
+                            objectFit:
+                              "cover",
+                            borderRadius: 7,
+                          }}
+                        />
+                      )}
 
-                    <div>
-                      <div
-                        style={{
-                          color: "#d7193f",
-                          fontSize: 11,
-                          fontWeight: 800,
-                        }}
-                      >
-                        {story.category || "News"}
+                      <div>
+                        <div
+                          style={{
+                            color:
+                              "#d7193f",
+                            fontSize:
+                              11,
+                            fontWeight:
+                              800,
+                          }}
+                        >
+                          {story.category ||
+                            "News"}
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize:
+                              14,
+                            fontWeight:
+                              800,
+                            lineHeight:
+                              1.35,
+                          }}
+                        >
+                          {story.title}
+                        </div>
                       </div>
-
-                      <div
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 800,
-                          lineHeight: 1.35,
-                        }}
-                      >
-                        {story.title}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  ))}
               </div>
             </div>
           </section>
         )}
 
+        {/* MOST READ */}
         <section
           style={{
             marginBottom: 35,
@@ -573,44 +672,62 @@ export default async function HomePage() {
           <div
             style={{
               background: "#fff",
-              border: "1px solid #e5e7eb",
+              border:
+                "1px solid #e5e7eb",
               borderRadius: 14,
               padding: 18,
             }}
           >
-            <SectionHeader title="🔥 Most Read" />
+            <SectionHeader
+              title="🔥 Most Read"
+            />
 
             <p
               style={{
                 color: "#6b7280",
                 fontSize: 13,
-                margin: "-5px 0 8px",
+                margin:
+                  "-5px 0 8px",
               }}
             >
-              Stories getting the most views.
+              Stories getting the
+              most views.
             </p>
 
-            {mostRead.length > 0 ? (
+            {mostRead.length >
+            0 ? (
               <div
                 className="jnmulee-most-read"
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
+                  display:
+                    "grid",
+                  gridTemplateColumns:
+                    "1fr 1fr",
                   columnGap: 25,
                 }}
               >
-                {mostRead.map((story, index) => (
-                  <MostReadItem
-                    key={story.id}
-                    story={story}
-                    number={index + 1}
-                  />
-                ))}
+                {mostRead.map(
+                  (
+                    story,
+                    index
+                  ) => (
+                    <MostReadItem
+                      key={
+                        story.id
+                      }
+                      story={story}
+                      number={
+                        index + 1
+                      }
+                    />
+                  )
+                )}
               </div>
             ) : (
               <p
                 style={{
-                  color: "#777",
+                  color:
+                    "#777",
                 }}
               >
                 No view data yet.
@@ -624,30 +741,45 @@ export default async function HomePage() {
             marginBottom: 35,
           }}
         >
-          <DirectAd placement="homepage" />
+          <DirectAd
+            placement="homepage"
+          />
         </div>
 
+        {/* LATEST NEWS */}
         <section
           style={{
             marginBottom: 40,
           }}
         >
-          <SectionHeader title="Latest News" />
+          <SectionHeader
+            title="Latest News"
+          />
 
           <div
             className="jnmulee-news-grid"
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3,minmax(0,1fr))",
+              display:
+                "grid",
+              gridTemplateColumns:
+                "repeat(3,minmax(0,1fr))",
               gap: 20,
             }}
           >
-            {latest.slice(1).map((story) => (
-              <StoryCard
-                key={story.id}
-                story={story}
-              />
-            ))}
+            {latest
+              .slice(1)
+              .map(
+                (story) => (
+                  <StoryCard
+                    key={
+                      story.id
+                    }
+                    story={
+                      story
+                    }
+                  />
+                )
+              )}
           </div>
         </section>
 
@@ -656,158 +788,87 @@ export default async function HomePage() {
             marginBottom: 40,
           }}
         >
-          <DirectAd placement="home_between" />
+          <DirectAd
+            placement="home_between"
+          />
         </div>
 
+        {/* CATEGORY SECTIONS */}
         {categories
-          .filter((category) => category.slug !== "news")
-          .map((category) => {
-            const stories =
-              categoryStories[category.slug] || [];
+          .filter(
+            (category) =>
+              category.slug !==
+              "news"
+          )
+          .map(
+            (category) => {
+              const stories =
+                categoryStories[
+                  category.slug
+                ] || [];
 
-            if (!stories.length) {
-              return null;
-            }
+              if (
+                !stories.length
+              ) {
+                return null;
+              }
 
-            return (
-              <section
-                key={category.slug}
-                style={{
-                  marginBottom: 45,
-                }}
-              >
-                <SectionHeader
-                  title={category.name}
-                  slug={category.slug}
-                />
-
-                <div
-                  className="jnmulee-category-grid"
+              return (
+                <section
+                  key={
+                    category.slug
+                  }
                   style={{
-                    display: "grid",
-                    gridTemplateColumns:
-                      "repeat(4,minmax(0,1fr))",
-                    gap: 18,
+                    marginBottom:
+                      45,
                   }}
                 >
-                  {stories.map((story) => (
-                    <StoryCard
-                      key={story.id}
-                      story={story}
-                    />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
+                  <SectionHeader
+                    title={
+                      category.name
+                    }
+                    slug={
+                      category.slug
+                    }
+                  />
 
-        <DirectAd placement="home_bottom" />
+                  <div
+                    className="jnmulee-category-grid"
+                    style={{
+                      display:
+                        "grid",
+                      gridTemplateColumns:
+                        "repeat(4,minmax(0,1fr))",
+                      gap: 18,
+                    }}
+                  >
+                    {stories.map(
+                      (
+                        story
+                      ) => (
+                        <StoryCard
+                          key={
+                            story.id
+                          }
+                          story={
+                            story
+                          }
+                        />
+                      )
+                    )}
+                  </div>
+                </section>
+              );
+            }
+          )}
+
+        <DirectAd
+          placement="home_bottom"
+        />
       </main>
 
-      <footer
-        style={{
-          background: "#111827",
-          color: "#fff",
-          padding: "35px 16px",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 1200,
-            margin: "0 auto",
-          }}
-        >
-          <div
-            className="jnmulee-footer-grid"
-            style={{
-              display: "grid",
-              gridTemplateColumns: "2fr 1fr 1fr",
-              gap: 30,
-            }}
-          >
-            <div>
-              <h2
-                style={{
-                  margin: "0 0 10px",
-                }}
-              >
-                JNMulee News
-              </h2>
-
-              <p
-                style={{
-                  color: "#d1d5db",
-                  lineHeight: 1.6,
-                  fontSize: 14,
-                  margin: 0,
-                }}
-              >
-                Independent digital news and current
-                affairs from Nigeria and around the world.
-              </p>
-            </div>
-
-            <div>
-              <h3>Categories</h3>
-
-              {categories.slice(1, 6).map((category) => (
-                <Link
-                  key={category.slug}
-                  href={`/category/${category.slug}`}
-                  style={{
-                    display: "block",
-                    color: "#d1d5db",
-                    textDecoration: "none",
-                    fontSize: 13,
-                    marginBottom: 7,
-                  }}
-                >
-                  {category.name}
-                </Link>
-              ))}
-            </div>
-
-            <div>
-              <h3>Information</h3>
-
-              {[
-                ["About", "/about"],
-                ["Contact", "/contact"],
-                ["Privacy Policy", "/privacy"],
-                ["Terms", "/terms"],
-                ["Search", "/search"],
-              ].map(([label, href]) => (
-                <Link
-                  key={href}
-                  href={href}
-                  style={{
-                    display: "block",
-                    color: "#d1d5db",
-                    textDecoration: "none",
-                    fontSize: 13,
-                    marginBottom: 7,
-                  }}
-                >
-                  {label}
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <div
-            style={{
-              borderTop: "1px solid #374151",
-              marginTop: 30,
-              paddingTop: 18,
-              color: "#9ca3af",
-              fontSize: 12,
-            }}
-          >
-            © {new Date().getFullYear()} JNMulee News.
-            All rights reserved.
-          </div>
-        </div>
-      </footer>
+      {/* NO FOOTER HERE.
+          Footer is provided once by app/layout.tsx. */}
 
       <style>{`
         @media (max-width: 900px) {
@@ -831,10 +892,6 @@ export default async function HomePage() {
 
           .jnmulee-category-grid,
           .jnmulee-news-grid {
-            grid-template-columns: 1fr !important;
-          }
-
-          .jnmulee-footer-grid {
             grid-template-columns: 1fr !important;
           }
         }
