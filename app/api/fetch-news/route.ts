@@ -67,7 +67,10 @@ function cleanText(
     .replace(/<header[\s\S]*?<\/header>/gi, " ")
     .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
     .replace(/<form[\s\S]*?<\/form>/gi, " ")
-    .replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, "$1")
+    .replace(
+      /<a\b[^>]*>([\s\S]*?)<\/a>/gi,
+      "$1"
+    )
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>/gi, "\n\n")
     .replace(/<\/article>/gi, "\n\n")
@@ -449,9 +452,6 @@ function extractFeedContent(
   );
 }
 
-/*
- * Escape HTML before inserting generated content.
- */
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -461,16 +461,6 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
-/*
- * Convert the AI article into safe, attractive HTML.
- *
- * The AI returns simple blocks such as:
- *
- * <p>...</p>
- * <h2>...</h2>
- *
- * Only the tags we explicitly allow are retained.
- */
 function sanitizeArticleHtml(
   value: string
 ) {
@@ -519,6 +509,99 @@ function sanitizeArticleHtml(
   return html.trim();
 }
 
+/*
+ * Makes article paragraphs easy to read.
+ *
+ * AI-generated articles can sometimes contain
+ * very large paragraphs. This splits them into
+ * smaller mobile-friendly paragraphs while
+ * preserving headings, lists and blockquotes.
+ */
+function formatReadableArticleHtml(
+  value: string
+) {
+  let html =
+    sanitizeArticleHtml(value);
+
+  if (!html) {
+    return "";
+  }
+
+  html = html.replace(
+    /<p>([\s\S]*?)<\/p>/gi,
+    (_, paragraph: string) => {
+      const text =
+        cleanText(paragraph);
+
+      if (!text) {
+        return "";
+      }
+
+      const sentences =
+        text
+          .match(
+            /[^.!?]+(?:[.!?]+|$)/g
+          )
+          ?.map((sentence) =>
+            sentence.trim()
+          )
+          .filter(Boolean) || [text];
+
+      const chunks: string[] = [];
+
+      let current: string[] = [];
+      let currentLength = 0;
+
+      for (const sentence of sentences) {
+        const sentenceLength =
+          sentence.length;
+
+        if (
+          current.length >= 3 ||
+          (current.length >= 2 &&
+            currentLength +
+              sentenceLength >
+              420)
+        ) {
+          chunks.push(
+            current.join(" ")
+          );
+
+          current = [];
+          currentLength = 0;
+        }
+
+        current.push(sentence);
+
+        currentLength +=
+          sentenceLength + 1;
+      }
+
+      if (current.length) {
+        chunks.push(
+          current.join(" ")
+        );
+      }
+
+      return chunks
+        .map(
+          (chunk) =>
+            `<p>${escapeHtml(
+              chunk
+            )}</p>`
+        )
+        .join("\n");
+    }
+  );
+
+  html = html.replace(
+    /<p>\s*<\/p>/gi,
+    ""
+  );
+
+  return html.trim();
+}
+
 function textToHtml(
   value: string
 ) {
@@ -538,7 +621,10 @@ function textToHtml(
       (paragraph) =>
         `<p>${escapeHtml(
           paragraph
-        ).replace(/\n/g, "<br />")}</p>`
+        ).replace(
+          /\n/g,
+          "<br />"
+        )}</p>`
     )
     .join("\n");
 }
@@ -565,16 +651,8 @@ async function createLongOriginalArticle({
       await openai.chat.completions.create({
         model: OPENAI_MODEL,
 
-        /*
-         * Low temperature keeps facts
-         * more consistent.
-         */
         temperature: 0.35,
 
-        /*
-         * Enough output space for
-         * approximately 1,000–1,300 words.
-         */
         max_tokens: 2600,
 
         messages: [
@@ -727,14 +805,7 @@ ${content}
     const count =
       wordCount(articleText);
 
-    /*
-     * Accept 850+ words.
-     * This prevents short source material
-     * from forcing the AI to invent facts.
-     */
-    if (
-      count < 850
-    ) {
+    if (count < 850) {
       return null;
     }
 
@@ -822,8 +893,8 @@ export async function GET() {
           }
 
           /*
-           * Every published article needs
-           * an image.
+           * Every published article MUST
+           * have an image.
            */
           const imageUrl =
             extractImage(rawItem);
@@ -860,7 +931,7 @@ export async function GET() {
           }
 
           /*
-           * Get the factual material from
+           * Get factual material from
            * the RSS feed.
            */
           const rssContent =
@@ -882,17 +953,14 @@ export async function GET() {
               sourceCategory
             );
 
-          /*
-           * Start with the RSS material.
-           */
           let finalTitle = title;
 
           let finalContent =
             rssContent || title;
 
           /*
-           * Ask AI to create a much longer,
-           * better-formatted article.
+           * Generate a longer original
+           * article when OpenAI is available.
            */
           const generatedArticle =
             await createLongOriginalArticle({
@@ -907,21 +975,27 @@ export async function GET() {
               generatedArticle.headline;
 
             finalContent =
-              generatedArticle.articleHtml;
+              formatReadableArticleHtml(
+                generatedArticle.articleHtml
+              );
 
             aiGenerated++;
           } else if (rssContent) {
             /*
-             * If AI is unavailable, still make
-             * the RSS content readable HTML.
+             * AI unavailable:
+             * make RSS content readable
+             * instead of storing one giant
+             * paragraph.
              */
             finalContent =
-              textToHtml(
-                rssContent
+              formatReadableArticleHtml(
+                textToHtml(rssContent)
               );
           } else {
             finalContent =
-              textToHtml(title);
+              formatReadableArticleHtml(
+                textToHtml(title)
+              );
           }
 
           finalTitle =
@@ -933,7 +1007,24 @@ export async function GET() {
 
           if (!finalContent) {
             finalContent =
-              textToHtml(title);
+              formatReadableArticleHtml(
+                textToHtml(title)
+              );
+          }
+
+          /*
+           * Final safety check:
+           * never store an article without
+           * an image.
+           */
+          if (
+            !imageUrl ||
+            !/^https?:\/\//i.test(
+              imageUrl
+            )
+          ) {
+            skippedNoImage++;
+            continue;
           }
 
           /*
@@ -956,6 +1047,19 @@ export async function GET() {
             });
 
           if (insertError) {
+            /*
+             * PostgreSQL unique violation.
+             * Another importer run may have
+             * inserted the same source URL.
+             */
+            if (
+              insertError.code ===
+              "23505"
+            ) {
+              skipped++;
+              continue;
+            }
+
             errors.push(
               `${finalTitle}: ${insertError.message}`
             );
