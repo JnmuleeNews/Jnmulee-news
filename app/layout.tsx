@@ -50,15 +50,31 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>
-        {children}
+      <body
+        style={{
+          margin: 0,
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <div
+          style={{
+            flex: "1 0 auto",
+            width: "100%",
+          }}
+        >
+          {children}
+        </div>
 
+        {/* SINGLE GLOBAL FOOTER */}
         <footer
           style={{
-            marginTop: "60px",
+            flexShrink: 0,
             background: "#111827",
             color: "#ffffff",
             borderTop: "4px solid #d7193f",
+            marginTop: "40px",
           }}
         >
           <div
@@ -76,6 +92,7 @@ export default function RootLayout({
                 gap: "32px",
               }}
             >
+              {/* BRAND */}
               <div>
                 <Link
                   href="/"
@@ -97,6 +114,7 @@ export default function RootLayout({
                     color: "#d1d5db",
                     lineHeight: 1.7,
                     marginTop: "12px",
+                    marginBottom: 0,
                   }}
                 >
                   Latest news, stories and information
@@ -104,8 +122,14 @@ export default function RootLayout({
                 </p>
               </div>
 
+              {/* EXPLORE */}
               <div>
-                <h3 style={{ marginBottom: "14px" }}>
+                <h3
+                  style={{
+                    marginTop: 0,
+                    marginBottom: "14px",
+                  }}
+                >
                   Explore
                 </h3>
 
@@ -161,8 +185,14 @@ export default function RootLayout({
                 </div>
               </div>
 
+              {/* INFORMATION */}
               <div>
-                <h3 style={{ marginBottom: "14px" }}>
+                <h3
+                  style={{
+                    marginTop: 0,
+                    marginBottom: "14px",
+                  }}
+                >
                   Information
                 </h3>
 
@@ -202,6 +232,13 @@ export default function RootLayout({
                     Terms of Use
                   </Link>
 
+                  <Link
+                    href="/search"
+                    style={{ color: "inherit" }}
+                  >
+                    Search
+                  </Link>
+
                   <a
                     href="/sitemap.xml"
                     style={{ color: "inherit" }}
@@ -227,6 +264,7 @@ export default function RootLayout({
           </div>
         </footer>
 
+        {/* BASIC COPY / CONTEXT PROTECTION */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
