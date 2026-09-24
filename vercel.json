@@ -3,27 +3,27 @@
   "framework": "nextjs",
   "crons": [
     {
-      "path": "/api/fetch-news?batch=0",
+      "path": "/api/fetch-news",
       "schedule": "0 */6 * * *"
     },
     {
-      "path": "/api/fetch-news?batch=1",
+      "path": "/api/fetch-news",
       "schedule": "10 */6 * * *"
     },
     {
-      "path": "/api/fetch-news?batch=2",
+      "path": "/api/fetch-news",
       "schedule": "20 */6 * * *"
     },
     {
-      "path": "/api/fetch-news?batch=3",
+      "path": "/api/fetch-news",
       "schedule": "30 */6 * * *"
     },
     {
-      "path": "/api/fetch-news?batch=4",
+      "path": "/api/fetch-news",
       "schedule": "40 */6 * * *"
     },
     {
-      "path": "/api/fetch-news?batch=5",
+      "path": "/api/fetch-news",
       "schedule": "50 */6 * * *"
     },
     {
