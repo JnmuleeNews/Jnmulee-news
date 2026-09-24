@@ -25,12 +25,11 @@ const openai = process.env.OPENAI_API_KEY
 const AI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
 const MAX_FEED_ITEMS_PER_SOURCE = 20;
-const ARTICLE_PAGE_TIMEOUT_MS = 15000;
-const MAX_ARTICLE_PAGE_CHARS = 100000;
-const MAX_COMBINED_SOURCE_CHARS = 120000;
+const ARTICLE_TIMEOUT_MS = 15000;
+const MAX_ARTICLE_HTML = 100000;
+const MAX_SOURCE_MATERIAL = 120000;
 
-const MIN_PAGE_WORDS = 100;
-const MIN_SOURCE_WORDS_FOR_AI = 180;
+const MIN_SOURCE_WORDS = 180;
 const MIN_FINAL_WORDS = 180;
 
 const ALLOWED_CATEGORIES = [
@@ -80,11 +79,13 @@ function decodeHtml(value: string): string {
     .replace(/&#x27;/gi, "'")
     .replace(/&#x2F;/gi, "/")
     .replace(/&#(\d+);/g, (_, n) => {
-      try {
-        return String.fromCharCode(Number(n));
-      } catch {
-        return "";
+      const number = Number(n);
+
+      if (Number.isFinite(number)) {
+        return String.fromCharCode(number);
       }
+
+      return "";
     });
 }
 
@@ -102,15 +103,6 @@ function wordCount(value: string): number {
     .filter(Boolean).length;
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -121,14 +113,23 @@ function slugify(value: string): string {
     .slice(0, 150);
 }
 
-function dedupeParagraphs(text: string): string {
-  const paragraphs = normalizeWhitespace(text)
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function dedupeParagraphs(value: string): string {
+  const paragraphs = normalizeWhitespace(value)
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter(Boolean);
 
   const seen = new Set<string>();
-  const output: string[] = [];
+  const result: string[] = [];
 
   for (const paragraph of paragraphs) {
     const key = paragraph
@@ -136,216 +137,196 @@ function dedupeParagraphs(text: string): string {
       .replace(/[^\p{L}\p{N}]+/gu, " ")
       .trim();
 
-    if (!key || key.length < 15) continue;
-
+    if (key.length < 20) continue;
     if (seen.has(key)) continue;
 
     seen.add(key);
-    output.push(paragraph);
+    result.push(paragraph);
   }
 
-  return output.join("\n\n");
+  return result.join("\n\n");
 }
 
 /**
- * Removes source attribution and promotional language from imported text.
+ * Removes source-site boilerplate.
  *
- * IMPORTANT:
- * Source metadata remains stored separately in:
- * source_url
- * source_name
- * canonical_url
- * attribution_text
- *
- * These values are NOT inserted into the article body.
+ * This does NOT remove legitimate references to people who
+ * are subjects of the story.
  */
-function removeSourceAttributionText(text: string): string {
-  let output = text;
+function removeSourceBoilerplate(value: string): string {
+  let text = value;
 
   const patterns = [
-    /(?:this\s+story\s+)?continues\s+at\s+[^\n]+/gi,
     /this\s+story\s+continues\s+at[^\n]*/gi,
-    /read\s+more\s*:?[^\n]*/gi,
-    /read\s+the\s+full\s+story\s*:?[^\n]*/gi,
-    /read\s+the\s+full\s+article\s*:?[^\n]*/gi,
+    /this\s+story\s+continues[^\n]*/gi,
     /originally\s+published\s+(?:by|on|at)[^\n]*/gi,
     /original\s+source\s*:?[^\n]*/gi,
     /article\s+source\s*:?[^\n]*/gi,
-    /source\s*:?[ \t]*(?:https?:\/\/|www\.)[^\n]*/gi,
-    /via\s*:?[ \t]*(?:https?:\/\/|www\.)[^\n]*/gi,
-    /courtesy\s+of[^\n]*/gi,
-    /published\s+by[^\n]*/gi,
-    /first\s+published\s+by[^\n]*/gi,
-    /follow\s+us[^\n]*/gi,
-    /follow\s+us\s+on[^\n]*/gi,
-    /subscribe\s+to[^\n]*/gi,
-    /subscribe\s+now[^\n]*/gi,
+    /^\s*source\s*:\s*[^\n]*$/gim,
+    /^\s*via\s*:\s*[^\n]*$/gim,
+    /read\s+more\s*:?[^\n]*/gi,
+    /read\s+the\s+full\s+story\s*:?[^\n]*/gi,
+    /read\s+the\s+full\s+article\s*:?[^\n]*/gi,
+    /follow\s+us\s*(?:on)?[^\n]*/gi,
+    /subscribe\s+(?:now|today|to)[^\n]*/gi,
     /sign\s+up\s+for[^\n]*/gi,
     /join\s+our\s+newsletter[^\n]*/gi,
-    /newsletter[^\n]*/gi,
+    /newsletter\s*:?[^\n]*/gi,
     /click\s+here[^\n]*/gi,
     /visit\s+our\s+website[^\n]*/gi,
-    /visit\s+[a-z0-9.-]+\.[a-z]{2,}[^\n]*/gi,
+    /you\s+may\s+also\s+like[\s\S]{0,2500}/gi,
+    /you\s+might\s+also\s+like[\s\S]{0,2500}/gi,
+    /related\s+(?:stories|articles|news|posts)[\s\S]{0,2500}/gi,
+    /recommended\s+(?:for\s+you|articles|stories)[\s\S]{0,2500}/gi,
+    /most\s+read[\s\S]{0,2500}/gi,
+    /latest\s+news[\s\S]{0,2500}/gi,
+    /popular\s+stories[\s\S]{0,2500}/gi,
+    /trending\s+(?:stories|news)[\s\S]{0,2500}/gi,
+    /read\s+next[\s\S]{0,2500}/gi,
+    /table\s+of\s+contents[\s\S]{0,2500}/gi,
   ];
 
   for (const pattern of patterns) {
-    output = output.replace(pattern, "");
+    text = text.replace(pattern, "");
   }
 
-  output = output.replace(
+  text = text.replace(
     /\bhttps?:\/\/[^\s<>"']+/gi,
     ""
   );
 
-  output = output.replace(
+  text = text.replace(
     /\bwww\.[^\s<>"']+/gi,
     ""
   );
 
-  return normalizeWhitespace(output);
+  return normalizeWhitespace(text);
 }
 
 /**
- * Removes author biography/author-profile material.
+ * Removes actual author biography/profile material.
+ *
+ * It intentionally does not remove normal sentences merely
+ * because they contain the word "author".
  */
-function removeAuthorBiography(text: string): string {
-  let output = text;
+function removeAuthorBiography(value: string): string {
+  let text = value;
 
   const patterns = [
-    /about\s+the\s+author[\s\S]{0,1500}/gi,
-    /author\s+bio[\s\S]{0,1500}/gi,
-    /author\s+biography[\s\S]{0,1500}/gi,
-    /author\s+description[\s\S]{0,1500}/gi,
-    /meet\s+the\s+author[\s\S]{0,1500}/gi,
-    /written\s+by\s+[^\n]{1,150}/gi,
-    /by\s+[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,4}\s*(?:\||-)?\s*(?:edited|updated|published)[^\n]*/g,
-    /journalist\s+[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,5}\s+has\s+over\s+\d+\s+years[^\n]*/gi,
-    /journalist\s+[A-Z][A-Za-z.'-]+[^\n]{0,300}\bexperience\s+covering\b[^\n]*/gi,
-    /reporter\s+[A-Z][A-Za-z.'-]+[^\n]{0,300}\bexperience\s+covering\b[^\n]*/gi,
-    /editor\s+[A-Z][A-Za-z.'-]+[^\n]{0,300}\bexperience\s+covering\b[^\n]*/gi,
+    /about\s+the\s+author[\s\S]{0,2500}/gi,
+    /author\s+bio[\s\S]{0,2500}/gi,
+    /author\s+biography[\s\S]{0,2500}/gi,
+    /author\s+description[\s\S]{0,2500}/gi,
+    /meet\s+the\s+author[\s\S]{0,2500}/gi,
   ];
 
   for (const pattern of patterns) {
-    output = output.replace(pattern, "");
+    text = text.replace(pattern, "");
   }
 
-  return normalizeWhitespace(output);
+  return normalizeWhitespace(text);
 }
 
-/**
- * Removes obvious advertisements and website promotional blocks.
- */
-function removeAdvertisingText(text: string): string {
-  let output = text;
+function removeAdvertising(value: string): string {
+  let text = value;
 
   const patterns = [
-    /advertisement[\s\S]{0,500}/gi,
-    /advertisements[\s\S]{0,500}/gi,
-    /sponsored\s+content[\s\S]{0,500}/gi,
-    /sponsored[\s:,-]*[\s\S]{0,300}/gi,
-    /promoted\s+content[\s\S]{0,500}/gi,
-    /paid\s+partnership[\s\S]{0,500}/gi,
-    /pay\s+attention[\s\S]{0,500}/gi,
-    /find\s+it\s+fast[\s\S]{0,500}/gi,
-    /mark\s+[a-z0-9.-]+\s+as\s+a\s+preferred\s+source[\s\S]{0,500}/gi,
-    /download\s+our\s+app[\s\S]{0,500}/gi,
-    /get\s+our\s+app[\s\S]{0,500}/gi,
-    /install\s+our\s+app[\s\S]{0,500}/gi,
-    /enable\s+notifications[\s\S]{0,300}/gi,
-    /turn\s+on\s+notifications[\s\S]{0,300}/gi,
-    /accept\s+cookies[\s\S]{0,300}/gi,
-    /cookie\s+policy[\s\S]{0,300}/gi,
+    /advertisement[\s\S]{0,1000}/gi,
+    /advertisements[\s\S]{0,1000}/gi,
+    /sponsored\s+content[\s\S]{0,1000}/gi,
+    /promoted\s+content[\s\S]{0,1000}/gi,
+    /paid\s+partnership[\s\S]{0,1000}/gi,
+    /download\s+our\s+app[\s\S]{0,700}/gi,
+    /get\s+our\s+app[\s\S]{0,700}/gi,
+    /install\s+our\s+app[\s\S]{0,700}/gi,
+    /enable\s+notifications[\s\S]{0,500}/gi,
+    /turn\s+on\s+notifications[\s\S]{0,500}/gi,
+    /accept\s+cookies[\s\S]{0,500}/gi,
+    /cookie\s+policy[\s\S]{0,700}/gi,
   ];
 
   for (const pattern of patterns) {
-    output = output.replace(pattern, "");
+    text = text.replace(pattern, "");
   }
 
-  return normalizeWhitespace(output);
-}
-
-/**
- * Removes navigation, related content, and other website furniture.
- */
-function removeWebsiteFurniture(text: string): string {
-  let output = text;
-
-  const blocks = [
-    /related\s+(?:stories|articles|news|posts)[\s\S]{0,3000}/gi,
-    /you\s+may\s+also\s+like[\s\S]{0,3000}/gi,
-    /you\s+might\s+also\s+like[\s\S]{0,3000}/gi,
-    /recommended\s+(?:for\s+you|articles|stories)[\s\S]{0,3000}/gi,
-    /most\s+read[\s\S]{0,3000}/gi,
-    /latest\s+news[\s\S]{0,3000}/gi,
-    /popular\s+stories[\s\S]{0,3000}/gi,
-    /trending\s+(?:stories|news)[\s\S]{0,3000}/gi,
-    /read\s+next[\s\S]{0,3000}/gi,
-    /more\s+from\s+[A-Za-z0-9 .'-]+[\s\S]{0,3000}/gi,
-    /table\s+of\s+contents[\s\S]{0,2500}/gi,
-    /share\s+this\s+(?:article|story)[\s\S]{0,1000}/gi,
-    /copy\s+link[\s\S]{0,500}/gi,
-    /link\s+copied[\s\S]{0,500}/gi,
-    /sign\s+in[\s\S]{0,300}/gi,
-    /log\s+in[\s\S]{0,300}/gi,
-    /create\s+an\s+account[\s\S]{0,300}/gi,
-    /live\s+radio[\s\S]{0,1000}/gi,
-    /view\s+all\s+results[\s\S]{0,500}/gi,
-    /no\s+result[\s\S]{0,500}/gi,
-  ];
-
-  for (const pattern of blocks) {
-    output = output.replace(pattern, "");
-  }
-
-  return normalizeWhitespace(output);
+  return normalizeWhitespace(text);
 }
 
 function cleanText(value: string): string {
-  let output = decodeHtml(value);
+  let text = decodeHtml(value || "");
 
-  output = output.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
-  output = output.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "");
-  output = output.replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, "");
-  output = output.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, "");
-  output = output.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, "");
-  output = output.replace(/<canvas\b[^>]*>[\s\S]*?<\/canvas>/gi, "");
-
-  output = output.replace(/<\/p\s*>/gi, "\n\n");
-  output = output.replace(/<\/div\s*>/gi, "\n");
-  output = output.replace(/<br\s*\/?>/gi, "\n");
-
-  output = output.replace(/<[^>]+>/g, " ");
-
-  output = output
-    .replace(/&[#a-z0-9]+;/gi, (entity) => decodeHtml(entity))
-    .replace(/\u00a0/g, " ");
-
-  output = removeAuthorBiography(output);
-  output = removeAdvertisingText(output);
-  output = removeWebsiteFurniture(output);
-  output = removeSourceAttributionText(output);
-
-  output = output.replace(
-    /^\s*(share|comments?|advertisement|subscribe|follow us)\s*$/gim,
+  text = text.replace(
+    /<script\b[^>]*>[\s\S]*?<\/script>/gi,
     ""
   );
 
-  output = output.replace(
-    /^\s*(home|news|sports|business|technology|politics|entertainment|gossip)\s*$/gim,
+  text = text.replace(
+    /<style\b[^>]*>[\s\S]*?<\/style>/gi,
     ""
   );
 
-  output = normalizeWhitespace(output);
-  output = dedupeParagraphs(output);
+  text = text.replace(
+    /<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi,
+    ""
+  );
 
-  return output;
+  text = text.replace(
+    /<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi,
+    ""
+  );
+
+  text = text.replace(
+    /<svg\b[^>]*>[\s\S]*?<\/svg>/gi,
+    ""
+  );
+
+  text = text.replace(
+    /<\/p\s*>/gi,
+    "\n\n"
+  );
+
+  text = text.replace(
+    /<\/div\s*>/gi,
+    "\n"
+  );
+
+  text = text.replace(
+    /<br\s*\/?>/gi,
+    "\n"
+  );
+
+  text = text.replace(
+    /<li\b[^>]*>/gi,
+    "\n- "
+  );
+
+  text = text.replace(
+    /<[^>]+>/g,
+    " "
+  );
+
+  text = decodeHtml(text);
+
+  text = removeAuthorBiography(text);
+  text = removeAdvertising(text);
+  text = removeSourceBoilerplate(text);
+
+  text = text.replace(
+    /^\s*(home|menu|search|share|comments?|subscribe|advertisement)\s*$/gim,
+    ""
+  );
+
+  text = normalizeWhitespace(text);
+  text = dedupeParagraphs(text);
+
+  return text;
 }
 
 function extractTag(
   xml: string,
-  tagNames: string[]
+  tags: string[]
 ): string {
-  for (const tag of tagNames) {
+  for (const tag of tags) {
     const regex = new RegExp(
       `<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`,
       "i"
@@ -361,14 +342,14 @@ function extractTag(
   return "";
 }
 
-function extractAttr(
+function extractAttribute(
   xml: string,
-  tagNames: string[],
-  attr: string
+  tags: string[],
+  attribute: string
 ): string {
-  for (const tag of tagNames) {
+  for (const tag of tags) {
     const regex = new RegExp(
-      `<${tag}\\b[^>]*\\b${attr}\\s*=\\s*["']([^"']+)["'][^>]*>`,
+      `<${tag}\\b[^>]*\\b${attribute}\\s*=\\s*["']([^"']+)["']`,
       "i"
     );
 
@@ -386,21 +367,25 @@ function extractImage(raw: string): string {
   const candidates: string[] = [];
 
   const add = (value: string) => {
-    const cleaned = decodeHtml(value || "").trim();
+    const url = decodeHtml(value || "").trim();
 
     if (
-      cleaned &&
-      /^https?:\/\//i.test(cleaned) &&
-      !candidates.includes(cleaned)
+      url &&
+      /^https?:\/\//i.test(url) &&
+      !candidates.includes(url)
     ) {
-      candidates.push(cleaned);
+      candidates.push(url);
     }
   };
 
   add(
-    extractAttr(
+    extractAttribute(
       raw,
-      ["media:content", "media:thumbnail", "enclosure"],
+      [
+        "media:content",
+        "media:thumbnail",
+        "enclosure",
+      ],
       "url"
     )
   );
@@ -415,7 +400,7 @@ function extractImage(raw: string): string {
   }
 
   const imageRegex =
-    /<img\b[^>]*(?:src|data-src|data-original)\s*=\s*["']([^"']+)["'][^>]*>/gi;
+    /<img\b[^>]*(?:src|data-src|data-original|data-lazy-src)\s*=\s*["']([^"']+)["'][^>]*>/gi;
 
   while ((match = imageRegex.exec(raw)) !== null) {
     add(match[1]);
@@ -425,120 +410,127 @@ function extractImage(raw: string): string {
     /\bsrcset\s*=\s*["']([^"']+)["']/gi;
 
   while ((match = srcsetRegex.exec(raw)) !== null) {
-    const first = match[1]
+    const urls = match[1]
       .split(",")
-      .map((item) => item.trim().split(/\s+/)[0])
-      .find((item) => /^https?:\/\//i.test(item));
+      .map((x) => x.trim().split(/\s+/)[0]);
 
-    if (first) add(first);
+    for (const url of urls) {
+      if (/^https?:\/\//i.test(url)) {
+        add(url);
+        break;
+      }
+    }
   }
 
   return candidates[0] || "";
 }
 
 function parseFeed(xml: string): FeedItem[] {
-  const items: FeedItem[] = [];
+  const results: FeedItem[] = [];
 
-  const itemRegex =
+  const rssItems =
     /<item\b[^>]*>([\s\S]*?)<\/item>/gi;
 
   let match: RegExpExecArray | null;
 
-  while ((match = itemRegex.exec(xml)) !== null) {
+  while ((match = rssItems.exec(xml)) !== null) {
     const raw = match[1];
 
     const title = extractTag(raw, ["title"]);
+
     const link =
       extractTag(raw, ["link"]) ||
-      extractAttr(raw, ["atom:link", "link"], "href");
-
-    const description = extractTag(raw, [
-      "description",
-      "summary",
-    ]);
-
-    const content = extractTag(raw, [
-      "content:encoded",
-      "content",
-    ]);
-
-    const pubDate = extractTag(raw, [
-      "pubDate",
-      "dc:date",
-      "published",
-      "updated",
-    ]);
-
-    const category = extractTag(raw, ["category"]);
-
-    const imageUrl = extractImage(raw);
+      extractAttribute(
+        raw,
+        ["atom:link", "link"],
+        "href"
+      );
 
     if (!title || !link) continue;
 
-    items.push({
+    results.push({
       title: cleanText(title),
       link: link.trim(),
-      description: cleanText(description),
-      content: cleanText(content),
-      imageUrl,
-      category: cleanText(category),
-      pubDate,
+      description: cleanText(
+        extractTag(raw, [
+          "description",
+          "summary",
+        ])
+      ),
+      content: cleanText(
+        extractTag(raw, [
+          "content:encoded",
+          "content",
+        ])
+      ),
+      imageUrl: extractImage(raw),
+      category: cleanText(
+        extractTag(raw, ["category"])
+      ),
+      pubDate: extractTag(raw, [
+        "pubDate",
+        "dc:date",
+        "published",
+        "updated",
+      ]),
     });
   }
 
-  if (items.length > 0) {
-    return items;
+  if (results.length > 0) {
+    return results;
   }
 
-  const entryRegex =
+  const atomEntries =
     /<entry\b[^>]*>([\s\S]*?)<\/entry>/gi;
 
-  while ((match = entryRegex.exec(xml)) !== null) {
+  while (
+    (match = atomEntries.exec(xml)) !== null
+  ) {
     const raw = match[1];
 
     const title = extractTag(raw, ["title"]);
 
     const link =
-      extractAttr(raw, ["link"], "href") ||
+      extractAttribute(
+        raw,
+        ["link"],
+        "href"
+      ) ||
       extractTag(raw, ["link"]);
-
-    const description = extractTag(raw, [
-      "summary",
-      "description",
-    ]);
-
-    const content = extractTag(raw, [
-      "content",
-      "content:encoded",
-    ]);
-
-    const pubDate = extractTag(raw, [
-      "published",
-      "updated",
-    ]);
-
-    const category = extractAttr(
-      raw,
-      ["category"],
-      "term"
-    );
-
-    const imageUrl = extractImage(raw);
 
     if (!title || !link) continue;
 
-    items.push({
+    results.push({
       title: cleanText(title),
       link: link.trim(),
-      description: cleanText(description),
-      content: cleanText(content),
-      imageUrl,
-      category: cleanText(category),
-      pubDate,
+      description: cleanText(
+        extractTag(raw, [
+          "summary",
+          "description",
+        ])
+      ),
+      content: cleanText(
+        extractTag(raw, [
+          "content",
+          "content:encoded",
+        ])
+      ),
+      imageUrl: extractImage(raw),
+      category: cleanText(
+        extractAttribute(
+          raw,
+          ["category"],
+          "term"
+        )
+      ),
+      pubDate: extractTag(raw, [
+        "published",
+        "updated",
+      ]),
     });
   }
 
-  return items;
+  return results;
 }
 
 function classifyCategory(
@@ -549,7 +541,8 @@ function classifyCategory(
   const combined =
     `${title} ${content} ${sourceCategory || ""}`.toLowerCase();
 
-  const source = (sourceCategory || "").toLowerCase();
+  const source =
+    (sourceCategory || "").toLowerCase();
 
   if (source.includes("sport")) return "Sports";
   if (source.includes("politic")) return "Politics";
@@ -557,14 +550,18 @@ function classifyCategory(
   if (source.includes("tech")) return "Technology";
   if (source.includes("crypto")) return "Crypto";
   if (source.includes("gossip")) return "Gossip";
-  if (source.includes("entertainment")) return "Entertainment";
-  if (source.includes("nigeria")) return "Nigeria";
+  if (source.includes("entertainment"))
+    return "Entertainment";
+  if (source.includes("nigeria"))
+    return "Nigeria";
   if (source.includes("world")) return "World";
 
-  const rules: Array<[string, RegExp]> = [
+  const rules: Array<
+    [string, RegExp]
+  > = [
     [
       "Sports",
-      /\b(football|soccer|nba|nfl|tennis|cricket|afcon|fifa|premier league|champions league|super eagles|arsenal|chelsea|liverpool|manchester united|real madrid|barcelona)\b/i,
+      /\b(football|soccer|nba|nfl|tennis|cricket|fifa|afcon|premier league|champions league|arsenal|chelsea|liverpool|manchester united|real madrid|barcelona)\b/i,
     ],
     [
       "Crypto",
@@ -572,7 +569,7 @@ function classifyCategory(
     ],
     [
       "Technology",
-      /\b(ai|artificial intelligence|technology|tech|software|iphone|android|google|microsoft|apple|openai|robotics|chip|semiconductor|cybersecurity)\b/i,
+      /\b(artificial intelligence|technology|tech|software|iphone|android|google|microsoft|apple|openai|robotics|chip|semiconductor|cybersecurity)\b/i,
     ],
     [
       "Business",
@@ -584,7 +581,7 @@ function classifyCategory(
     ],
     [
       "Gossip",
-      /\b(celebrity|celebrities|viral|rumor|rumour|dating|relationship|breakup|social media|fans|instagram|tiktok)\b/i,
+      /\b(celebrity|celebrities|viral|rumor|rumour|dating|relationship|breakup|fans|instagram|tiktok)\b/i,
     ],
     [
       "Entertainment",
@@ -592,7 +589,7 @@ function classifyCategory(
     ],
     [
       "Nigeria",
-      /\b(nigeria|nigerian|lagos|abuja|kano|rivers state|anambra|enugu|kaduna|ibadan|yoruba|igbo|naira)\b/i,
+      /\b(nigeria|nigerian|lagos|abuja|kano|anambra|enugu|kaduna|ibadan|yoruba|igbo|naira)\b/i,
     ],
   ];
 
@@ -605,7 +602,9 @@ function classifyCategory(
   return "News";
 }
 
-function extractJsonLdArticleBody(html: string): string {
+function extractJsonLdArticleBody(
+  html: string
+): string {
   const scripts: string[] = [];
 
   const regex =
@@ -619,7 +618,7 @@ function extractJsonLdArticleBody(html: string): string {
 
   const bodies: string[] = [];
 
-  const walk = (value: unknown) => {
+  function walk(value: unknown): void {
     if (!value) return;
 
     if (Array.isArray(value)) {
@@ -629,12 +628,18 @@ function extractJsonLdArticleBody(html: string): string {
       return;
     }
 
-    if (typeof value !== "object") return;
+    if (
+      typeof value !== "object"
+    ) {
+      return;
+    }
 
-    const object = value as Record<string, unknown>;
+    const object =
+      value as Record<string, unknown>;
 
     if (
-      typeof object.articleBody === "string" &&
+      typeof object.articleBody ===
+        "string" &&
       wordCount(object.articleBody) >= 50
     ) {
       bodies.push(object.articleBody);
@@ -651,7 +656,7 @@ function extractJsonLdArticleBody(html: string): string {
         walk(object[key]);
       }
     }
-  };
+  }
 
   for (const raw of scripts) {
     try {
@@ -661,33 +666,41 @@ function extractJsonLdArticleBody(html: string): string {
 
       walk(parsed);
     } catch {
-      // Ignore malformed JSON-LD.
+      // Ignore invalid JSON-LD.
     }
   }
 
-  if (!bodies.length) return "";
+  if (!bodies.length) {
+    return "";
+  }
 
   bodies.sort(
-    (a, b) => wordCount(b) - wordCount(a)
+    (a, b) =>
+      wordCount(b) - wordCount(a)
   );
 
   return cleanText(bodies[0]);
 }
 
-function extractArticleContainers(html: string): string[] {
+function extractArticleContainers(
+  html: string
+): string[] {
   const candidates: string[] = [];
 
   const patterns = [
     /<article\b[^>]*>([\s\S]*?)<\/article>/gi,
+
     /<main\b[^>]*>([\s\S]*?)<\/main>/gi,
 
-    /<(?:div|section)\b[^>]*(?:class|id)=["'][^"']*(?:article-body|article__body|article-content|article__content|post-content|entry-content|story-body|story__body|content-body|c-bodyNews__article|news-content|single-content)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|section)>/gi,
+    /<(?:div|section)\b[^>]*(?:class|id)=["'][^"']*(?:article-body|article__body|article-content|article__content|post-content|entry-content|story-body|story__body|content-body|news-content|single-content)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|section)>/gi,
   ];
 
   for (const pattern of patterns) {
     let match: RegExpExecArray | null;
 
-    while ((match = pattern.exec(html)) !== null) {
+    while (
+      (match = pattern.exec(html)) !== null
+    ) {
       if (match[1]) {
         candidates.push(match[1]);
       }
@@ -697,39 +710,40 @@ function extractArticleContainers(html: string): string[] {
   return candidates;
 }
 
-function scoreArticleCandidate(
+function scoreCandidate(
   text: string,
   title: string
 ): number {
   const words = wordCount(text);
 
-  if (words < 50) return -Infinity;
+  if (words < 50) {
+    return -Infinity;
+  }
 
-  const paragraphs = text
-    .split(/\n{2,}/)
-    .filter(Boolean).length;
+  const paragraphs =
+    text.split(/\n{2,}/).filter(Boolean)
+      .length;
+
+  const lower = text.toLowerCase();
 
   const titleWords = title
     .toLowerCase()
     .split(/\s+/)
     .filter((word) => word.length > 3);
 
-  const lower = text.toLowerCase();
-
   let score =
     words * 1.5 +
-    paragraphs * 12;
+    paragraphs * 15;
 
-  for (const titleWord of titleWords) {
-    if (lower.includes(titleWord)) {
-      score += 5;
+  for (const word of titleWords) {
+    if (lower.includes(word)) {
+      score += 4;
     }
   }
 
-  const penalties = [
-    "sign up",
-    "subscribe",
+  const badPhrases = [
     "newsletter",
+    "subscribe",
     "related stories",
     "related articles",
     "most read",
@@ -742,12 +756,9 @@ function scoreArticleCandidate(
     "all rights reserved",
     "share this",
     "read next",
-    "you may also like",
-    "table of contents",
-    "live radio",
   ];
 
-  for (const phrase of penalties) {
+  for (const phrase of badPhrases) {
     if (lower.includes(phrase)) {
       score -= 100;
     }
@@ -764,11 +775,13 @@ async function fetchArticlePage(
   imageUrl: string;
 }> {
   try {
-    const controller = new AbortController();
+    const controller =
+      new AbortController();
 
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, ARTICLE_PAGE_TIMEOUT_MS);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      ARTICLE_TIMEOUT_MS
+    );
 
     const response = await fetch(url, {
       method: "GET",
@@ -776,7 +789,7 @@ async function fetchArticlePage(
       signal: controller.signal,
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (compatible; JNMuleeNewsBot/1.0; +https://jnmulee-news-jnnation.vercel.app)",
+          "Mozilla/5.0 (compatible; JNMuleeNewsBot/1.0)",
         Accept:
           "text/html,application/xhtml+xml",
       },
@@ -801,74 +814,73 @@ async function fetchArticlePage(
       };
     }
 
-    const limitedHtml =
-      html.length > MAX_ARTICLE_PAGE_CHARS
-        ? html.slice(0, MAX_ARTICLE_PAGE_CHARS)
+    const limited =
+      html.length > MAX_ARTICLE_HTML
+        ? html.slice(0, MAX_ARTICLE_HTML)
         : html;
 
-    const pageImage = extractImage(limitedHtml);
+    const imageUrl =
+      extractImage(limited);
 
-    const jsonLdBody =
-      extractJsonLdArticleBody(limitedHtml);
+    const jsonLd =
+      extractJsonLdArticleBody(limited);
 
     const candidates =
-      extractArticleContainers(limitedHtml);
+      extractArticleContainers(limited)
+        .map((candidate) =>
+          cleanText(candidate)
+        )
+        .filter(
+          (candidate) =>
+            wordCount(candidate) >= 50
+        );
 
-    const cleanedCandidates = candidates
-      .map((candidate) => cleanText(candidate))
-      .filter(
-        (candidate) =>
-          wordCount(candidate) >= 50
-      );
+    let best = "";
 
-    let bestText = "";
-
-    if (cleanedCandidates.length) {
-      cleanedCandidates.sort(
+    if (candidates.length) {
+      candidates.sort(
         (a, b) =>
-          scoreArticleCandidate(b, title) -
-          scoreArticleCandidate(a, title)
+          scoreCandidate(b, title) -
+          scoreCandidate(a, title)
       );
 
-      bestText = cleanedCandidates[0];
+      best = candidates[0];
     }
 
     if (
-      wordCount(jsonLdBody) >
-      wordCount(bestText)
+      wordCount(jsonLd) >
+      wordCount(best)
     ) {
-      bestText = jsonLdBody;
+      best = jsonLd;
     }
 
-    if (wordCount(bestText) < MIN_PAGE_WORDS) {
+    if (wordCount(best) < 100) {
       const bodyMatch =
-        limitedHtml.match(
+        limited.match(
           /<body\b[^>]*>([\s\S]*?)<\/body>/i
         );
 
       if (bodyMatch?.[1]) {
-        const bodyText = cleanText(
-          bodyMatch[1]
-        );
+        const bodyText =
+          cleanText(bodyMatch[1]);
 
         if (
           wordCount(bodyText) >
-          wordCount(bestText)
+          wordCount(best)
         ) {
-          bestText = bodyText;
+          best = bodyText;
         }
       }
     }
 
-    bestText = removeAuthorBiography(bestText);
-    bestText = removeAdvertisingText(bestText);
-    bestText = removeWebsiteFurniture(bestText);
-    bestText = removeSourceAttributionText(bestText);
-    bestText = dedupeParagraphs(bestText);
+    best = removeAuthorBiography(best);
+    best = removeAdvertising(best);
+    best = removeSourceBoilerplate(best);
+    best = dedupeParagraphs(best);
 
     return {
-      text: bestText,
-      imageUrl: pageImage,
+      text: best,
+      imageUrl,
     };
   } catch {
     return {
@@ -886,192 +898,160 @@ function buildSourceMaterial(
 
   if (pageText) {
     parts.push(
-      `FULL ARTICLE MATERIAL:\n${pageText}`
+      `FULL ARTICLE REPORTING:\n${pageText}`
     );
   }
 
   if (item.content) {
     parts.push(
-      `RSS ARTICLE MATERIAL:\n${item.content}`
+      `RSS ARTICLE CONTENT:\n${item.content}`
     );
   }
 
   if (item.description) {
     parts.push(
-      `RSS SUMMARY:\n${item.description}`
+      `RSS DESCRIPTION:\n${item.description}`
     );
   }
 
-  let combined = parts.join("\n\n");
+  let material =
+    parts.join("\n\n");
 
-  combined = removeAuthorBiography(combined);
-  combined = removeAdvertisingText(combined);
-  combined = removeWebsiteFurniture(combined);
-  combined = removeSourceAttributionText(combined);
-  combined = dedupeParagraphs(combined);
+  material =
+    removeAuthorBiography(material);
+
+  material =
+    removeAdvertising(material);
+
+  material =
+    removeSourceBoilerplate(material);
+
+  material =
+    dedupeParagraphs(material);
 
   if (
-    combined.length >
-    MAX_COMBINED_SOURCE_CHARS
+    material.length >
+    MAX_SOURCE_MATERIAL
   ) {
-    combined = combined.slice(
-      0,
-      MAX_COMBINED_SOURCE_CHARS
-    );
+    material =
+      material.slice(
+        0,
+        MAX_SOURCE_MATERIAL
+      );
   }
 
-  return combined;
+  return material;
 }
 
-function sanitizeArticleHtml(
-  html: string
-): string {
-  let output = html;
-
-  output = output.replace(
-    /<(script|style|iframe|object|embed|form|nav|header|footer|aside|noscript|svg|canvas|button|input|textarea|select|option|figure|figcaption)\b[^>]*>[\s\S]*?<\/\1>/gi,
-    ""
-  );
-
-  output = output.replace(
-    /<a\b[^>]*>([\s\S]*?)<\/a>/gi,
-    "$1"
-  );
-
-  output = output.replace(
-    /<img\b[^>]*>/gi,
-    ""
-  );
-
-  output = output.replace(
-    /<video\b[^>]*>[\s\S]*?<\/video>/gi,
-    ""
-  );
-
-  output = output.replace(
-    /<audio\b[^>]*>[\s\S]*?<\/audio>/gi,
-    ""
-  );
-
-  output = output.replace(
-    /<\/?(?!p\b|h2\b|h3\b|strong\b|em\b|ul\b|ol\b|li\b|blockquote\b|br\b)[^>]+>/gi,
-    ""
-  );
-
-  return output.trim();
-}
-
-function removeSourceAttributionHtml(
-  html: string
-): string {
-  let output = html;
-
-  output = output.replace(
-    /<p[^>]*>\s*(?:originally\s+published|original\s+source|article\s+source|source|via|courtesy|read\s+more|this\s+story\s+continues|follow\s+us|subscribe)[\s\S]*?<\/p>/gi,
-    ""
-  );
-
-  output = output.replace(
-    /<p[^>]*>\s*(?:written\s+by|by)\s+[^<]{1,180}<\/p>/gi,
-    ""
-  );
-
-  output = output.replace(
-    /<p[^>]*>\s*(?:about\s+the\s+author|author\s+bio|author\s+biography)[\s\S]*?<\/p>/gi,
-    ""
-  );
-
-  output = output.replace(
-    /https?:\/\/[^\s<>"']+/gi,
-    ""
-  );
-
-  return output.trim();
-}
-
-function cleanFinalArticleText(
+/**
+ * Additional final cleanup after AI generation.
+ */
+function cleanFinalArticle(
   value: string
 ): string {
-  let output = decodeHtml(value);
+  let text = decodeHtml(value || "");
 
-  output = removeAuthorBiography(output);
-  output = removeAdvertisingText(output);
-  output = removeWebsiteFurniture(output);
-  output = removeSourceAttributionText(output);
+  text = text
+    .replace(
+      /^(?:headline|title)\s*:\s*/i,
+      ""
+    )
+    .replace(
+      /^(?:article|story|content)\s*:\s*/i,
+      ""
+    );
 
-  output = output.replace(
-    /^(?:title|headline)\s*:\s*/i,
-    ""
-  );
+  text =
+    removeAuthorBiography(text);
 
-  output = output.replace(
-    /^(?:article|story|content)\s*:\s*/i,
-    ""
-  );
+  text =
+    removeAdvertising(text);
 
-  output = output.replace(
-    /^(?:source|sources|original source|article source)\s*:.*$/gim,
-    ""
-  );
+  text =
+    removeSourceBoilerplate(text);
 
-  output = output.replace(
+  text = text.replace(
     /https?:\/\/\S+/gi,
     ""
   );
 
-  output = output.replace(
+  text = text.replace(
     /www\.\S+/gi,
     ""
   );
 
-  output = normalizeWhitespace(output);
-  output = dedupeParagraphs(output);
+  text = normalizeWhitespace(text);
+  text = dedupeParagraphs(text);
 
-  return output;
+  return text;
 }
 
-function textToHtml(text: string): string {
-  let output = cleanFinalArticleText(text);
+function textToHtml(
+  text: string
+): string {
+  const cleaned =
+    cleanFinalArticle(text);
 
-  const blocks = output
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter(Boolean);
+  const blocks =
+    cleaned
+      .split(/\n{2,}/)
+      .map((block) => block.trim())
+      .filter(Boolean);
 
-  const htmlBlocks: string[] = [];
+  const html: string[] = [];
 
   for (const block of blocks) {
-    if (/^##\s+/.test(block)) {
-      htmlBlocks.push(
-        `<h2>${escapeHtml(
-          block.replace(/^##\s+/, "")
-        )}</h2>`
-      );
-      continue;
-    }
-
     if (/^###\s+/.test(block)) {
-      htmlBlocks.push(
+      html.push(
         `<h3>${escapeHtml(
-          block.replace(/^###\s+/, "")
+          block.replace(
+            /^###\s+/,
+            ""
+          )
         )}</h3>`
       );
       continue;
     }
 
-    if (/^[-*]\s+/.test(block)) {
-      const items = block
-        .split(/\n/)
-        .map((line) =>
-          line.replace(/^[-*]\s+/, "").trim()
-        )
-        .filter(Boolean);
+    if (/^##\s+/.test(block)) {
+      html.push(
+        `<h2>${escapeHtml(
+          block.replace(
+            /^##\s+/,
+            ""
+          )
+        )}</h2>`
+      );
+      continue;
+    }
 
-      htmlBlocks.push(
+    if (
+      block
+        .split("\n")
+        .every((line) =>
+          /^[-*]\s+/.test(line)
+        )
+    ) {
+      const items =
+        block
+          .split("\n")
+          .map((line) =>
+            line
+              .replace(
+                /^[-*]\s+/,
+                ""
+              )
+              .trim()
+          )
+          .filter(Boolean);
+
+      html.push(
         `<ul>${items
           .map(
             (item) =>
-              `<li>${escapeHtml(item)}</li>`
+              `<li>${escapeHtml(
+                item
+              )}</li>`
           )
           .join("")}</ul>`
       );
@@ -1079,132 +1059,343 @@ function textToHtml(text: string): string {
       continue;
     }
 
-    htmlBlocks.push(
+    html.push(
       `<p>${escapeHtml(
-        block.replace(/\n+/g, " ")
+        block.replace(
+          /\n+/g,
+          " "
+        )
       )}</p>`
     );
   }
 
-  return sanitizeArticleHtml(
-    removeSourceAttributionHtml(
-      htmlBlocks.join("\n")
-    )
-  );
+  return html.join("\n");
 }
 
-async function createLongOriginalArticle(
+function containsForbiddenContent(
+  text: string
+): boolean {
+  const forbidden =
+    /originally\s+published|original\s+source|article\s+source|about\s+the\s+author|author\s+bio|author\s+biography|written\s+by\s+|this\s+story\s+continues|read\s+more|follow\s+us|subscribe\s+now|advertisement|sponsored\s+content|newsletter|related\s+(?:stories|articles)|most\s+read|you\s+may\s+also\s+like|source\s*:/i;
+
+  return forbidden.test(text);
+}
+
+function qualityScore(
+  text: string
+): number {
+  const cleaned =
+    cleanFinalArticle(text);
+
+  const words =
+    wordCount(cleaned);
+
+  if (words < MIN_FINAL_WORDS) {
+    return 0;
+  }
+
+  const paragraphs =
+    cleaned
+      .split(/\n{2,}/)
+      .filter(Boolean);
+
+  let score = 50;
+
+  if (words >= 250) score += 10;
+  if (words >= 400) score += 10;
+  if (paragraphs.length >= 5)
+    score += 10;
+
+  const sentences =
+    cleaned.split(
+      /[.!?]+(?:\s+|$)/
+    );
+
+  if (sentences.length >= 8) {
+    score += 10;
+  }
+
+  if (
+    containsForbiddenContent(
+      cleaned
+    )
+  ) {
+    score -= 40;
+  }
+
+  const lower =
+    cleaned.toLowerCase();
+
+  const repeatedSentencePenalty =
+    sentences.length -
+    new Set(
+      sentences
+        .map((sentence) =>
+          sentence
+            .trim()
+            .toLowerCase()
+        )
+        .filter(Boolean)
+    ).size;
+
+  score -=
+    repeatedSentencePenalty * 15;
+
+  if (
+    lower.includes(
+      "as an ai"
+    ) ||
+    lower.includes(
+      "i cannot"
+    )
+  ) {
+    score -= 100;
+  }
+
+  return Math.max(0, score);
+}
+
+async function generateJnmuleeArticle(
   title: string,
   material: string
 ): Promise<string> {
   if (!openai) {
+    console.error(
+      "OPENAI_API_KEY is not configured."
+    );
+
     return "";
   }
 
   if (
     wordCount(material) <
-    MIN_SOURCE_WORDS_FOR_AI
+    MIN_SOURCE_WORDS
   ) {
     return "";
   }
 
   try {
     const response =
-      await openai.chat.completions.create({
-        model: AI_MODEL,
-        temperature: 0.25,
-        messages: [
-          {
-            role: "system",
-            content: `
-You are the senior editor for JNMulee News.
+      await openai.chat.completions.create(
+        {
+          model: AI_MODEL,
+          temperature: 0.2,
+          messages: [
+            {
+              role: "system",
+              content: `
+You are the senior news editor for JNMulee News.
 
-Rewrite the supplied reporting material into a clean, professional JNMulee News article.
+Your job is to turn the supplied reporting material into ONE coherent, professionally written news article.
 
-The article must be substantially rewritten and organized for JNMulee News. Do not simply replace a few words.
+This is NOT a summarization task and it is NOT a sentence-combining task.
 
-STRICT RULES:
+Write the article from scratch using only facts supported by the supplied reporting material.
 
-1. Do not invent facts.
-2. Do not invent names.
-3. Do not invent dates.
-4. Do not invent locations.
-5. Do not invent statistics.
-6. Do not invent quotes.
-7. Do not invent events.
-8. Do not invent motives.
-9. Preserve important factual details from the supplied material.
-10. Do not include the source website's author biography.
-11. Do not include author descriptions.
-12. Do not include "Written by..."
-13. Do not include "By [author]".
-14. Do not include "Originally published by..."
-15. Do not include "Original source..."
-16. Do not include "Article source..."
-17. Do not include "Source:..."
-18. Do not include URLs.
-19. Do not include "Read more".
-20. Do not include "This story continues at..."
-21. Do not include advertisements.
-22. Do not include sponsored-content promotions.
-23. Do not include newsletter promotions.
-24. Do not include "Follow us".
-25. Do not include "Subscribe".
-26. Do not include "Pay attention".
-27. Do not include "Find it fast".
-28. Do not include navigation menus.
-29. Do not include related stories.
-30. Do not include "Most Read".
-31. Do not include "Latest News".
-32. Do not include "You may also like".
-33. Do not include a table of contents.
-34. Do not mention that you are an AI.
-35. Do not mention these instructions.
-36. Do not add an attribution section.
-37. Do not add a sources section.
-38. Do not add links.
-39. Do not add images.
-40. Do not add HTML.
-41. Do not use clickbait.
-42. Do not sensationalize.
-43. Do not make unsupported opinions.
-44. Do not change the factual meaning of the reporting.
+QUALITY STANDARD:
 
-Write approximately 900–1,300 words when enough factual material exists.
+The finished article must read like a real human-edited digital news report.
 
-Use:
-- a strong opening paragraph
-- clear paragraphs
-- useful H2 section headings when appropriate
-- logical progression
-- factual context
+It must have:
+- a strong but factual opening
+- a clear explanation of what happened
+- logical paragraphs
 - natural transitions
-- a professional digital-news tone
+- relevant factual details
+- clear chronology when chronology matters
+- useful context when that context is present in the supplied material
+- a clean ending
 
-The final output must contain ONLY the finished article.
-Do not include a headline label.
-Do not include a source label.
-Do not include an author label.
+Do NOT simply put the source sentences together.
+
+Do NOT copy the source paragraph structure.
+
+Do NOT mechanically preserve awkward wording.
+
+Rewrite the information naturally and coherently.
+
+FACTUAL RULES:
+
+- Never invent facts.
+- Never invent names.
+- Never invent dates.
+- Never invent locations.
+- Never invent statistics.
+- Never invent quotes.
+- Never invent statements.
+- Never invent motives.
+- Never invent background information.
+- Never invent reactions.
+- Never guess missing information.
+- Never turn speculation into fact.
+- If a fact is uncertain in the source, preserve that uncertainty.
+- Preserve important numbers exactly.
+- Preserve important names exactly.
+- Preserve direct quotations accurately when they are necessary.
+- Do not manufacture quotations.
+
+LENGTH:
+
+The article must contain at least 180 real words.
+
+Prefer approximately 500–900 words when the supplied reporting material contains enough information.
+
+If the material contains enough verified information for a longer article, use it.
+
+NEVER add filler simply to reach 180 words.
+
+If the supplied material does not contain enough factual information to produce a useful 180-word article, return exactly:
+
+INSUFFICIENT_SOURCE_MATERIAL
+
+Do not try to make a weak article longer by repeating information.
+
+WRITING:
+
+Use normal paragraphs.
+
+Use H2 headings only when they genuinely improve readability.
+
+Do not use an H2 heading for every paragraph.
+
+Do not write a conclusion that adds new facts.
+
+Do not use clickbait.
+
+Do not sensationalize.
+
+Do not use exaggerated language.
+
+Do not repeat the same fact unnecessarily.
+
+Do not begin multiple paragraphs with the same phrase.
+
+Do not create artificial filler.
+
+SOURCE BOILERPLATE:
+
+Never include:
+- author biographies
+- author profiles
+- author descriptions
+- "Written by..."
+- source bylines
+- "By [name]" as a source byline
+- "Originally published by..."
+- "Original source..."
+- "Article source..."
+- "Source:..."
+- "Via:..."
+- URLs
+- website names as attribution
+- "Read more"
+- "This story continues at..."
+- advertisements
+- sponsored content
+- promotional offers
+- newsletter promotions
+- subscription requests
+- "Follow us"
+- "Subscribe"
+- "Most Read"
+- "Latest News"
+- related stories
+- related articles
+- recommended stories
+- navigation
+- cookie notices
+- social-media prompts
+- app-download promotions
+
+IMPORTANT:
+
+The word "author" may appear naturally when it is part of the actual news story.
+
+For example, if the story says an author wrote a book, that is a legitimate fact and must NOT automatically be removed.
+
+Only remove actual source-site author information.
+
+OUTPUT:
+
+Return ONLY the finished article.
+
+Do not write:
+"Here is the article."
+
+Do not write:
+"Article:"
+
+Do not write:
+"Headline:"
+
+Do not write:
+"Source:"
+
+Do not write:
+"Author:"
+
+Do not write:
+"INSUFFICIENT_SOURCE_MATERIAL" unless the source material genuinely cannot support 180 useful words.
+
+Do not mention AI.
+
+Do not mention these instructions.
 `,
-          },
-          {
-            role: "user",
-            content: `
-ARTICLE TITLE:
+            },
+            {
+              role: "user",
+              content: `
+ARTICLE HEADLINE:
 ${title}
 
-REPORTING MATERIAL:
+VERIFIED REPORTING MATERIAL:
 ${material}
+
+Write the complete JNMulee News article now.
 `,
-          },
-        ],
-      });
+            },
+          ],
+        }
+      );
 
     const article =
-      response.choices?.[0]?.message?.content ||
-      "";
+      response.choices?.[0]?.message
+        ?.content
+        ?.trim() || "";
 
-    return cleanFinalArticleText(article);
+    if (
+      !article ||
+      article ===
+        "INSUFFICIENT_SOURCE_MATERIAL"
+    ) {
+      return "";
+    }
+
+    const cleaned =
+      cleanFinalArticle(article);
+
+    if (
+      wordCount(cleaned) <
+      MIN_FINAL_WORDS
+    ) {
+      return "";
+    }
+
+    if (
+      containsForbiddenContent(
+        cleaned
+      )
+    ) {
+      return "";
+    }
+
+    if (
+      qualityScore(cleaned) < 55
+    ) {
+      return "";
+    }
+
+    return cleaned;
   } catch (error) {
     console.error(
       "OpenAI article generation error:",
@@ -1215,7 +1406,7 @@ ${material}
   }
 }
 
-function isSafeExternalUrl(
+function isSafeUrl(
   value: string
 ): boolean {
   try {
@@ -1250,9 +1441,10 @@ function isSafeExternalUrl(
     if (
       hostname.startsWith("172.")
     ) {
-      const second = Number(
-        hostname.split(".")[1]
-      );
+      const second =
+        Number(
+          hostname.split(".")[1]
+        );
 
       if (
         second >= 16 &&
@@ -1263,7 +1455,8 @@ function isSafeExternalUrl(
     }
 
     if (
-      hostname === "metadata.google.internal" ||
+      hostname ===
+        "metadata.google.internal" ||
       hostname.endsWith(
         ".metadata.google.internal"
       )
@@ -1277,38 +1470,43 @@ function isSafeExternalUrl(
   }
 }
 
-async function fetchText(
+async function fetchExternalText(
   url: string
 ): Promise<string> {
-  if (!isSafeExternalUrl(url)) {
+  if (!isSafeUrl(url)) {
     throw new Error(
       "Unsafe external URL"
     );
   }
 
-  const controller = new AbortController();
+  const controller =
+    new AbortController();
 
-  const timeout = setTimeout(() => {
-    controller.abort();
-  }, ARTICLE_PAGE_TIMEOUT_MS);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    ARTICLE_TIMEOUT_MS
+  );
 
   try {
-    const response = await fetch(url, {
-      method: "GET",
-      redirect: "follow",
-      signal: controller.signal,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; JNMuleeNewsBot/1.0)",
-        Accept:
-          "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9",
-      },
-      cache: "no-store",
-    });
+    const response = await fetch(
+      url,
+      {
+        method: "GET",
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (compatible; JNMuleeNewsBot/1.0)",
+          Accept:
+            "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9",
+        },
+        cache: "no-store",
+      }
+    );
 
     if (!response.ok) {
       throw new Error(
-        `Feed request failed: ${response.status}`
+        `Request failed: ${response.status}`
       );
     }
 
@@ -1319,19 +1517,21 @@ async function fetchText(
 }
 
 export async function GET() {
-  const startedAt = Date.now();
+  const startedAt =
+    Date.now();
 
   let sourcesProcessed = 0;
   let feedItemsSeen = 0;
   let articlesPublished = 0;
   let articlesSkipped = 0;
+
   let skippedNoImage = 0;
-  let skippedInsufficientContent = 0;
+  let skippedShortSource = 0;
   let skippedDuplicate = 0;
+  let skippedPoorQuality = 0;
+
   let articlePagesFetched = 0;
-  let articlePagesFailed = 0;
   let aiGenerated = 0;
-  let fallbackPublished = 0;
 
   const errors: string[] = [];
 
@@ -1370,9 +1570,7 @@ export async function GET() {
 
       if (
         !source.feed_url ||
-        !isSafeExternalUrl(
-          source.feed_url
-        )
+        !isSafeUrl(source.feed_url)
       ) {
         errors.push(
           `${source.name}: invalid feed URL`
@@ -1380,399 +1578,301 @@ export async function GET() {
         continue;
       }
 
+      let xml = "";
+
       try {
-        const xml = await fetchText(
-          source.feed_url
+        xml =
+          await fetchExternalText(
+            source.feed_url
+          );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : String(error);
+
+        errors.push(
+          `${source.name}: ${message}`
         );
 
-        const feedItems =
-          parseFeed(xml).slice(
-            0,
-            MAX_FEED_ITEMS_PER_SOURCE
-          );
+        continue;
+      }
 
-        feedItemsSeen += feedItems.length;
+      const feedItems =
+        parseFeed(xml).slice(
+          0,
+          MAX_FEED_ITEMS_PER_SOURCE
+        );
 
-        for (const item of feedItems) {
-          try {
-            const title = cleanText(
-              item.title
+      feedItemsSeen +=
+        feedItems.length;
+
+      for (const item of feedItems) {
+        try {
+          const title =
+            cleanText(item.title);
+
+          if (
+            !title ||
+            !item.link ||
+            !isSafeUrl(item.link)
+          ) {
+            articlesSkipped++;
+            continue;
+          }
+
+          /**
+           * First check whether this source URL
+           * has already been imported.
+           */
+          const {
+            data: existing,
+            error: duplicateError,
+          } = await supabase
+            .from("news")
+            .select("id")
+            .eq(
+              "source_url",
+              item.link
+            )
+            .limit(1);
+
+          if (duplicateError) {
+            console.error(
+              "Duplicate check error:",
+              duplicateError
+            );
+          }
+
+          if (
+            existing &&
+            existing.length > 0
+          ) {
+            skippedDuplicate++;
+            articlesSkipped++;
+            continue;
+          }
+
+          /**
+           * Get the complete article page whenever
+           * possible. This is important because RSS
+           * descriptions are often only a few sentences.
+           */
+          const page =
+            await fetchArticlePage(
+              item.link,
+              title
             );
 
-            if (!title || !item.link) {
-              articlesSkipped++;
-              continue;
-            }
+          articlePagesFetched++;
 
-            if (
-              !isSafeExternalUrl(
-                item.link
-              )
-            ) {
-              articlesSkipped++;
-              continue;
-            }
+          let imageUrl =
+            item.imageUrl ||
+            page.imageUrl ||
+            "";
 
-            /**
-             * IMAGE IS REQUIRED.
-             *
-             * If RSS has no image, the article page
-             * gets a chance to provide one.
-             */
-            let imageUrl =
-              item.imageUrl;
-
-            let pageText = "";
-
-            const pageResult =
-              await fetchArticlePage(
-                item.link,
-                title
-              );
-
-            articlePagesFetched++;
-
-            pageText =
-              pageResult.text;
-
-            if (
-              !imageUrl &&
-              pageResult.imageUrl
-            ) {
-              imageUrl =
-                pageResult.imageUrl;
-            }
-
-            if (
-              !imageUrl ||
-              !/^https?:\/\//i.test(
-                imageUrl
-              )
-            ) {
-              skippedNoImage++;
-              articlesSkipped++;
-              continue;
-            }
-
-            /**
-             * Make sure the article image itself
-             * is an external HTTP/HTTPS image.
-             */
-            if (
-              !isSafeExternalUrl(
-                imageUrl
-              )
-            ) {
-              skippedNoImage++;
-              articlesSkipped++;
-              continue;
-            }
-
-            const {
-              data: existing,
-              error: duplicateError,
-            } = await supabase
-              .from("news")
-              .select("id")
-              .eq(
-                "source_url",
-                item.link
-              )
-              .limit(1);
-
-            if (duplicateError) {
-              console.error(
-                "Duplicate check error:",
-                duplicateError
-              );
-            }
-
-            if (
-              existing &&
-              existing.length > 0
-            ) {
-              skippedDuplicate++;
-              articlesSkipped++;
-              continue;
-            }
-
-            const rssMaterial = [
-              item.content,
-              item.description,
-            ]
-              .filter(Boolean)
-              .join("\n\n");
-
-            const cleanedPageText =
-              cleanText(pageText);
-
-            const sourceMaterial =
-              buildSourceMaterial(
-                {
-                  ...item,
-                  title,
-                  content:
-                    cleanText(
-                      item.content
-                    ),
-                  description:
-                    cleanText(
-                      item.description
-                    ),
-                },
-                cleanedPageText
-              );
-
-            const availableWords =
-              wordCount(
-                sourceMaterial
-              );
-
-            if (
-              availableWords <
-              MIN_SOURCE_WORDS_FOR_AI &&
-              wordCount(
-                cleanedPageText
-              ) <
-                MIN_PAGE_WORDS &&
-              wordCount(
-                rssMaterial
-              ) <
-                MIN_SOURCE_WORDS_FOR_AI
-            ) {
-              skippedInsufficientContent++;
-              articlesSkipped++;
-              continue;
-            }
-
-            const category =
-              classifyCategory(
-                title,
-                sourceMaterial,
-                source.category ||
-                  item.category
-              );
-
-            const finalCategory =
-              ALLOWED_CATEGORIES.includes(
-                category
-              )
-                ? category
-                : "News";
-
-            let finalArticle = "";
-
-            if (openai) {
-              finalArticle =
-                await createLongOriginalArticle(
-                  title,
-                  sourceMaterial
-                );
-
-              if (finalArticle) {
-                aiGenerated++;
-              }
-            }
-
-            /**
-             * Fallback:
-             * only use the full cleaned article page.
-             * Never publish a tiny RSS summary.
-             */
-            if (
-              wordCount(
-                finalArticle
-              ) < MIN_FINAL_WORDS
-            ) {
-              const fallback =
-                cleanFinalArticleText(
-                  cleanedPageText
-                );
-
-              if (
-                wordCount(fallback) >=
-                MIN_FINAL_WORDS
-              ) {
-                finalArticle = fallback;
-                fallbackPublished++;
-              } else {
-                skippedInsufficientContent++;
-                articlesSkipped++;
-                continue;
-              }
-            }
-
-            /**
-             * Final safety cleanup AFTER AI.
-             * This catches unwanted text that AI may
-             * have accidentally reproduced.
-             */
-            finalArticle =
-              cleanFinalArticleText(
-                finalArticle
-              );
-
-            if (
-              wordCount(finalArticle) <
-              MIN_FINAL_WORDS
-            ) {
-              skippedInsufficientContent++;
-              articlesSkipped++;
-              continue;
-            }
-
-            const contentHtml =
-              textToHtml(finalArticle);
-
-            if (
-              wordCount(contentHtml) <
-              MIN_FINAL_WORDS
-            ) {
-              skippedInsufficientContent++;
-              articlesSkipped++;
-              continue;
-            }
-
-            /**
-             * Final article-body check.
-             *
-             * These should NEVER appear in published
-             * article content.
-             */
-            const forbiddenArticleText =
-              /originally\s+published|original\s+source|article\s+source|about\s+the\s+author|author\s+bio|author\s+biography|written\s+by|this\s+story\s+continues|read\s+more|follow\s+us|subscribe|advertisement|sponsored\s+content|pay\s+attention|find\s+it\s+fast|related\s+(?:stories|articles)|most\s+read|you\s+may\s+also\s+like/i;
-
-            if (
-              forbiddenArticleText.test(
-                contentHtml
-              )
-            ) {
-              /**
-               * Try one additional cleanup instead of
-               * publishing contaminated content.
-               */
-              finalArticle =
-                cleanFinalArticleText(
-                  finalArticle
-                );
-
-              if (
-                forbiddenArticleText.test(
-                  finalArticle
-                )
-              ) {
-                articlesSkipped++;
-                continue;
-              }
-            }
-
-            const slugBase =
-              slugify(title) ||
-              `news-${Date.now()}`;
-
-            let slug = slugBase;
-
-            const {
-              data: slugExisting,
-            } = await supabase
-              .from("news")
-              .select("id")
-              .eq("slug", slug)
-              .limit(1);
-
-            if (
-              slugExisting &&
-              slugExisting.length > 0
-            ) {
-              slug = `${slugBase}-${Date.now()
-                .toString()
-                .slice(-6)}`;
-            }
-
-            /**
-             * IMPORTANT:
-             *
-             * Source information stays in metadata,
-             * not inside article content.
-             */
-            const insertPayload = {
-              title,
-              slug,
-              content: contentHtml,
-              image_url: imageUrl,
-              Published: true,
-              source_url: item.link,
-              category: finalCategory,
-
-              content_type: "syndicated",
-              source_name:
-                source.name || null,
-              canonical_url: item.link,
-              attribution_text:
-                source.name
-                  ? `Originally published by ${source.name}`
-                  : null,
-            };
-
-            const {
-              error: insertError,
-            } = await supabase
-              .from("news")
-              .insert(insertPayload);
-
-            if (insertError) {
-              console.error(
-                "News insert error:",
-                insertError
-              );
-
-              errors.push(
-                `${title}: ${insertError.message}`
-              );
-
-              continue;
-            }
-
-            articlesPublished++;
-          } catch (itemError) {
+          /**
+           * An image is mandatory.
+           */
+          if (
+            !imageUrl ||
+            !isSafeUrl(imageUrl)
+          ) {
+            skippedNoImage++;
             articlesSkipped++;
+            continue;
+          }
 
-            const message =
-              itemError instanceof Error
-                ? itemError.message
-                : String(itemError);
+          const material =
+            buildSourceMaterial(
+              {
+                ...item,
+                title,
+              },
+              page.text
+            );
 
+          const materialWords =
+            wordCount(material);
+
+          if (
+            materialWords <
+            MIN_SOURCE_WORDS
+          ) {
+            skippedShortSource++;
+            articlesSkipped++;
+            continue;
+          }
+
+          const category =
+            classifyCategory(
+              title,
+              material,
+              source.category ||
+                item.category
+            );
+
+          const finalCategory =
+            ALLOWED_CATEGORIES.includes(
+              category
+            )
+              ? category
+              : "News";
+
+          /**
+           * AI must produce a genuinely rewritten,
+           * coherent article.
+           */
+          const article =
+            await generateJnmuleeArticle(
+              title,
+              material
+            );
+
+          if (!article) {
+            skippedPoorQuality++;
+            articlesSkipped++;
+            continue;
+          }
+
+          const finalWords =
+            wordCount(article);
+
+          if (
+            finalWords <
+            MIN_FINAL_WORDS
+          ) {
+            skippedPoorQuality++;
+            articlesSkipped++;
+            continue;
+          }
+
+          /**
+           * Final article safety check.
+           */
+          if (
+            containsForbiddenContent(
+              article
+            )
+          ) {
+            skippedPoorQuality++;
+            articlesSkipped++;
+            continue;
+          }
+
+          const content =
+            textToHtml(article);
+
+          if (
+            wordCount(content) <
+            MIN_FINAL_WORDS
+          ) {
+            skippedPoorQuality++;
+            articlesSkipped++;
+            continue;
+          }
+
+          /**
+           * Create a unique slug.
+           */
+          const slugBase =
+            slugify(title) ||
+            `news-${Date.now()}`;
+
+          let slug = slugBase;
+
+          const {
+            data: slugExisting,
+          } = await supabase
+            .from("news")
+            .select("id")
+            .eq("slug", slug)
+            .limit(1);
+
+          if (
+            slugExisting &&
+            slugExisting.length > 0
+          ) {
+            slug =
+              `${slugBase}-${Date.now()
+                .toString()
+                .slice(-7)}`;
+          }
+
+          /**
+           * Source information remains metadata.
+           *
+           * It is NOT placed inside the article body.
+           */
+          const payload = {
+            title,
+            slug,
+            content,
+            image_url: imageUrl,
+            Published: true,
+            source_url: item.link,
+            category: finalCategory,
+
+            content_type:
+              "syndicated",
+
+            source_name:
+              source.name || null,
+
+            canonical_url:
+              item.link,
+
+            attribution_text:
+              source.name
+                ? `Originally published by ${source.name}`
+                : null,
+          };
+
+          const {
+            error: insertError,
+          } = await supabase
+            .from("news")
+            .insert(payload);
+
+          if (insertError) {
             console.error(
-              "Feed item processing error:",
-              message
+              "News insert error:",
+              insertError
             );
 
             if (
               errors.length < 20
             ) {
               errors.push(
-                `${item.title || "Unknown article"}: ${message}`
+                `${title}: ${insertError.message}`
               );
             }
+
+            continue;
           }
-        }
-      } catch (sourceError) {
-        const message =
-          sourceError instanceof Error
-            ? sourceError.message
-            : String(sourceError);
 
-        console.error(
-          `Feed error for ${source.name}:`,
-          message
-        );
+          articlesPublished++;
+          aiGenerated++;
+        } catch (itemError) {
+          articlesSkipped++;
 
-        articlePagesFailed++;
+          const message =
+            itemError instanceof Error
+              ? itemError.message
+              : String(itemError);
 
-        if (errors.length < 20) {
-          errors.push(
-            `${source.name}: ${message}`
+          console.error(
+            "Article processing error:",
+            message
           );
+
+          if (
+            errors.length < 20
+          ) {
+            errors.push(
+              `${item.title || "Unknown article"}: ${message}`
+            );
+          }
         }
       }
     }
@@ -1785,7 +1885,7 @@ export async function GET() {
         success: true,
 
         message:
-          "News import completed. Only articles with images and sufficient content were published.",
+          "News import completed. Only articles with images and genuine 180+ word editorial content were published.",
 
         sourcesProcessed,
         feedItemsSeen,
@@ -1794,21 +1894,17 @@ export async function GET() {
         articlesSkipped,
 
         skippedNoImage,
-        skippedInsufficientContent,
+        skippedShortSource,
         skippedDuplicate,
+        skippedPoorQuality,
 
         articlePagesFetched,
-        articlePagesFailed,
-
         aiGenerated,
-        fallbackPublished,
 
         durationMs,
 
         errors:
-          errors.length > 0
-            ? errors.slice(0, 20)
-            : [],
+          errors.slice(0, 20),
       },
       {
         status: 200,
