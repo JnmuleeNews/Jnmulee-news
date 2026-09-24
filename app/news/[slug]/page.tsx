@@ -66,9 +66,6 @@ function decodeHtml(value: string): string {
 function sanitizeArticleHtml(value: string): string {
   let html = decodeHtml(value);
 
-  /*
-   * Remove dangerous document-level elements.
-   */
   html = html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -80,17 +77,11 @@ function sanitizeArticleHtml(value: string): string {
     .replace(/<meta[\s\S]*?>/gi, "")
     .replace(/<base[\s\S]*?>/gi, "");
 
-  /*
-   * Remove inline JavaScript event handlers.
-   */
   html = html.replace(
     /\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,
     ""
   );
 
-  /*
-   * Remove javascript:, vbscript:, and data:text/html URLs.
-   */
   html = html.replace(
     /\s+(href|src|action|formaction)\s*=\s*(["'])\s*(javascript:|vbscript:|data:text\/html)[\s\S]*?\2/gi,
     ""
@@ -129,9 +120,7 @@ function getDescription(content: string | null): string {
   return `${text.slice(0, 157).replace(/\s+\S*$/, "")}...`;
 }
 
-function getImageFromContent(
-  content: string | null
-): string | null {
+function getImageFromContent(content: string | null): string | null {
   if (!content) return null;
 
   const match = content.match(
@@ -213,6 +202,56 @@ function getWordCount(content: string | null): number {
   return plainText ? plainText.split(/\s+/).length : 0;
 }
 
+function mapArticleStory(raw: unknown): ArticleStory | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const row = raw as Record<string, unknown>;
+
+  if (
+    typeof row.id !== "string" ||
+    typeof row.slug !== "string" ||
+    typeof row.created_at !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    title: typeof row.title === "string" ? row.title : null,
+    slug: row.slug,
+    content: typeof row.content === "string" ? row.content : null,
+    image_url:
+      typeof row.image_url === "string" ? row.image_url : null,
+    Published:
+      typeof row.Published === "boolean" ? row.Published : true,
+    category:
+      typeof row.category === "string" ? row.category : null,
+    created_at: row.created_at,
+    view_count:
+      typeof row.view_count === "number"
+        ? row.view_count
+        : null,
+    content_type:
+      typeof row.content_type === "string"
+        ? row.content_type
+        : null,
+    source_name:
+      typeof row.source_name === "string"
+        ? row.source_name
+        : null,
+    canonical_url:
+      typeof row.canonical_url === "string"
+        ? row.canonical_url
+        : null,
+    attribution_text:
+      typeof row.attribution_text === "string"
+        ? row.attribution_text
+        : null,
+  };
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -220,7 +259,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
 
-  const { data } = await supabase
+  const result = await supabase
     .from("news")
     .select(
       `
@@ -239,7 +278,13 @@ export async function generateMetadata({
     .eq("Published", true)
     .maybeSingle();
 
-  if (!data) {
+  const rawData = result.data as unknown;
+  const row =
+    rawData && typeof rawData === "object"
+      ? (rawData as Record<string, unknown>)
+      : null;
+
+  if (!row) {
     return {
       title: "Article Not Found | JNMulee News",
       description: "The requested article could not be found.",
@@ -250,15 +295,43 @@ export async function generateMetadata({
     };
   }
 
-  const story = data as unknown as ArticleStory;
+  const title =
+    typeof row.title === "string"
+      ? row.title
+      : "JNMulee News";
 
-  const title = story.title || "JNMulee News";
-  const description = getDescription(story.content);
-  const canonicalUrl = `${SITE_URL}/news/${story.slug}`;
+  const content =
+    typeof row.content === "string"
+      ? row.content
+      : null;
+
+  const slugValue =
+    typeof row.slug === "string"
+      ? row.slug
+      : slug;
+
+  const categoryValue =
+    typeof row.category === "string"
+      ? row.category
+      : null;
+
+  const createdAt =
+    typeof row.created_at === "string"
+      ? row.created_at
+      : new Date().toISOString();
+
+  const sourceName =
+    typeof row.source_name === "string"
+      ? row.source_name
+      : null;
 
   const image =
-    story.image_url ||
-    getImageFromContent(story.content || "");
+    typeof row.image_url === "string"
+      ? row.image_url
+      : getImageFromContent(content);
+
+  const description = getDescription(content);
+  const canonicalUrl = `${SITE_URL}/news/${slugValue}`;
 
   return {
     metadataBase: new URL(SITE_URL),
@@ -270,8 +343,8 @@ export async function generateMetadata({
     keywords: [
       "JNMulee News",
       "news",
-      formatCategory(story.category),
-      ...(story.source_name ? [story.source_name] : []),
+      formatCategory(categoryValue),
+      ...(sourceName ? [sourceName] : []),
     ],
 
     alternates: {
@@ -292,8 +365,8 @@ export async function generateMetadata({
       url: canonicalUrl,
       siteName: "JNMulee News",
       type: "article",
-      publishedTime: story.created_at,
-      section: formatCategory(story.category),
+      publishedTime: createdAt,
+      section: formatCategory(categoryValue),
       images: image
         ? [
             {
@@ -325,7 +398,7 @@ export default async function NewsArticlePage({
   const { slug } = await params;
   const query = await searchParams;
 
-  const { data, error } = await supabase
+  const result = await supabase
     .from("news")
     .select(
       `
@@ -348,13 +421,11 @@ export default async function NewsArticlePage({
     .eq("Published", true)
     .maybeSingle();
 
-  if (error || !data) {
-    notFound();
-  }
+  const story = mapArticleStory(
+    result.data as unknown
+  );
 
-  const story = data as unknown as ArticleStory;
-
-  if (!story) {
+  if (result.error || !story) {
     notFound();
   }
 
@@ -369,9 +440,6 @@ export default async function NewsArticlePage({
 
   const articleUrl = `${SITE_URL}/news/${story.slug}`;
 
-  /*
-   * Comments
-   */
   const { data: commentsData } = await supabase
     .from("comments")
     .select("id,name,comment,created_at")
@@ -382,9 +450,6 @@ export default async function NewsArticlePage({
 
   const comments = (commentsData || []) as Comment[];
 
-  /*
-   * Related stories.
-   */
   let relatedStories: RelatedStory[] = [];
 
   if (story.category) {
@@ -404,10 +469,6 @@ export default async function NewsArticlePage({
     relatedStories = (relatedData || []) as RelatedStory[];
   }
 
-  /*
-   * If the category does not have enough stories, fill the
-   * remaining slots with the latest published stories.
-   */
   if (relatedStories.length < 6) {
     const existingIds = new Set(
       relatedStories.map((item) => item.id)
@@ -443,9 +504,6 @@ export default async function NewsArticlePage({
         ? "error"
         : null;
 
-  /*
-   * NewsArticle structured data.
-   */
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "NewsArticle",
@@ -485,7 +543,10 @@ export default async function NewsArticlePage({
   async function postComment(formData: FormData) {
     "use server";
 
-    const name = String(formData.get("name") || "").trim();
+    const name = String(
+      formData.get("name") || ""
+    ).trim();
+
     const comment = String(
       formData.get("comment") || ""
     ).trim();
@@ -503,30 +564,38 @@ export default async function NewsArticlePage({
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
 
-    const { data: article } = await commentClient
+    const articleResult = await commentClient
       .from("news")
       .select("id")
       .eq("slug", slug)
       .eq("Published", true)
       .maybeSingle();
 
-    if (!article?.id) {
+    const articleData = articleResult.data as unknown;
+
+    const article =
+      articleData && typeof articleData === "object"
+        ? (articleData as Record<string, unknown>)
+        : null;
+
+    const articleId =
+      article && typeof article.id === "string"
+        ? article.id
+        : null;
+
+    if (!articleId) {
       redirect(`/news/${slug}?comment=error`);
     }
 
     const { error: insertError } = await commentClient
       .from("comments")
       .insert({
-        news_id: article.id,
+        news_id: articleId,
         name,
         comment,
         approved: false,
       });
 
-    /*
-     * The database trigger handles automatic approval of
-     * acceptable comments and blocks prohibited content.
-     */
     if (insertError) {
       redirect(`/news/${slug}?comment=error`);
     }
@@ -761,9 +830,10 @@ export default async function NewsArticlePage({
           color: #20242b;
           font-size: 19px;
           line-height: 1.82;
+          overflow-wrap: anywhere;
         }
 
-        .articleBody :global(p) {
+        .articleBody p {
           margin: 0 0 1.35em;
         }
 
@@ -1241,7 +1311,10 @@ export default async function NewsArticlePage({
           </form>
         </div>
 
-        <nav className="categoryNav" aria-label="Main navigation">
+        <nav
+          className="categoryNav"
+          aria-label="Main navigation"
+        >
           <div className="container categoryNavInner">
             <Link href="/">Home</Link>
             <Link href="/category/news">News</Link>
@@ -1262,8 +1335,13 @@ export default async function NewsArticlePage({
 
       <div className="breakingBar">
         <div className="container breakingInner">
-          <span className="breakingLabel">LATEST</span>
-          <span>JNMulee News — Latest stories and updates</span>
+          <span className="breakingLabel">
+            LATEST
+          </span>
+
+          <span>
+            JNMulee News — Latest stories and updates
+          </span>
         </div>
       </div>
 
@@ -1273,9 +1351,11 @@ export default async function NewsArticlePage({
             <div className="breadcrumb">
               <Link href="/">Home</Link>
               <span>›</span>
+
               <Link href={categoryHref(story.category)}>
                 {category}
               </Link>
+
               <span>›</span>
               <span>Article</span>
             </div>
@@ -1288,7 +1368,9 @@ export default async function NewsArticlePage({
                 {category}
               </Link>
 
-              <h1 className="articleTitle">{title}</h1>
+              <h1 className="articleTitle">
+                {title}
+              </h1>
 
               <p className="articleDescription">
                 {getDescription(content)}
@@ -1296,21 +1378,29 @@ export default async function NewsArticlePage({
 
               <div className="articleMeta">
                 <span>
-                  Published <strong>{formatDate(story.created_at)}</strong>
+                  Published{" "}
+                  <strong>
+                    {formatDate(story.created_at)}
+                  </strong>
                 </span>
 
                 <span>•</span>
 
-                <span>{readingTime} min read</span>
+                <span>
+                  {readingTime} min read
+                </span>
 
                 <span>•</span>
 
-                <span>{wordCount.toLocaleString()} words</span>
+                <span>
+                  {wordCount.toLocaleString()} words
+                </span>
 
                 {story.view_count !== null &&
                   story.view_count !== undefined && (
                     <>
                       <span>•</span>
+
                       <span>
                         {story.view_count.toLocaleString()} views
                       </span>
@@ -1337,16 +1427,18 @@ export default async function NewsArticlePage({
                 <div className="attribution">
                   {story.attribution_text ||
                     `Originally published by ${story.source_name}`}
+
                   {story.canonical_url && (
                     <>
                       {" "}
-                      <Link
+
+                      <a
                         href={story.canonical_url}
                         target="_blank"
                         rel="noopener noreferrer nofollow"
                       >
                         View original
-                      </Link>
+                      </a>
                     </>
                   )}
                 </div>
@@ -1368,17 +1460,22 @@ export default async function NewsArticlePage({
 
                   <p className="sourceBoxText">
                     This story was originally published by{" "}
-                    <strong>{story.source_name}</strong>.
+                    <strong>
+                      {story.source_name}
+                    </strong>
+                    .
+
                     {story.canonical_url && (
                       <>
                         {" "}
-                        <Link
+
+                        <a
                           href={story.canonical_url}
                           target="_blank"
                           rel="noopener noreferrer nofollow"
                         >
                           Read the original story
-                        </Link>
+                        </a>
                         .
                       </>
                     )}
@@ -1419,12 +1516,15 @@ export default async function NewsArticlePage({
 
             {commentStatus === "error" && (
               <div className="commentStatus commentError">
-                Your comment could not be posted. Please check
-                your name and comment and try again.
+                Your comment could not be posted. Please
+                check your name and comment and try again.
               </div>
             )}
 
-            <form action={postComment} className="commentForm">
+            <form
+              action={postComment}
+              className="commentForm"
+            >
               <input
                 type="text"
                 name="name"
@@ -1460,7 +1560,9 @@ export default async function NewsArticlePage({
                     </p>
 
                     <p className="commentDate">
-                      {formatDateTime(comment.created_at)}
+                      {formatDateTime(
+                        comment.created_at
+                      )}
                     </p>
 
                     <p className="commentText">
@@ -1471,8 +1573,8 @@ export default async function NewsArticlePage({
               </div>
             ) : (
               <p className="noComments">
-                No comments yet. Be the first to join the
-                conversation.
+                No comments yet. Be the first to join
+                the conversation.
               </p>
             )}
           </section>
@@ -1486,34 +1588,42 @@ export default async function NewsArticlePage({
               </h2>
 
               <div className="relatedGrid">
-                {relatedStories.slice(0, 6).map((related) => (
-                  <Link
-                    href={`/news/${related.slug}`}
-                    className="relatedCard"
-                    key={related.id}
-                  >
-                    {related.image_url && (
-                      <div className="relatedImage">
-                        <Image
-                          src={related.image_url}
-                          alt={related.title || "News story"}
-                          fill
-                          sizes="(max-width: 700px) 100vw, 33vw"
-                        />
+                {relatedStories
+                  .slice(0, 6)
+                  .map((related) => (
+                    <Link
+                      href={`/news/${related.slug}`}
+                      className="relatedCard"
+                      key={related.id}
+                    >
+                      {related.image_url && (
+                        <div className="relatedImage">
+                          <Image
+                            src={related.image_url}
+                            alt={
+                              related.title ||
+                              "News story"
+                            }
+                            fill
+                            sizes="(max-width: 700px) 100vw, 33vw"
+                          />
+                        </div>
+                      )}
+
+                      <div className="relatedBody">
+                        <span className="relatedCategory">
+                          {formatCategory(
+                            related.category
+                          )}
+                        </span>
+
+                        <h3 className="relatedTitle">
+                          {related.title ||
+                            "Read more"}
+                        </h3>
                       </div>
-                    )}
-
-                    <div className="relatedBody">
-                      <span className="relatedCategory">
-                        {formatCategory(related.category)}
-                      </span>
-
-                      <h3 className="relatedTitle">
-                        {related.title || "Read more"}
-                      </h3>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  ))}
               </div>
             </section>
           )}
@@ -1576,24 +1686,29 @@ export default async function NewsArticlePage({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(structuredData),
+          __html: JSON.stringify(
+            structuredData
+          ),
         }}
       />
 
-      <ArticleViewTracker articleId={story.id} />
+      {/* IMPORTANT: ArticleViewTracker expects newsId */}
+      <ArticleViewTracker newsId={story.id} />
 
       <footer className="siteFooter">
         <div className="container">
           <div className="footerLinks">
             <Link href="/about">About</Link>
             <Link href="/contact">Contact</Link>
-            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/privacy">
+              Privacy Policy
+            </Link>
             <Link href="/terms">Terms</Link>
           </div>
 
           <p className="footerCopyright">
-            © {new Date().getFullYear()} JNMulee News. All rights
-            reserved.
+            © {new Date().getFullYear()} JNMulee News.
+            All rights reserved.
           </p>
         </div>
       </footer>
