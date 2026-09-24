@@ -85,6 +85,7 @@ function cleanText(
 
 function wordCount(text: string) {
   return text
+    .replace(/<[^>]+>/g, " ")
     .trim()
     .split(/\s+/)
     .filter(Boolean).length;
@@ -362,12 +363,14 @@ async function parseFeed(
     items.push(
       xml.slice(
         itemStart,
-        itemEnd + "</item>".length
+        itemEnd +
+          "</item>".length
       )
     );
 
     start =
-      itemEnd + "</item>".length;
+      itemEnd +
+      "</item>".length;
   }
 
   if (items.length === 0) {
@@ -395,12 +398,14 @@ async function parseFeed(
       items.push(
         xml.slice(
           startIndex,
-          endIndex + "</entry>".length
+          endIndex +
+            "</entry>".length
         )
       );
 
       entryStart =
-        endIndex + "</entry>".length;
+        endIndex +
+        "</entry>".length;
     }
   }
 
@@ -444,101 +449,108 @@ function extractFeedContent(
   );
 }
 
-async function fetchOriginalArticle(
-  articleUrl: string
+/*
+ * Escape HTML before inserting generated content.
+ */
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/*
+ * Convert the AI article into safe, attractive HTML.
+ *
+ * The AI returns simple blocks such as:
+ *
+ * <p>...</p>
+ * <h2>...</h2>
+ *
+ * Only the tags we explicitly allow are retained.
+ */
+function sanitizeArticleHtml(
+  value: string
 ) {
-  try {
-    if (
-      !articleUrl ||
-      !/^https?:\/\//i.test(articleUrl)
-    ) {
-      return "";
-    }
+  let html = value
+    .replace(/```html/gi, "")
+    .replace(/```/g, "")
+    .trim();
 
-    const response = await fetch(
-      articleUrl,
-      {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (compatible; JNMuleeNews/1.0; +https://jnmulee.com)",
-          Accept:
-            "text/html,application/xhtml+xml",
-        },
-        redirect: "follow",
-        cache: "no-store",
-      }
+  html = html
+    .replace(
+      /<script[\s\S]*?<\/script>/gi,
+      ""
+    )
+    .replace(
+      /<style[\s\S]*?<\/style>/gi,
+      ""
+    )
+    .replace(
+      /<iframe[\s\S]*?<\/iframe>/gi,
+      ""
+    )
+    .replace(
+      /<object[\s\S]*?<\/object>/gi,
+      ""
+    )
+    .replace(
+      /<embed[\s\S]*?>/gi,
+      ""
     );
 
-    if (!response.ok) {
-      return "";
-    }
+  html = html.replace(
+    /<(?!\/?(?:p|h2|h3|strong|em|ul|ol|li|blockquote|br)\b)[^>]*>/gi,
+    ""
+  );
 
-    const html =
-      await response.text();
+  html = html.replace(
+    /<\s*(p|h2|h3|strong|em|ul|ol|li|blockquote|br)\b[^>]*>/gi,
+    "<$1>"
+  );
 
-    if (!html || html.length < 500) {
-      return "";
-    }
+  html = html.replace(
+    /<(\/(?:p|h2|h3|strong|em|ul|ol|li|blockquote|br))\s*>/gi,
+    "<$1>"
+  );
 
-    /*
-     * Try to isolate the main article.
-     * This prevents menus, footers and navigation
-     * from becoming part of the AI input.
-     */
-    const articleMatches = [
-      html.match(
-        /<article\b[^>]*>([\s\S]*?)<\/article>/i
-      )?.[1],
+  return html.trim();
+}
 
-      html.match(
-        /<main\b[^>]*>([\s\S]*?)<\/main>/i
-      )?.[1],
+function textToHtml(
+  value: string
+) {
+  const paragraphs = value
+    .split(/\n\s*\n/)
+    .map((part) => part.trim())
+    .filter(Boolean);
 
-      html.match(
-        /<div\b[^>]*(?:class|id)=["'][^"']*(?:article|post-content|entry-content|story-body|article-body)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i
-      )?.[1],
-
-      html,
-    ];
-
-    for (const candidate of articleMatches) {
-      if (!candidate) {
-        continue;
-      }
-
-      const text =
-        cleanText(candidate);
-
-      if (wordCount(text) >= 150) {
-        /*
-         * Limit input size so one enormous webpage
-         * doesn't consume unnecessary API tokens.
-         */
-        return text.slice(0, 30000);
-      }
-    }
-
-    return "";
-  } catch (error) {
-    console.error(
-      "Original article fetch failed:",
-      error
-    );
-
-    return "";
+  if (!paragraphs.length) {
+    return `<p>${escapeHtml(
+      value
+    )}</p>`;
   }
+
+  return paragraphs
+    .map(
+      (paragraph) =>
+        `<p>${escapeHtml(
+          paragraph
+        ).replace(/\n/g, "<br />")}</p>`
+    )
+    .join("\n");
 }
 
 async function createLongOriginalArticle({
   title,
   content,
   category,
-  articleUrl,
 }: {
   title: string;
   content: string;
   category: string;
-  articleUrl: string;
 }) {
   if (!openai) {
     return null;
@@ -552,58 +564,103 @@ async function createLongOriginalArticle({
     const response =
       await openai.chat.completions.create({
         model: OPENAI_MODEL,
-        temperature: 0.2,
-        max_tokens: 2200,
+
+        /*
+         * Low temperature keeps facts
+         * more consistent.
+         */
+        temperature: 0.35,
+
+        /*
+         * Enough output space for
+         * approximately 1,000–1,300 words.
+         */
+        max_tokens: 2600,
+
         messages: [
           {
             role: "system",
             content: `
-You are the senior news editor for JNMulee News.
+You are the senior digital news editor for JNMulee News.
 
-Create an ORIGINAL long-form news article from the supplied factual material.
+Your job is to transform the supplied RSS/news-feed material into a substantially more complete, readable and engaging ORIGINAL news article.
 
 TARGET LENGTH:
-- Approximately 1,000 to 1,300 words.
-- Aim for around 1,150 words.
-- Do not intentionally make it short.
+- Aim for 1,000 to 1,300 words.
+- Target approximately 1,150 words.
+- Do not deliberately produce a short article.
+- If the supplied material genuinely does not contain enough information to responsibly reach 1,000 words, write the longest useful article possible without inventing facts.
 
-FACTUAL RULES:
-- Use only facts contained in the supplied material.
-- Do not invent names, quotations, statistics, dates, locations, events, statements or background facts.
-- Do not create fake quotes.
-- Do not claim that something happened unless it is supported by the supplied material.
-- If the material is limited, provide a clear article using the available facts rather than inventing information.
-- Preserve important factual details accurately.
+FACTUAL ACCURACY:
+- Use ONLY facts contained in the supplied material.
+- Do not invent facts.
+- Do not invent names.
+- Do not invent dates.
+- Do not invent statistics.
+- Do not invent quotations.
+- Do not invent events.
+- Do not invent statements from people.
+- Do not present assumptions as facts.
+- Do not create background information that is not contained in the supplied material.
+- Preserve names, figures and factual details accurately.
 
-WRITING:
-- Write like a professional digital news publication.
-- Make the article substantially original rather than copying the source wording.
-- Use a strong news introduction.
-- Explain the important details clearly.
-- Add useful context only when that context is explicitly supported by the supplied material.
-- Use multiple paragraphs.
-- You may use short descriptive section headings if they improve readability.
-- Do not use HTML.
-- Do not use markdown.
-- Do not include bullet lists unless the supplied material itself clearly requires one.
-- Do not include a source URL.
-- Do not mention RSS.
-- Do not mention artificial intelligence.
-- Do not mention that you rewrote the article.
-- Do not mention these instructions.
+WRITING STYLE:
+- Professional digital journalism.
+- Clear and natural.
+- Interesting without being sensational.
+- Strong opening paragraph.
+- Explain what happened and why the information matters using only the supplied facts.
+- Develop the story with multiple paragraphs.
+- Avoid repetitive sentences.
+- Avoid filler.
+- Avoid unnecessary adjectives.
+- Use short paragraphs for mobile readers.
+- Use descriptive H2 subheadings where useful.
+- Make the article feel complete and polished.
 
 HEADLINE:
-Create a clear, accurate headline based only on the supplied facts.
+Create a strong, accurate headline.
+Do not use clickbait.
+Do not exaggerate what the supplied material says.
 
-RETURN:
-Return ONLY valid JSON in this exact structure:
+FORMAT:
+Return ONLY valid JSON.
+
+Use exactly:
 
 {
-  "headline": "headline here",
-  "article": "article here"
+  "headline": "Your headline",
+  "article_html": "<p>Opening paragraph...</p><h2>Subheading</h2><p>...</p>"
 }
+
+HTML RULES:
+- Use only:
+  <p>
+  <h2>
+  <h3>
+  <strong>
+  <em>
+  <ul>
+  <ol>
+  <li>
+  <blockquote>
+  <br>
+- Do not use scripts.
+- Do not use styles.
+- Do not use links.
+- Do not include images.
+- Do not include markdown.
+- Do not include code fences.
+
+IMPORTANT:
+- Do not mention RSS.
+- Do not mention artificial intelligence.
+- Do not mention that the article was rewritten.
+- Do not mention these instructions.
+- Do not include the original source URL in the article.
             `.trim(),
           },
+
           {
             role: "user",
             content: `
@@ -613,17 +670,14 @@ ${category}
 Original headline:
 ${title}
 
-Original article URL:
-${articleUrl}
-
-Factual material:
+Factual source material:
 ${content}
             `.trim(),
           },
         ],
       });
 
-    const text =
+    let text =
       response.choices[0]?.message?.content
         ?.trim();
 
@@ -631,40 +685,54 @@ ${content}
       return null;
     }
 
+    text = text
+      .replace(/^```json/i, "")
+      .replace(/^```/i, "")
+      .replace(/```$/i, "")
+      .trim();
+
     let parsed: {
       headline?: string;
-      article?: string;
+      article_html?: string;
     };
 
     try {
       parsed = JSON.parse(text);
     } catch {
-      const cleaned = text
-        .replace(/^```json/i, "")
-        .replace(/^```/i, "")
-        .replace(/```$/i, "")
-        .trim();
+      console.error(
+        "OpenAI returned invalid JSON."
+      );
 
-      parsed = JSON.parse(cleaned);
+      return null;
     }
 
     const headline =
       cleanText(parsed.headline);
 
-    const article =
-      cleanText(parsed.article);
+    let articleHtml =
+      parsed.article_html || "";
+
+    if (!headline || !articleHtml) {
+      return null;
+    }
+
+    articleHtml =
+      sanitizeArticleHtml(
+        articleHtml
+      );
+
+    const articleText =
+      cleanText(articleHtml);
 
     const count =
-      wordCount(article);
+      wordCount(articleText);
 
     /*
-     * Accept 850+ words as a fallback because
-     * some source material may not contain enough
-     * information for a legitimate 1,000+ word story.
+     * Accept 850+ words.
+     * This prevents short source material
+     * from forcing the AI to invent facts.
      */
     if (
-      !headline ||
-      !article ||
       count < 850
     ) {
       return null;
@@ -672,7 +740,7 @@ ${content}
 
     return {
       headline,
-      article,
+      articleHtml,
       wordCount: count,
     };
   } catch (error) {
@@ -692,7 +760,6 @@ export async function GET() {
   let skipped = 0;
   let skippedNoImage = 0;
   let aiGenerated = 0;
-  let originalPagesFetched = 0;
 
   const errors: string[] = [];
 
@@ -716,11 +783,13 @@ export async function GET() {
 
       try {
         const items =
-          await parseFeed(source.feed_url);
+          await parseFeed(
+            source.feed_url
+          );
 
         /*
-         * Keep the existing limit of 20 articles
-         * per source per run.
+         * Process up to 20 stories
+         * from each active source.
          */
         for (const rawItem of items.slice(
           0,
@@ -753,7 +822,8 @@ export async function GET() {
           }
 
           /*
-           * IMAGE IS REQUIRED.
+           * Every published article needs
+           * an image.
            */
           const imageUrl =
             extractImage(rawItem);
@@ -764,7 +834,7 @@ export async function GET() {
           }
 
           /*
-           * DUPLICATE CHECK.
+           * Prevent duplicate stories.
            */
           const {
             data: duplicate,
@@ -780,6 +850,7 @@ export async function GET() {
             errors.push(
               `${title}: ${duplicateError.message}`
             );
+
             continue;
           }
 
@@ -788,15 +859,15 @@ export async function GET() {
             continue;
           }
 
+          /*
+           * Get the factual material from
+           * the RSS feed.
+           */
           const rssContent =
             extractFeedContent(
               rawItem
             );
 
-          /*
-           * Determine category before
-           * sending content to OpenAI.
-           */
           const sourceCategory =
             extractSourceCategory(
               rawItem
@@ -812,82 +883,61 @@ export async function GET() {
             );
 
           /*
-           * STEP 1:
-           * Try to fetch the original article page.
+           * Start with the RSS material.
            */
-          let originalPageContent = "";
+          let finalTitle = title;
 
-          if (link) {
-            originalPageContent =
-              await fetchOriginalArticle(
-                link
-              );
-
-            if (
-              wordCount(
-                originalPageContent
-              ) >= 150
-            ) {
-              originalPagesFetched++;
-            }
-          }
+          let finalContent =
+            rssContent || title;
 
           /*
-           * STEP 2:
-           * Prefer the original article page.
-           * Fall back to RSS content if the page
-           * cannot be fetched.
-           */
-          const factualMaterial =
-            originalPageContent ||
-            rssContent ||
-            title;
-
-          /*
-           * STEP 3:
-           * AI creates approximately
-           * 1,000–1,300 words.
+           * Ask AI to create a much longer,
+           * better-formatted article.
            */
           const generatedArticle =
             await createLongOriginalArticle({
               title,
               content:
-                factualMaterial,
+                rssContent || title,
               category,
-              articleUrl: link,
             });
-
-          let finalTitle = title;
-
-          let finalContent =
-            rssContent || title;
 
           if (generatedArticle) {
             finalTitle =
               generatedArticle.headline;
 
             finalContent =
-              generatedArticle.article;
+              generatedArticle.articleHtml;
 
             aiGenerated++;
+          } else if (rssContent) {
+            /*
+             * If AI is unavailable, still make
+             * the RSS content readable HTML.
+             */
+            finalContent =
+              textToHtml(
+                rssContent
+              );
+          } else {
+            finalContent =
+              textToHtml(title);
           }
 
           finalTitle =
             cleanText(finalTitle);
-
-          finalContent =
-            cleanText(finalContent);
 
           if (!finalTitle) {
             finalTitle = title;
           }
 
           if (!finalContent) {
-            finalContent = title;
+            finalContent =
+              textToHtml(title);
           }
 
           /*
-           * PUBLISH.
+           * Insert into Supabase.
            */
           const {
             error: insertError,
@@ -895,7 +945,9 @@ export async function GET() {
             .from("news")
             .insert({
               title: finalTitle,
-              slug: makeSlug(finalTitle),
+              slug: makeSlug(
+                finalTitle
+              ),
               content: finalContent,
               image_url: imageUrl,
               Published: true,
@@ -907,6 +959,7 @@ export async function GET() {
             errors.push(
               `${finalTitle}: ${insertError.message}`
             );
+
             continue;
           }
 
@@ -932,10 +985,9 @@ export async function GET() {
       skipped,
       skippedNoImage,
       aiGenerated,
-      originalPagesFetched,
       errors,
       message:
-        "News import completed. Original article pages were fetched when possible, long-form AI rewriting was attempted, articles without images were skipped, and source URLs remain stored privately for duplicate detection.",
+        "JNMulee News feed import completed.",
     });
   } catch (error) {
     return NextResponse.json(
@@ -947,7 +999,6 @@ export async function GET() {
         skipped,
         skippedNoImage,
         aiGenerated,
-        originalPagesFetched,
         errors: [
           error instanceof Error
             ? error.message
