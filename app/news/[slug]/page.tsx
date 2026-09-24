@@ -30,10 +30,6 @@ type ArticleStory = {
   category: string | null;
   created_at: string;
   view_count: number | null;
-  content_type: string | null;
-  source_name: string | null;
-  canonical_url: string | null;
-  attribution_text: string | null;
 };
 
 type RelatedStory = {
@@ -91,6 +87,43 @@ function sanitizeArticleHtml(value: string): string {
     /\s+(href|src|action|formaction)\s*=\s*(javascript:|vbscript:|data:text\/html)[^\s>]*/gi,
     ""
   );
+
+  /*
+   * Remove obvious imported byline/source blocks from the
+   * visible article body.
+   *
+   * These patterns are intentionally narrow so normal mentions
+   * of people, authors, journalists, companies, etc. remain.
+   */
+
+  html = html
+    .replace(
+      /<(p|div|span|strong|em)[^>]*>\s*(?:by|written by|author)\s+[^<]{1,160}<\/\1>/gi,
+      ""
+    )
+    .replace(
+      /<(p|div|span)[^>]*>\s*(?:originally published by|source\s*:|read the original story|view original)\b[\s\S]*?<\/\1>/gi,
+      ""
+    )
+    .replace(
+      /<a[^>]*>\s*(?:read the original story|view original|original story)\s*<\/a>/gi,
+      ""
+    );
+
+  /*
+   * Remove common source-site boilerplate that sometimes
+   * arrives inside RSS/article HTML.
+   */
+
+  html = html
+    .replace(
+      /<(p|div|section)[^>]*>\s*(?:this story was originally published by|this article was originally published by)[\s\S]*?<\/\1>/gi,
+      ""
+    )
+    .replace(
+      /<(p|div|section)[^>]*>\s*(?:continue reading|read more|follow us|subscribe to our newsletter|sign up for our newsletter)[\s\S]*?<\/\1>/gi,
+      ""
+    );
 
   return html.trim();
 }
@@ -233,22 +266,6 @@ function mapArticleStory(raw: unknown): ArticleStory | null {
       typeof row.view_count === "number"
         ? row.view_count
         : null,
-    content_type:
-      typeof row.content_type === "string"
-        ? row.content_type
-        : null,
-    source_name:
-      typeof row.source_name === "string"
-        ? row.source_name
-        : null,
-    canonical_url:
-      typeof row.canonical_url === "string"
-        ? row.canonical_url
-        : null,
-    attribution_text:
-      typeof row.attribution_text === "string"
-        ? row.attribution_text
-        : null,
   };
 }
 
@@ -268,10 +285,7 @@ export async function generateMetadata({
         content,
         image_url,
         category,
-        created_at,
-        content_type,
-        source_name,
-        canonical_url
+        created_at
       `
     )
     .eq("slug", slug)
@@ -279,6 +293,7 @@ export async function generateMetadata({
     .maybeSingle();
 
   const rawData = result.data as unknown;
+
   const row =
     rawData && typeof rawData === "object"
       ? (rawData as Record<string, unknown>)
@@ -320,18 +335,15 @@ export async function generateMetadata({
       ? row.created_at
       : new Date().toISOString();
 
-  const sourceName =
-    typeof row.source_name === "string"
-      ? row.source_name
-      : null;
-
   const image =
     typeof row.image_url === "string"
       ? row.image_url
       : getImageFromContent(content);
 
   const description = getDescription(content);
-  const canonicalUrl = `${SITE_URL}/news/${slugValue}`;
+
+  const canonicalUrl =
+    `${SITE_URL}/news/${slugValue}`;
 
   return {
     metadataBase: new URL(SITE_URL),
@@ -344,7 +356,6 @@ export async function generateMetadata({
       "JNMulee News",
       "news",
       formatCategory(categoryValue),
-      ...(sourceName ? [sourceName] : []),
     ],
 
     alternates: {
@@ -367,6 +378,7 @@ export async function generateMetadata({
       type: "article",
       publishedTime: createdAt,
       section: formatCategory(categoryValue),
+
       images: image
         ? [
             {
@@ -380,10 +392,14 @@ export async function generateMetadata({
     },
 
     twitter: {
-      card: image ? "summary_large_image" : "summary",
+      card: image
+        ? "summary_large_image"
+        : "summary",
       title,
       description,
-      images: image ? [image] : undefined,
+      images: image
+        ? [image]
+        : undefined,
     },
   };
 }
@@ -396,6 +412,7 @@ export default async function NewsArticlePage({
   searchParams: Promise<{ comment?: string }>;
 }) {
   const { slug } = await params;
+
   const query = await searchParams;
 
   const result = await supabase
@@ -410,11 +427,7 @@ export default async function NewsArticlePage({
         Published,
         category,
         created_at,
-        view_count,
-        content_type,
-        source_name,
-        canonical_url,
-        attribution_text
+        view_count
       `
     )
     .eq("slug", slug)
@@ -429,71 +442,105 @@ export default async function NewsArticlePage({
     notFound();
   }
 
-  const title = story.title || "JNMulee News";
-  const content = story.content || "";
-  const category = formatCategory(story.category);
+  const title =
+    story.title || "JNMulee News";
 
-  const safeContent = sanitizeArticleHtml(content);
+  const content =
+    story.content || "";
 
-  const readingTime = estimateReadingTime(content);
-  const wordCount = getWordCount(content);
+  const category =
+    formatCategory(story.category);
 
-  const articleUrl = `${SITE_URL}/news/${story.slug}`;
+  const safeContent =
+    sanitizeArticleHtml(content);
 
-  const { data: commentsData } = await supabase
-    .from("comments")
-    .select("id,name,comment,created_at")
-    .eq("news_id", story.id)
-    .eq("approved", true)
-    .order("created_at", { ascending: false })
-    .limit(100);
+  const readingTime =
+    estimateReadingTime(content);
 
-  const comments = (commentsData || []) as Comment[];
+  const wordCount =
+    getWordCount(content);
+
+  const articleUrl =
+    `${SITE_URL}/news/${story.slug}`;
+
+  const { data: commentsData } =
+    await supabase
+      .from("comments")
+      .select(
+        "id,name,comment,created_at"
+      )
+      .eq("news_id", story.id)
+      .eq("approved", true)
+      .order("created_at", {
+        ascending: false,
+      })
+      .limit(100);
+
+  const comments =
+    (commentsData || []) as Comment[];
 
   let relatedStories: RelatedStory[] = [];
 
   if (story.category) {
-    const { data: relatedData } = await supabase
-      .from("news")
-      .select(
-        "id,title,slug,image_url,category,created_at"
-      )
-      .eq("Published", true)
-      .eq("category", story.category)
-      .neq("id", story.id)
-      .not("image_url", "is", null)
-      .neq("image_url", "")
-      .order("created_at", { ascending: false })
-      .limit(6);
+    const { data: relatedData } =
+      await supabase
+        .from("news")
+        .select(
+          "id,title,slug,image_url,category,created_at"
+        )
+        .eq("Published", true)
+        .eq("category", story.category)
+        .neq("id", story.id)
+        .not("image_url", "is", null)
+        .neq("image_url", "")
+        .order("created_at", {
+          ascending: false,
+        })
+        .limit(6);
 
-    relatedStories = (relatedData || []) as RelatedStory[];
+    relatedStories =
+      (relatedData || []) as RelatedStory[];
   }
 
   if (relatedStories.length < 6) {
-    const existingIds = new Set(
-      relatedStories.map((item) => item.id)
-    );
+    const existingIds =
+      new Set(
+        relatedStories.map(
+          (item) => item.id
+        )
+      );
 
     existingIds.add(story.id);
 
-    const { data: latestData } = await supabase
-      .from("news")
-      .select(
-        "id,title,slug,image_url,category,created_at"
-      )
-      .eq("Published", true)
-      .not("image_url", "is", null)
-      .neq("image_url", "")
-      .order("created_at", { ascending: false })
-      .limit(12);
+    const { data: latestData } =
+      await supabase
+        .from("news")
+        .select(
+          "id,title,slug,image_url,category,created_at"
+        )
+        .eq("Published", true)
+        .not("image_url", "is", null)
+        .neq("image_url", "")
+        .order("created_at", {
+          ascending: false,
+        })
+        .limit(12);
 
-    for (const item of (latestData || []) as RelatedStory[]) {
-      if (existingIds.has(item.id)) continue;
+    for (
+      const item of
+        (latestData || []) as RelatedStory[]
+    ) {
+      if (existingIds.has(item.id)) {
+        continue;
+      }
 
       relatedStories.push(item);
+
       existingIds.add(item.id);
 
-      if (relatedStories.length >= 6) break;
+      if (relatedStories.length >= 6) {
+        break;
+      }
     }
   }
 
@@ -506,41 +553,45 @@ export default async function NewsArticlePage({
 
   const structuredData = {
     "@context": "https://schema.org",
+
     "@type": "NewsArticle",
+
     headline: title,
-    description: getDescription(content),
-    datePublished: story.created_at,
-    dateModified: story.created_at,
+
+    description:
+      getDescription(content),
+
+    datePublished:
+      story.created_at,
+
+    dateModified:
+      story.created_at,
+
     mainEntityOfPage: {
       "@type": "WebPage",
       "@id": articleUrl,
     },
+
     publisher: {
       "@type": "Organization",
       name: "JNMulee News",
       url: SITE_URL,
     },
+
     image: story.image_url
       ? [story.image_url]
       : undefined,
+
     articleSection: category,
+
     wordCount,
+
     isAccessibleForFree: true,
-    ...(story.source_name
-      ? {
-          isBasedOn: {
-            "@type": "NewsArticle",
-            publisher: {
-              "@type": "Organization",
-              name: story.source_name,
-            },
-            url: story.canonical_url || undefined,
-          },
-        }
-      : {}),
   };
 
-  async function postComment(formData: FormData) {
+  async function postComment(
+    formData: FormData
+  ) {
     "use server";
 
     const name = String(
@@ -552,55 +603,79 @@ export default async function NewsArticlePage({
     ).trim();
 
     if (!name || name.length > 80) {
-      redirect(`/news/${slug}?comment=error`);
+      redirect(
+        `/news/${slug}?comment=error`
+      );
     }
 
-    if (!comment || comment.length > 2000) {
-      redirect(`/news/${slug}?comment=error`);
+    if (
+      !comment ||
+      comment.length > 2000
+    ) {
+      redirect(
+        `/news/${slug}?comment=error`
+      );
     }
 
-    const commentClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    const commentClient =
+      createClient(
+        process.env
+          .NEXT_PUBLIC_SUPABASE_URL!,
+        process.env
+          .NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
 
-    const articleResult = await commentClient
-      .from("news")
-      .select("id")
-      .eq("slug", slug)
-      .eq("Published", true)
-      .maybeSingle();
+    const articleResult =
+      await commentClient
+        .from("news")
+        .select("id")
+        .eq("slug", slug)
+        .eq("Published", true)
+        .maybeSingle();
 
-    const articleData = articleResult.data as unknown;
+    const articleData =
+      articleResult.data as unknown;
 
     const article =
-      articleData && typeof articleData === "object"
-        ? (articleData as Record<string, unknown>)
+      articleData &&
+      typeof articleData === "object"
+        ? (articleData as Record<
+            string,
+            unknown
+          >)
         : null;
 
     const articleId =
-      article && typeof article.id === "string"
+      article &&
+      typeof article.id === "string"
         ? article.id
         : null;
 
     if (!articleId) {
-      redirect(`/news/${slug}?comment=error`);
+      redirect(
+        `/news/${slug}?comment=error`
+      );
     }
 
-    const { error: insertError } = await commentClient
-      .from("comments")
-      .insert({
-        news_id: articleId,
-        name,
-        comment,
-        approved: false,
-      });
+    const { error: insertError } =
+      await commentClient
+        .from("comments")
+        .insert({
+          news_id: articleId,
+          name,
+          comment,
+          approved: false,
+        });
 
     if (insertError) {
-      redirect(`/news/${slug}?comment=error`);
+      redirect(
+        `/news/${slug}?comment=error`
+      );
     }
 
-    redirect(`/news/${slug}?comment=success`);
+    redirect(
+      `/news/${slug}?comment=success`
+    );
   }
 
   return (
@@ -807,54 +882,42 @@ export default async function NewsArticlePage({
           object-fit: cover;
         }
 
-        .attribution {
-          margin: 0;
-          padding: 12px 24px;
-          background: #f9fafb;
-          border-top: 1px solid #e5e7eb;
-          border-bottom: 1px solid #e5e7eb;
-          color: #596273;
-          font-size: 13px;
-          line-height: 1.5;
-        }
-
-        .attribution a {
-          color: #c8102e;
-          font-weight: 800;
-          text-decoration: none;
-        }
-
         .articleBody {
           padding: 28px 30px 36px;
           font-family: Georgia, "Times New Roman", serif;
-          color: #20242b;
           font-size: 19px;
-          line-height: 1.82;
-          overflow-wrap: anywhere;
+          line-height: 1.8;
+          color: #252b36;
         }
 
         .articleBody p {
-          margin: 0 0 1.35em;
-        }
-
-        .articleBody h2,
-        .articleBody h3 {
-          font-family: Arial, Helvetica, sans-serif;
-          line-height: 1.25;
-          color: #111827;
-          margin: 1.5em 0 .65em;
+          margin: 0 0 1.2em;
         }
 
         .articleBody h2 {
-          font-size: 30px;
+          margin: 1.7em 0 .6em;
+          font-family: Arial, Helvetica, sans-serif;
+          font-size: 28px;
+          line-height: 1.25;
+          color: #111827;
         }
 
         .articleBody h3 {
-          font-size: 24px;
+          margin: 1.5em 0 .6em;
+          font-family: Arial, Helvetica, sans-serif;
+          font-size: 23px;
+          line-height: 1.3;
+          color: #111827;
         }
 
-        .articleBody strong {
-          color: #111827;
+        .articleBody ul,
+        .articleBody ol {
+          margin: 0 0 1.3em 1.4em;
+          padding: 0;
+        }
+
+        .articleBody li {
+          margin-bottom: .55em;
         }
 
         .articleBody a {
@@ -862,31 +925,24 @@ export default async function NewsArticlePage({
           text-decoration: underline;
         }
 
-        .articleBody ul,
-        .articleBody ol {
-          margin: 0 0 1.35em;
-          padding-left: 1.5em;
+        .articleBody img {
+          max-width: 100%;
+          height: auto;
+          display: block;
+          margin: 22px auto;
+          border-radius: 8px;
         }
 
         .articleBody blockquote {
-          margin: 1.5em 0;
+          margin: 24px 0;
           padding: 16px 20px;
           border-left: 4px solid #c8102e;
           background: #f9fafb;
           color: #4b5563;
-          font-style: italic;
-        }
-
-        .articleBody img {
-          display: block;
-          max-width: 100%;
-          height: auto;
-          margin: 25px auto;
-          border-radius: 8px;
         }
 
         .shareArea {
-          padding: 20px 24px;
+          padding: 20px 30px 28px;
           border-top: 1px solid #e5e7eb;
         }
 
@@ -894,85 +950,49 @@ export default async function NewsArticlePage({
           margin: 0 0 12px;
           font-size: 14px;
           font-weight: 900;
-          font-family: Arial, Helvetica, sans-serif;
-        }
-
-        .sourceBox {
-          margin: 0 24px 24px;
-          padding: 16px;
-          border: 1px solid #e5e7eb;
-          border-radius: 10px;
-          background: #fafafa;
-          font-family: Arial, Helvetica, sans-serif;
-        }
-
-        .sourceBoxTitle {
-          margin: 0 0 6px;
-          font-size: 12px;
-          color: #6b7280;
-          text-transform: uppercase;
-          letter-spacing: .6px;
-          font-weight: 900;
-        }
-
-        .sourceBoxText {
-          margin: 0;
-          font-size: 14px;
-          line-height: 1.5;
           color: #374151;
-        }
-
-        .sourceBox a {
-          color: #c8102e;
-          font-weight: 800;
-          text-decoration: none;
-        }
-
-        .sidebar {
-          min-width: 0;
         }
 
         .sidebarSticky {
           position: sticky;
-          top: 130px;
+          top: 105px;
         }
 
         .sideBox {
           background: white;
           border: 1px solid #e5e7eb;
           border-radius: 14px;
-          overflow: hidden;
-          margin-bottom: 20px;
+          padding: 18px;
+          margin-bottom: 18px;
         }
 
         .sideTitle {
-          margin: 0;
-          padding: 15px 17px;
-          border-bottom: 1px solid #e5e7eb;
-          font-size: 17px;
+          margin: 0 0 14px;
+          font-size: 19px;
           font-weight: 900;
         }
 
         .sideStory {
           display: grid;
-          grid-template-columns: 88px minmax(0, 1fr);
-          gap: 12px;
-          padding: 13px 15px;
-          border-bottom: 1px solid #eef0f3;
+          grid-template-columns: 88px minmax(0,1fr);
+          gap: 11px;
+          padding: 12px 0;
+          border-top: 1px solid #e5e7eb;
           text-decoration: none;
           color: inherit;
         }
 
-        .sideStory:last-child {
-          border-bottom: 0;
+        .sideStory:first-of-type {
+          border-top: 0;
+          padding-top: 0;
         }
 
         .sideStoryImage {
           position: relative;
           width: 88px;
           height: 62px;
-          overflow: hidden;
           border-radius: 7px;
+          overflow: hidden;
           background: #e5e7eb;
         }
 
@@ -1254,10 +1274,6 @@ export default async function NewsArticlePage({
             aspect-ratio: 16 / 10;
           }
 
-          .attribution {
-            padding: 11px 17px;
-          }
-
           .articleBody {
             padding: 23px 18px 28px;
             font-size: 18px;
@@ -1266,11 +1282,6 @@ export default async function NewsArticlePage({
 
           .shareArea {
             padding: 18px;
-          }
-
-          .sourceBox {
-            margin-left: 18px;
-            margin-right: 18px;
           }
 
           .sidebar {
@@ -1317,18 +1328,30 @@ export default async function NewsArticlePage({
         >
           <div className="container categoryNavInner">
             <Link href="/">Home</Link>
-            <Link href="/category/news">News</Link>
-            <Link href="/category/sport">Sports</Link>
+            <Link href="/category/news">
+              News
+            </Link>
+            <Link href="/category/sport">
+              Sports
+            </Link>
             <Link href="/category/entertainment">
               Entertainment
             </Link>
-            <Link href="/category/gossip">Gossip</Link>
-            <Link href="/category/business">Business</Link>
+            <Link href="/category/gossip">
+              Gossip
+            </Link>
+            <Link href="/category/business">
+              Business
+            </Link>
             <Link href="/category/technology">
               Technology
             </Link>
-            <Link href="/category/politics">Politics</Link>
-            <Link href="/category/crypto">Crypto</Link>
+            <Link href="/category/politics">
+              Politics
+            </Link>
+            <Link href="/category/crypto">
+              Crypto
+            </Link>
           </div>
         </nav>
       </header>
@@ -1349,20 +1372,30 @@ export default async function NewsArticlePage({
         <div className="articleMain">
           <article className="articleCard">
             <div className="breadcrumb">
-              <Link href="/">Home</Link>
+              <Link href="/">
+                Home
+              </Link>
+
               <span>›</span>
 
-              <Link href={categoryHref(story.category)}>
+              <Link
+                href={categoryHref(
+                  story.category
+                )}
+              >
                 {category}
               </Link>
 
               <span>›</span>
+
               <span>Article</span>
             </div>
 
             <header className="articleHeader">
               <Link
-                href={categoryHref(story.category)}
+                href={categoryHref(
+                  story.category
+                )}
                 className="categoryBadge"
               >
                 {category}
@@ -1380,7 +1413,9 @@ export default async function NewsArticlePage({
                 <span>
                   Published{" "}
                   <strong>
-                    {formatDate(story.created_at)}
+                    {formatDate(
+                      story.created_at
+                    )}
                   </strong>
                 </span>
 
@@ -1421,67 +1456,12 @@ export default async function NewsArticlePage({
               </div>
             )}
 
-            {story.content_type === "syndicated" &&
-              (story.source_name ||
-                story.attribution_text) && (
-                <div className="attribution">
-                  {story.attribution_text ||
-                    `Originally published by ${story.source_name}`}
-
-                  {story.canonical_url && (
-                    <>
-                      {" "}
-
-                      <a
-                        href={story.canonical_url}
-                        target="_blank"
-                        rel="noopener noreferrer nofollow"
-                      >
-                        View original
-                      </a>
-                    </>
-                  )}
-                </div>
-              )}
-
             <div
               className="articleBody"
               dangerouslySetInnerHTML={{
                 __html: safeContent,
               }}
             />
-
-            {story.content_type === "syndicated" &&
-              story.source_name && (
-                <div className="sourceBox">
-                  <p className="sourceBoxTitle">
-                    Source
-                  </p>
-
-                  <p className="sourceBoxText">
-                    This story was originally published by{" "}
-                    <strong>
-                      {story.source_name}
-                    </strong>
-                    .
-
-                    {story.canonical_url && (
-                      <>
-                        {" "}
-
-                        <a
-                          href={story.canonical_url}
-                          target="_blank"
-                          rel="noopener noreferrer nofollow"
-                        >
-                          Read the original story
-                        </a>
-                        .
-                      </>
-                    )}
-                  </p>
-                </div>
-              )}
 
             <div className="shareArea">
               <p className="shareTitle">
@@ -1503,9 +1483,10 @@ export default async function NewsArticlePage({
             </h2>
 
             <p className="sectionSubtitle">
-              Join the conversation. Comments containing
-              prohibited abusive or sexual content may be
-              blocked automatically.
+              Join the conversation. Comments
+              containing prohibited abusive or
+              sexual content may be blocked
+              automatically.
             </p>
 
             {commentStatus === "success" && (
@@ -1516,8 +1497,9 @@ export default async function NewsArticlePage({
 
             {commentStatus === "error" && (
               <div className="commentStatus commentError">
-                Your comment could not be posted. Please
-                check your name and comment and try again.
+                Your comment could not be posted.
+                Please check your name and comment
+                and try again.
               </div>
             )}
 
@@ -1573,8 +1555,8 @@ export default async function NewsArticlePage({
               </div>
             ) : (
               <p className="noComments">
-                No comments yet. Be the first to join
-                the conversation.
+                No comments yet. Be the first to
+                join the conversation.
               </p>
             )}
           </section>
@@ -1599,7 +1581,9 @@ export default async function NewsArticlePage({
                       {related.image_url && (
                         <div className="relatedImage">
                           <Image
-                            src={related.image_url}
+                            src={
+                              related.image_url
+                            }
                             alt={
                               related.title ||
                               "News story"
@@ -1650,7 +1634,9 @@ export default async function NewsArticlePage({
                       {related.image_url && (
                         <div className="sideStoryImage">
                           <Image
-                            src={related.image_url}
+                            src={
+                              related.image_url
+                            }
                             alt={
                               related.title ||
                               "News story"
@@ -1692,23 +1678,33 @@ export default async function NewsArticlePage({
         }}
       />
 
-      {/* IMPORTANT: ArticleViewTracker expects newsId */}
-      <ArticleViewTracker newsId={story.id} />
+      <ArticleViewTracker
+        newsId={story.id}
+      />
 
       <footer className="siteFooter">
         <div className="container">
           <div className="footerLinks">
-            <Link href="/about">About</Link>
-            <Link href="/contact">Contact</Link>
+            <Link href="/about">
+              About
+            </Link>
+
+            <Link href="/contact">
+              Contact
+            </Link>
+
             <Link href="/privacy">
               Privacy Policy
             </Link>
-            <Link href="/terms">Terms</Link>
+
+            <Link href="/terms">
+              Terms
+            </Link>
           </div>
 
           <p className="footerCopyright">
-            © {new Date().getFullYear()} JNMulee News.
-            All rights reserved.
+            © {new Date().getFullYear()} JNMulee
+            News. All rights reserved.
           </p>
         </div>
       </footer>
