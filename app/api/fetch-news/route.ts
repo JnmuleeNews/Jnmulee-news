@@ -19,9 +19,21 @@ const openai = process.env.OPENAI_API_KEY
 const AI_MODEL =
   process.env.OPENAI_MODEL || "gpt-4o-mini";
 
+/*
+ * IMPORTER SETTINGS
+ *
+ * Vercel triggers this endpoint every 10 minutes.
+ * The Supabase scheduler below allows only one
+ * scheduled run every 50 minutes.
+ */
 const MAX_SOURCES_PER_BATCH = 5;
-const MAX_FEED_ITEMS_PER_SOURCE = 5;
-const ARTICLE_FETCH_TIMEOUT_MS = 15_000;
+const MAX_FEED_ITEMS_PER_SOURCE = 3;
+
+const FEED_FETCH_TIMEOUT_MS = 7_000;
+const ARTICLE_FETCH_TIMEOUT_MS = 7_000;
+
+const IMPORT_INTERVAL_MS =
+  50 * 60 * 1000;
 
 const MIN_SOURCE_WORDS = 180;
 const MIN_FINAL_WORDS = 180;
@@ -620,7 +632,8 @@ function isSafeUrl(
 }
 
 async function fetchExternalText(
-  url: string
+  url: string,
+  timeoutMs: number = FEED_FETCH_TIMEOUT_MS
 ): Promise<string> {
   const controller =
     new AbortController();
@@ -629,7 +642,7 @@ async function fetchExternalText(
     setTimeout(
       () =>
         controller.abort(),
-      ARTICLE_FETCH_TIMEOUT_MS
+      timeoutMs
     );
 
   try {
@@ -665,7 +678,10 @@ async function fetchArticlePage(
   imageUrl: string | null;
 }> {
   const html =
-    await fetchExternalText(url);
+    await fetchExternalText(
+      url,
+      ARTICLE_FETCH_TIMEOUT_MS
+    );
 
   if (!html) {
     return {
@@ -1248,6 +1264,32 @@ Return only the article.
 
     return cleanFinalArticle(result);
   } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    const status =
+      typeof error === "object" &&
+      error !== null &&
+      "status" in error
+        ? Number(
+            (error as { status?: number })
+              .status
+          )
+        : undefined;
+
+    if (
+      status === 429 ||
+      /credit_balance_exhausted|insufficient_quota|quota/i.test(
+        message
+      )
+    ) {
+      throw new Error(
+        "OPENAI_CREDITS_UNAVAILABLE"
+      );
+    }
+
     console.error(
       "OpenAI article generation error:",
       error
@@ -1313,12 +1355,111 @@ async function insertArticle(
       "Published by JNMulee News",
   };
 
+  /*
+   * Upsert prevents the 23505 duplicate
+   * source_url errors caused when two
+   * importer invocations see the same
+   * article at nearly the same time.
+   */
   const { error } =
     await supabase
       .from("news")
-      .insert(payload);
+      .upsert(payload, {
+        onConflict: "source_url",
+        ignoreDuplicates: true,
+      });
 
   return error;
+}
+
+/*
+ * Atomically claim the 50-minute window
+ * as far as possible through Supabase's
+ * conditional update.
+ *
+ * The scheduler table has:
+ * id = 1
+ * last_run_at
+ * last_batch
+ */
+async function claimScheduledRun(): Promise<boolean> {
+  const now =
+    new Date();
+
+  const cutoff =
+    new Date(
+      now.getTime() -
+        IMPORT_INTERVAL_MS
+    ).toISOString();
+
+  /*
+   * First try the normal elapsed-time case.
+   *
+   * The UPDATE itself contains the timing
+   * condition, so the check is not simply
+   * performed in JavaScript.
+   */
+  const { data, error } =
+    await supabase
+      .from(
+        "news_import_scheduler"
+      )
+      .update({
+        last_run_at:
+          now.toISOString(),
+        updated_at:
+          now.toISOString(),
+      })
+      .eq("id", 1)
+      .lt(
+        "last_run_at",
+        cutoff
+      )
+      .select("id")
+      .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      `Scheduler update failed: ${error.message}`
+    );
+  }
+
+  if (data) {
+    return true;
+  }
+
+  /*
+   * Handle the initial NULL state.
+   */
+  const { data: initialData,
+    error: initialError } =
+    await supabase
+      .from(
+        "news_import_scheduler"
+      )
+      .update({
+        last_run_at:
+          now.toISOString(),
+        updated_at:
+          now.toISOString(),
+      })
+      .eq("id", 1)
+      .is(
+        "last_run_at",
+        null
+      )
+      .select("id")
+      .maybeSingle();
+
+  if (initialError) {
+    throw new Error(
+      `Initial scheduler update failed: ${initialError.message}`
+    );
+  }
+
+  return Boolean(
+    initialData
+  );
 }
 
 export async function GET(
@@ -1332,46 +1473,35 @@ export async function GET(
 
   /*
    * Manual testing:
-   *   /api/fetch-news?batch=0
    *
-   * Vercel cron:
-   * The cron schedule is read from the
-   * x-vercel-cron-schedule header.
+   * /api/fetch-news?batch=0
+   *
+   * A manual batch bypasses the
+   * 50-minute scheduler so you can
+   * test a particular batch directly.
    */
   const batchParam =
-    Number(
-      searchParams.get("batch")
-    );
+    searchParams.get("batch");
 
-  const cronSchedule =
-    request.headers.get(
-      "x-vercel-cron-schedule"
-    );
+  const isManualBatch =
+    batchParam !== null &&
+    /^\d+$/.test(batchParam);
 
-  const cronBatchMap:
-    Record<string, number> = {
-    "0 */6 * * *": 0,
-    "10 */6 * * *": 1,
-    "20 */6 * * *": 2,
-    "30 */6 * * *": 3,
-    "40 */6 * * *": 4,
-    "50 */6 * * *": 5,
-  };
+  let requestedBatch =
+    isManualBatch
+      ? Math.floor(
+          Number(batchParam)
+        )
+      : 0;
 
-  const batchFromCron =
-    cronSchedule &&
-    Object.prototype.hasOwnProperty.call(
-      cronBatchMap,
-      cronSchedule
-    )
-      ? cronBatchMap[cronSchedule]
-      : undefined;
-
-  const batch =
-    Number.isFinite(batchParam) &&
-    batchParam >= 0
-      ? Math.floor(batchParam)
-      : batchFromCron ?? 0;
+  if (
+    !Number.isFinite(
+      requestedBatch
+    ) ||
+    requestedBatch < 0
+  ) {
+    requestedBatch = 0;
+  }
 
   const stats = {
     sourcesProcessed: 0,
@@ -1388,7 +1518,15 @@ export async function GET(
 
   const errors: string[] = [];
 
+  let aiCreditsUnavailable =
+    false;
+
   try {
+    /*
+     * Load active sources first so the
+     * number of batches can be calculated
+     * dynamically.
+     */
     const {
       data: sources,
       error: sourcesError,
@@ -1410,6 +1548,116 @@ export async function GET(
 
     const allSources =
       (sources || []) as SourceRow[];
+
+    const totalBatches =
+      Math.max(
+        1,
+        Math.ceil(
+          allSources.length /
+            MAX_SOURCES_PER_BATCH
+        )
+      );
+
+    /*
+     * Scheduled Vercel calls use the
+     * 50-minute scheduler.
+     */
+    if (!isManualBatch) {
+      const claimed =
+        await claimScheduledRun();
+
+      if (!claimed) {
+        return NextResponse.json(
+          {
+            success: true,
+            skipped: true,
+            message:
+              "Importer trigger received, but the 50-minute interval has not elapsed yet.",
+            totalSources:
+              allSources.length,
+            totalBatches,
+            durationMs:
+              Date.now() -
+              startedAt,
+          },
+          {
+            status: 200,
+            headers: {
+              "Cache-Control":
+                "no-store, max-age=0",
+            },
+          }
+        );
+      }
+
+      /*
+       * Read the previous batch after
+       * claiming the scheduler window.
+       */
+      const {
+        data: scheduler,
+        error: schedulerError,
+      } = await supabase
+        .from(
+          "news_import_scheduler"
+        )
+        .select(
+          "last_batch"
+        )
+        .eq("id", 1)
+        .maybeSingle();
+
+      if (schedulerError) {
+        throw new Error(
+          `Unable to read scheduler state: ${schedulerError.message}`
+        );
+      }
+
+      /*
+       * last_batch is advanced here.
+       *
+       * First scheduled run starts at 0.
+       * Then 1, 2, 3, etc.
+       */
+      const previousBatch =
+        Number(
+          scheduler?.last_batch ??
+            -1
+        );
+
+      const nextBatch =
+        (
+          previousBatch +
+          1
+        ) % totalBatches;
+
+      const {
+        error: saveBatchError,
+      } = await supabase
+        .from(
+          "news_import_scheduler"
+        )
+        .update({
+          last_batch:
+            nextBatch,
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq("id", 1);
+
+      if (saveBatchError) {
+        throw new Error(
+          `Unable to save scheduler batch: ${saveBatchError.message}`
+        );
+      }
+
+      requestedBatch =
+        nextBatch;
+    }
+
+    const batch =
+      requestedBatch %
+      totalBatches;
 
     const sourceStart =
       batch *
@@ -1433,6 +1681,7 @@ export async function GET(
           batch,
           totalSources:
             allSources.length,
+          totalBatches,
           sourceStart,
           sourcesProcessed: 0,
           articlesPublished: 0,
@@ -1451,7 +1700,21 @@ export async function GET(
       );
     }
 
+    /*
+     * Process only this batch.
+     */
     for (const source of batchSources) {
+      /*
+       * Once OpenAI reports that the
+       * account has no credits, stop the
+       * entire batch immediately.
+       */
+      if (
+        aiCreditsUnavailable
+      ) {
+        break;
+      }
+
       stats.sourcesProcessed++;
 
       if (
@@ -1470,14 +1733,15 @@ export async function GET(
       try {
         const feedXml =
           await fetchExternalText(
-            source.feed_url
+            source.feed_url,
+            FEED_FETCH_TIMEOUT_MS
           );
 
+        /*
+         * Do not treat an inaccessible
+         * feed as a fatal importer error.
+         */
         if (!feedXml) {
-          errors.push(
-            `${source.name || source.id}: feed returned no usable content`
-          );
-
           continue;
         }
 
@@ -1491,6 +1755,12 @@ export async function GET(
           items.length;
 
         for (const item of items) {
+          if (
+            aiCreditsUnavailable
+          ) {
+            break;
+          }
+
           try {
             if (
               !item.link ||
@@ -1500,9 +1770,17 @@ export async function GET(
               continue;
             }
 
+            /*
+             * Fast duplicate check.
+             *
+             * The database upsert below is
+             * the final protection against
+             * concurrent duplicates.
+             */
             const {
               data: existing,
-              error: duplicateError,
+              error:
+                duplicateError,
             } = await supabase
               .from("news")
               .select("id")
@@ -1530,6 +1808,11 @@ export async function GET(
               continue;
             }
 
+            /*
+             * Fetch the actual article page
+             * to obtain the full article text
+             * and a reliable image.
+             */
             const articlePage =
               await fetchArticlePage(
                 item.link
@@ -1548,6 +1831,9 @@ export async function GET(
                 articlePage.imageUrl
               );
 
+            /*
+             * No image = do not publish.
+             */
             if (
               !material.imageUrl ||
               !isSafeUrl(
@@ -1559,6 +1845,10 @@ export async function GET(
               continue;
             }
 
+            /*
+             * Thin source material = do
+             * not send it to OpenAI.
+             */
             if (
               wordCount(
                 material.text
@@ -1581,6 +1871,10 @@ export async function GET(
                 material
               );
 
+            /*
+             * OpenAI has no credits.
+             * Stop processing immediately.
+             */
             if (!article) {
               stats.articlesSkipped++;
               continue;
@@ -1628,6 +1922,21 @@ export async function GET(
               );
 
             if (insertError) {
+              /*
+               * A duplicate can still happen
+               * if another importer inserts the
+               * article between the check and
+               * this operation.
+               */
+              if (
+                insertError.code ===
+                "23505"
+              ) {
+                stats.skippedDuplicate++;
+                stats.articlesSkipped++;
+                continue;
+              }
+
               errors.push(
                 `${source.name || source.id}: insert failed: ${insertError.message}`
               );
@@ -1638,24 +1947,39 @@ export async function GET(
 
             stats.articlesPublished++;
           } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : String(error);
+
             stats.articlesSkipped++;
 
+            if (
+              message ===
+              "OPENAI_CREDITS_UNAVAILABLE"
+            ) {
+              aiCreditsUnavailable =
+                true;
+              break;
+            }
+
             errors.push(
-              `${source.name || source.id}: article processing failed: ${
-                error instanceof Error
-                  ? error.message
-                  : String(error)
-              }`
+              `${source.name || source.id}: article processing failed: ${message}`
             );
           }
         }
       } catch (error) {
+        /*
+         * One bad source must never stop
+         * the remaining sources.
+         */
+        const message =
+          error instanceof Error
+            ? error.message
+            : String(error);
+
         errors.push(
-          `${source.name || source.id}: source processing failed: ${
-            error instanceof Error
-              ? error.message
-              : String(error)
-          }`
+          `${source.name || source.id}: source processing failed: ${message}`
         );
       }
     }
@@ -1668,9 +1992,11 @@ export async function GET(
         batch,
         totalSources:
           allSources.length,
+        totalBatches,
         sourceStart,
         batchSourcesProcessed:
           batchSources.length,
+        aiCreditsUnavailable,
         ...stats,
         durationMs:
           Date.now() -
@@ -1693,8 +2019,8 @@ export async function GET(
           error instanceof Error
             ? error.message
             : String(error),
-        batch,
         ...stats,
+        aiCreditsUnavailable,
         durationMs:
           Date.now() -
           startedAt,
