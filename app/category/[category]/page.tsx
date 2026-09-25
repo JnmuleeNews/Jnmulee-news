@@ -18,17 +18,51 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+/* =========================================================
+   CATEGORY CONFIGURATION
+========================================================= */
+
 const CATEGORIES = [
-  { name: "Top Stories", slug: "news" },
-  { name: "Nigeria", slug: "nigeria" },
-  { name: "World", slug: "world" },
-  { name: "Politics", slug: "politics" },
-  { name: "Business", slug: "business" },
-  { name: "Technology", slug: "technology" },
-  { name: "Sports", slug: "sports" },
-  { name: "Entertainment", slug: "entertainment" },
-  { name: "Gossip", slug: "gossip" },
-  { name: "Crypto", slug: "crypto" },
+  {
+    name: "Top Stories",
+    slug: "news",
+  },
+  {
+    name: "Nigeria",
+    slug: "nigeria",
+  },
+  {
+    name: "World",
+    slug: "world",
+  },
+  {
+    name: "Politics",
+    slug: "politics",
+  },
+  {
+    name: "Business",
+    slug: "business",
+  },
+  {
+    name: "Technology",
+    slug: "technology",
+  },
+  {
+    name: "Sports",
+    slug: "sports",
+  },
+  {
+    name: "Entertainment",
+    slug: "entertainment",
+  },
+  {
+    name: "Gossip",
+    slug: "gossip",
+  },
+  {
+    name: "Crypto",
+    slug: "crypto",
+  },
 ] as const;
 
 type CategoryConfig = (typeof CATEGORIES)[number];
@@ -44,33 +78,83 @@ type Story = {
   view_count: number | null;
 };
 
-function getCategoryBySlug(slug: string): CategoryConfig | null {
-  const normalized = slug.trim().toLowerCase();
+/* =========================================================
+   CATEGORY HELPERS
+========================================================= */
 
+function getCategoryBySlug(
+  slug: string
+): CategoryConfig | null {
+  const normalized = slug
+    .trim()
+    .toLowerCase();
+
+  /*
+   * "sport" is accepted as an alias for
+   * "sports" because older links on the
+   * site used /category/sport.
+   */
   const actualSlug =
-    normalized === "sport" ? "sports" : normalized;
+    normalized === "sport"
+      ? "sports"
+      : normalized;
 
   return (
     CATEGORIES.find(
-      (category) => category.slug === actualSlug
+      (category) =>
+        category.slug === actualSlug
     ) || null
   );
 }
 
-function cleanText(content: string | null): string {
-  if (!content) return "";
+function cleanText(
+  content: string | null
+): string {
+  if (!content) {
+    return "";
+  }
 
   return content
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/\s+/g, " ")
+    .replace(
+      /<script[\s\S]*?<\/script>/gi,
+      " "
+    )
+    .replace(
+      /<style[\s\S]*?<\/style>/gi,
+      " "
+    )
+    .replace(
+      /<[^>]*>/g,
+      " "
+    )
+    .replace(
+      /&nbsp;/gi,
+      " "
+    )
+    .replace(
+      /&amp;/gi,
+      "&"
+    )
+    .replace(
+      /&quot;/gi,
+      '"'
+    )
+    .replace(
+      /&#39;/gi,
+      "'"
+    )
+    .replace(
+      /&lt;/gi,
+      "<"
+    )
+    .replace(
+      /&gt;/gi,
+      ">"
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
     .trim();
 }
 
@@ -88,16 +172,21 @@ function getExcerpt(
     return text;
   }
 
-  const shortened = text
-    .slice(0, length)
-    .replace(/\s+\S*$/, "")
-    .trim();
+  const shortened =
+    text
+      .slice(0, length)
+      .replace(/\s+\S*$/, "")
+      .trim();
 
   return `${shortened}...`;
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "";
+function formatDate(
+  value: string | null
+): string {
+  if (!value) {
+    return "";
+  }
 
   const date = new Date(value);
 
@@ -105,17 +194,25 @@ function formatDate(value: string | null): string {
     return "";
   }
 
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }
+  ).format(date);
 }
 
-function timeAgo(value: string | null): string {
-  if (!value) return "";
+function timeAgo(
+  value: string | null
+): string {
+  if (!value) {
+    return "";
+  }
 
-  const timestamp = new Date(value).getTime();
+  const timestamp =
+    new Date(value).getTime();
 
   if (Number.isNaN(timestamp)) {
     return "";
@@ -123,24 +220,32 @@ function timeAgo(value: string | null): string {
 
   const seconds = Math.max(
     0,
-    Math.floor((Date.now() - timestamp) / 1000)
+    Math.floor(
+      (Date.now() - timestamp) /
+        1000
+    )
   );
 
-  if (seconds < 60) return "Just now";
+  if (seconds < 60) {
+    return "Just now";
+  }
 
-  const minutes = Math.floor(seconds / 60);
+  const minutes =
+    Math.floor(seconds / 60);
 
   if (minutes < 60) {
     return `${minutes}m ago`;
   }
 
-  const hours = Math.floor(minutes / 60);
+  const hours =
+    Math.floor(minutes / 60);
 
   if (hours < 24) {
     return `${hours}h ago`;
   }
 
-  const days = Math.floor(hours / 24);
+  const days =
+    Math.floor(hours / 24);
 
   if (days < 7) {
     return `${days}d ago`;
@@ -149,30 +254,56 @@ function timeAgo(value: string | null): string {
   return formatDate(value);
 }
 
-function validImage(value: string | null): boolean {
-  if (!value) return false;
+function validImage(
+  value: string | null
+): boolean {
+  if (!value) {
+    return false;
+  }
 
-  return /^https?:\/\//i.test(value);
+  return /^https?:\/\//i.test(
+    value
+  );
 }
 
-function categoryHref(category: string | null): string {
-  if (!category) return "/category/news";
+function categoryHref(
+  category: string | null
+): string {
+  if (!category) {
+    return "/category/news";
+  }
 
-  const normalized = category.trim().toLowerCase();
+  const normalized =
+    category
+      .trim()
+      .toLowerCase();
 
-  const found = CATEGORIES.find(
-    (item) =>
-      item.name.toLowerCase() === normalized ||
-      item.slug === normalized
-  );
+  const found =
+    CATEGORIES.find(
+      (item) =>
+        item.name.toLowerCase() ===
+        normalized ||
+        item.slug === normalized
+    );
 
-  if (!found) return "/category/news";
+  if (!found) {
+    return "/category/news";
+  }
 
   return `/category/${found.slug}`;
 }
 
-function StoryCard({ story }: { story: Story }) {
-  const hasImage = validImage(story.image_url);
+/* =========================================================
+   STORY CARD
+========================================================= */
+
+function StoryCard({
+  story,
+}: {
+  story: Story;
+}) {
+  const hasImage =
+    validImage(story.image_url);
 
   return (
     <article className="storyCard">
@@ -184,9 +315,16 @@ function StoryCard({ story }: { story: Story }) {
           <div className="storyImage">
             <Image
               src={story.image_url!}
-              alt={story.title || "JNMulee News story"}
+              alt={
+                story.title ||
+                "JNMulee News story"
+              }
               fill
-              sizes="(max-width: 650px) 100vw, (max-width: 1000px) 50vw, 33vw"
+              sizes="
+                (max-width: 650px) 100vw,
+                (max-width: 1000px) 50vw,
+                33vw
+              "
               className="storyImageElement"
             />
           </div>
@@ -198,26 +336,39 @@ function StoryCard({ story }: { story: Story }) {
 
         <div className="storyBody">
           <div className="storyCategory">
-            {story.category || "News"}
+            {story.category ||
+              "News"}
           </div>
 
           <h2 className="storyTitle">
-            {story.title || "Untitled Story"}
+            {story.title ||
+              "Untitled Story"}
           </h2>
 
           <p className="storyExcerpt">
-            {getExcerpt(story.content)}
+            {getExcerpt(
+              story.content
+            )}
           </p>
 
           <div className="storyMeta">
-            <time dateTime={story.created_at || undefined}>
-              {timeAgo(story.created_at)}
+            <time
+              dateTime={
+                story.created_at ||
+                undefined
+              }
+            >
+              {timeAgo(
+                story.created_at
+              )}
             </time>
 
             <span>•</span>
 
             <span>
-              {formatDate(story.created_at)}
+              {formatDate(
+                story.created_at
+              )}
             </span>
           </div>
         </div>
@@ -226,8 +377,17 @@ function StoryCard({ story }: { story: Story }) {
   );
 }
 
-function FeaturedStory({ story }: { story: Story }) {
-  const hasImage = validImage(story.image_url);
+/* =========================================================
+   FEATURED STORY
+========================================================= */
+
+function FeaturedStory({
+  story,
+}: {
+  story: Story;
+}) {
+  const hasImage =
+    validImage(story.image_url);
 
   return (
     <article className="featuredStory">
@@ -239,10 +399,16 @@ function FeaturedStory({ story }: { story: Story }) {
           <div className="featuredImage">
             <Image
               src={story.image_url!}
-              alt={story.title || "JNMulee News"}
+              alt={
+                story.title ||
+                "JNMulee News"
+              }
               fill
               priority
-              sizes="(max-width: 800px) 100vw, 66vw"
+              sizes="
+                (max-width: 800px) 100vw,
+                66vw
+              "
               className="featuredImageElement"
             />
           </div>
@@ -254,19 +420,26 @@ function FeaturedStory({ story }: { story: Story }) {
 
         <div className="featuredBody">
           <div className="featuredCategory">
-            {story.category || "News"}
+            {story.category ||
+              "News"}
           </div>
 
           <h2 className="featuredTitle">
-            {story.title || "Latest News"}
+            {story.title ||
+              "Latest News"}
           </h2>
 
           <p className="featuredExcerpt">
-            {getExcerpt(story.content, 260)}
+            {getExcerpt(
+              story.content,
+              260
+            )}
           </p>
 
           <div className="featuredMeta">
-            {timeAgo(story.created_at)}
+            {timeAgo(
+              story.created_at
+            )}
           </div>
         </div>
       </Link>
@@ -274,8 +447,17 @@ function FeaturedStory({ story }: { story: Story }) {
   );
 }
 
-function CompactStory({ story }: { story: Story }) {
-  const hasImage = validImage(story.image_url);
+/* =========================================================
+   COMPACT STORY
+========================================================= */
+
+function CompactStory({
+  story,
+}: {
+  story: Story;
+}) {
+  const hasImage =
+    validImage(story.image_url);
 
   return (
     <Link
@@ -286,7 +468,10 @@ function CompactStory({ story }: { story: Story }) {
         <div className="compactImage">
           <Image
             src={story.image_url!}
-            alt={story.title || "JNMulee News"}
+            alt={
+              story.title ||
+              "JNMulee News"
+            }
             fill
             sizes="90px"
             className="compactImageElement"
@@ -300,20 +485,28 @@ function CompactStory({ story }: { story: Story }) {
 
       <div className="compactBody">
         <div className="compactCategory">
-          {story.category || "News"}
+          {story.category ||
+            "News"}
         </div>
 
         <div className="compactTitle">
-          {story.title || "Latest News"}
+          {story.title ||
+            "Latest News"}
         </div>
 
         <div className="compactDate">
-          {timeAgo(story.created_at)}
+          {timeAgo(
+            story.created_at
+          )}
         </div>
       </div>
     </Link>
   );
 }
+
+/* =========================================================
+   MOST READ
+========================================================= */
 
 function MostReadItem({
   story,
@@ -328,16 +521,21 @@ function MostReadItem({
       className="mostReadItem"
     >
       <div className="mostReadNumber">
-        {String(number).padStart(2, "0")}
+        {String(number).padStart(
+          2,
+          "0"
+        )}
       </div>
 
       <div className="mostReadContent">
         <div className="mostReadCategory">
-          {story.category || "News"}
+          {story.category ||
+            "News"}
         </div>
 
         <div className="mostReadTitle">
-          {story.title || "Latest News"}
+          {story.title ||
+            "Latest News"}
         </div>
 
         <div className="mostReadViews">
@@ -351,24 +549,40 @@ function MostReadItem({
   );
 }
 
+/* =========================================================
+   STATIC PARAMS
+========================================================= */
+
 export function generateStaticParams() {
-  return CATEGORIES.map((category) => ({
-    category: category.slug,
-  }));
+  return CATEGORIES.map(
+    (category) => ({
+      category:
+        category.slug,
+    })
+  );
 }
+
+/* =========================================================
+   METADATA
+========================================================= */
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ category: string }>;
+  params: Promise<{
+    category: string;
+  }>;
 }): Promise<Metadata> {
-  const { category } = await params;
+  const { category } =
+    await params;
 
-  const config = getCategoryBySlug(category);
+  const config =
+    getCategoryBySlug(category);
 
   if (!config) {
     return {
-      title: "Category Not Found | JNMulee News",
+      title:
+        "Category Not Found | JNMulee News",
       robots: {
         index: false,
         follow: true,
@@ -387,20 +601,23 @@ export async function generateMetadata({
       : `Latest ${config.name} news, stories and updates from JNMulee News.`;
 
   return {
-    metadataBase: new URL(SITE_URL),
+    metadataBase:
+      new URL(SITE_URL),
 
     title,
 
     description,
 
     alternates: {
-      canonical: `${SITE_URL}/category/${config.slug}`,
+      canonical:
+        `${SITE_URL}/category/${config.slug}`,
     },
 
     robots: {
       index: true,
       follow: true,
-      "max-image-preview": "large",
+      "max-image-preview":
+        "large",
       "max-snippet": -1,
       "max-video-preview": -1,
     },
@@ -409,8 +626,10 @@ export async function generateMetadata({
       type: "website",
       title,
       description,
-      url: `${SITE_URL}/category/${config.slug}`,
-      siteName: "JNMulee News",
+      url:
+        `${SITE_URL}/category/${config.slug}`,
+      siteName:
+        "JNMulee News",
     },
 
     twitter: {
@@ -421,41 +640,78 @@ export async function generateMetadata({
   };
 }
 
+/* =========================================================
+   PAGE
+========================================================= */
+
 export default async function CategoryPage({
   params,
 }: {
-  params: Promise<{ category: string }>;
+  params: Promise<{
+    category: string;
+  }>;
 }) {
-  const { category } = await params;
+  const { category } =
+    await params;
 
-  const config = getCategoryBySlug(category);
+  const config =
+    getCategoryBySlug(category);
 
   if (!config) {
     notFound();
   }
 
+  /*
+   * IMPORTANT:
+   *
+   * "news" means Top Stories and therefore
+   * displays all published stories.
+   *
+   * Every other category uses the exact
+   * category value stored in Supabase.
+   */
+
   const storySelect =
     "id,title,slug,content,image_url,category,created_at,view_count";
 
-  let query = supabase
-    .from("news")
-    .select(storySelect)
-    .eq("Published", true)
-    .not("image_url", "is", null)
-    .neq("image_url", "")
-    .not("slug", "is", null);
+  let query =
+    supabase
+      .from("news")
+      .select(storySelect)
+      .eq("Published", true)
+      .not(
+        "image_url",
+        "is",
+        null
+      )
+      .neq(
+        "image_url",
+        ""
+      )
+      .not(
+        "slug",
+        "is",
+        null
+      );
 
   if (config.slug !== "news") {
-    query = query.eq("category", config.name);
+    query =
+      query.eq(
+        "category",
+        config.name
+      );
   }
 
   const {
     data,
     error,
   } = await query
-    .order("created_at", {
-      ascending: false,
-    })
+    .order(
+      "created_at",
+      {
+        ascending: false,
+      }
+    )
     .limit(60);
 
   if (error) {
@@ -465,7 +721,12 @@ export default async function CategoryPage({
     );
   }
 
-  const stories = (data || []) as Story[];
+  const stories =
+    (data || []) as Story[];
+
+  /*
+   * Most-read stories.
+   */
 
   const {
     data: mostReadData,
@@ -473,23 +734,55 @@ export default async function CategoryPage({
     .from("news")
     .select(storySelect)
     .eq("Published", true)
-    .not("image_url", "is", null)
-    .neq("image_url", "")
-    .not("slug", "is", null)
-    .order("view_count", {
-      ascending: false,
-    })
-    .order("created_at", {
-      ascending: false,
-    })
+    .not(
+      "image_url",
+      "is",
+      null
+    )
+    .neq(
+      "image_url",
+      ""
+    )
+    .not(
+      "slug",
+      "is",
+      null
+    )
+    .order(
+      "view_count",
+      {
+        ascending: false,
+      }
+    )
+    .order(
+      "created_at",
+      {
+        ascending: false,
+      }
+    )
     .limit(5);
 
   const mostRead =
-    (mostReadData || []) as Story[];
+    (mostReadData ||
+      []) as Story[];
 
-  const featured = stories[0] || null;
-  const secondary = stories.slice(1, 5);
-  const remaining = stories.slice(5);
+  /*
+   * Featured story + secondary stories.
+   */
+
+  const featured =
+    stories[0] || null;
+
+  const secondary =
+    stories.slice(1, 5);
+
+  const remaining =
+    stories.slice(5);
+
+  /*
+   * Other categories for the
+   * navigation bar.
+   */
 
   return (
     <main className="categoryPage">
@@ -509,13 +802,18 @@ export default async function CategoryPage({
           margin: 0 auto;
         }
 
+        /* =========================
+           HEADER
+        ========================= */
+
         .siteHeader {
           position: sticky;
           top: 0;
           z-index: 100;
           background: #c8102e;
           color: #ffffff;
-          box-shadow: 0 2px 12px rgba(0,0,0,.12);
+          box-shadow:
+            0 2px 12px rgba(0,0,0,.12);
         }
 
         .headerTop {
@@ -563,7 +861,9 @@ export default async function CategoryPage({
 
         .categoryNav {
           background: #a90d27;
-          border-top: 1px solid rgba(255,255,255,.14);
+          border-top:
+            1px solid
+            rgba(255,255,255,.14);
           overflow-x: auto;
           scrollbar-width: none;
         }
@@ -580,7 +880,8 @@ export default async function CategoryPage({
         }
 
         .categoryNavLink {
-          color: rgba(255,255,255,.96);
+          color:
+            rgba(255,255,255,.96);
           text-decoration: none;
           padding: 12px 14px;
           font-size: 13px;
@@ -588,12 +889,18 @@ export default async function CategoryPage({
         }
 
         .categoryNavLink:hover {
-          background: rgba(255,255,255,.12);
+          background:
+            rgba(255,255,255,.12);
         }
 
         .categoryNavLink.active {
-          background: rgba(255,255,255,.18);
+          background:
+            rgba(255,255,255,.18);
         }
+
+        /* =========================
+           BREAKING BAR
+        ========================= */
 
         .breakingBar {
           background: #111827;
@@ -640,6 +947,10 @@ export default async function CategoryPage({
           text-decoration: underline;
         }
 
+        /* =========================
+           MAIN
+        ========================= */
+
         .main {
           padding-top: 32px;
           padding-bottom: 70px;
@@ -659,6 +970,10 @@ export default async function CategoryPage({
           color: #c8102e;
           text-decoration: none;
           font-weight: 800;
+        }
+
+        .breadcrumb a:hover {
+          text-decoration: underline;
         }
 
         .categoryHeading {
@@ -681,7 +996,11 @@ export default async function CategoryPage({
         .categoryTitle {
           margin: 0;
           color: #111827;
-          font-size: clamp(34px, 5vw, 52px);
+          font-size: clamp(
+            34px,
+            5vw,
+            52px
+          );
           line-height: 1;
           letter-spacing: -2px;
           font-weight: 950;
@@ -702,19 +1021,28 @@ export default async function CategoryPage({
           font-weight: 700;
         }
 
+        /* =========================
+           FEATURED
+        ========================= */
+
         .featuredLayout {
           display: grid;
-          grid-template-columns: minmax(0, 1.55fr) minmax(300px, .75fr);
+          grid-template-columns:
+            minmax(0, 1.55fr)
+            minmax(300px, .75fr);
           gap: 25px;
           margin-bottom: 35px;
         }
 
         .featuredStory {
           overflow: hidden;
-          border: 1px solid #e5e7eb;
+          border:
+            1px solid #e5e7eb;
           border-radius: 17px;
           background: #ffffff;
-          box-shadow: 0 8px 28px rgba(15,23,42,.06);
+          box-shadow:
+            0 8px 28px
+            rgba(15,23,42,.06);
         }
 
         .featuredLink {
@@ -732,10 +1060,12 @@ export default async function CategoryPage({
 
         .featuredImageElement {
           object-fit: cover;
-          transition: transform .35s ease;
+          transition:
+            transform .35s ease;
         }
 
-        .featuredStory:hover .featuredImageElement {
+        .featuredStory:hover
+        .featuredImageElement {
           transform: scale(1.035);
         }
 
@@ -744,10 +1074,16 @@ export default async function CategoryPage({
           display: flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, #d7193f, #790d28);
+          background:
+            linear-gradient(
+              135deg,
+              #d7193f,
+              #790d28
+            );
           color: #ffffff;
           font-size: 18px;
           font-weight: 950;
+          letter-spacing: 1px;
         }
 
         .featuredBody {
@@ -767,7 +1103,11 @@ export default async function CategoryPage({
         .featuredTitle {
           margin: 0;
           color: #111827;
-          font-size: clamp(27px, 4vw, 43px);
+          font-size: clamp(
+            27px,
+            4vw,
+            43px
+          );
           line-height: 1.08;
           letter-spacing: -1.3px;
           font-weight: 950;
@@ -786,6 +1126,10 @@ export default async function CategoryPage({
           font-size: 12px;
           font-weight: 650;
         }
+
+        /* =========================
+           SECONDARY STORIES
+        ========================= */
 
         .secondaryPanel {
           min-width: 0;
@@ -825,7 +1169,8 @@ export default async function CategoryPage({
           gap: 12px;
           min-width: 0;
           padding-bottom: 12px;
-          border-bottom: 1px solid #e5e7eb;
+          border-bottom:
+            1px solid #e5e7eb;
           color: inherit;
           text-decoration: none;
         }
@@ -848,6 +1193,7 @@ export default async function CategoryPage({
           display: flex;
           align-items: center;
           justify-content: center;
+          background: #e5e7eb;
           color: #8a93a3;
           font-size: 11px;
           font-weight: 800;
@@ -857,20 +1203,15 @@ export default async function CategoryPage({
           min-width: 0;
         }
 
-        .compactCategory,
-        .mostReadCategory,
-        .storyCategory {
-          color: #c8102e;
-          text-transform: uppercase;
-          font-weight: 950;
-        }
-
         .compactCategory {
           margin-bottom: 4px;
           overflow: hidden;
+          color: #c8102e;
           text-overflow: ellipsis;
+          text-transform: uppercase;
           white-space: nowrap;
           font-size: 9px;
+          font-weight: 950;
           letter-spacing: .6px;
         }
 
@@ -891,18 +1232,28 @@ export default async function CategoryPage({
           font-size: 10px;
         }
 
-        .compactStory:hover .compactTitle {
+        .compactStory:hover
+        .compactTitle {
           color: #c8102e;
         }
+
+        /* =========================
+           ADS
+        ========================= */
 
         .adWrap {
           margin: 30px 0;
         }
 
+        /* =========================
+           MOST READ
+        ========================= */
+
         .mostReadSection {
           margin: 40px 0;
           padding: 24px;
-          border: 1px solid #e5e7eb;
+          border:
+            1px solid #e5e7eb;
           border-top: 4px solid #c8102e;
           border-radius: 15px;
           background: #ffffff;
@@ -936,7 +1287,8 @@ export default async function CategoryPage({
 
         .mostReadGrid {
           display: grid;
-          grid-template-columns: repeat(5, minmax(0,1fr));
+          grid-template-columns:
+            repeat(5, minmax(0,1fr));
           gap: 16px;
         }
 
@@ -953,6 +1305,19 @@ export default async function CategoryPage({
           font-size: 28px;
           line-height: 1;
           font-weight: 950;
+        }
+
+        .mostReadContent {
+          min-width: 0;
+        }
+
+        .mostReadCategory {
+          margin-bottom: 5px;
+          color: #c8102e;
+          font-size: 9px;
+          font-weight: 950;
+          letter-spacing: .5px;
+          text-transform: uppercase;
         }
 
         .mostReadTitle {
@@ -972,9 +1337,14 @@ export default async function CategoryPage({
           font-size: 10px;
         }
 
-        .mostReadItem:hover .mostReadTitle {
+        .mostReadItem:hover
+        .mostReadTitle {
           color: #c8102e;
         }
+
+        /* =========================
+           STORY GRID
+        ========================= */
 
         .latestHeader {
           display: flex;
@@ -989,6 +1359,7 @@ export default async function CategoryPage({
           color: #111827;
           font-size: 29px;
           line-height: 1;
+          letter-spacing: -.8px;
           font-weight: 950;
         }
 
@@ -1001,23 +1372,31 @@ export default async function CategoryPage({
 
         .storyGrid {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0,1fr));
+          grid-template-columns:
+            repeat(3, minmax(0,1fr));
           gap: 21px;
         }
 
         .storyCard {
           min-width: 0;
           overflow: hidden;
-          border: 1px solid #e5e7eb;
+          border:
+            1px solid #e5e7eb;
           border-radius: 14px;
           background: #ffffff;
-          box-shadow: 0 7px 25px rgba(15,23,42,.05);
-          transition: transform .2s ease, box-shadow .2s ease;
+          box-shadow:
+            0 7px 25px
+            rgba(15,23,42,.05);
+          transition:
+            transform .2s ease,
+            box-shadow .2s ease;
         }
 
         .storyCard:hover {
           transform: translateY(-3px);
-          box-shadow: 0 14px 32px rgba(15,23,42,.1);
+          box-shadow:
+            0 14px 32px
+            rgba(15,23,42,.1);
         }
 
         .storyLink {
@@ -1037,10 +1416,12 @@ export default async function CategoryPage({
 
         .storyImageElement {
           object-fit: cover;
-          transition: transform .3s ease;
+          transition:
+            transform .3s ease;
         }
 
-        .storyCard:hover .storyImageElement {
+        .storyCard:hover
+        .storyImageElement {
           transform: scale(1.035);
         }
 
@@ -1048,10 +1429,16 @@ export default async function CategoryPage({
           display: flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, #d7193f, #790d28);
+          background:
+            linear-gradient(
+              135deg,
+              #d7193f,
+              #790d28
+            );
           color: #ffffff;
           font-size: 14px;
           font-weight: 950;
+          letter-spacing: .7px;
         }
 
         .storyBody {
@@ -1061,8 +1448,11 @@ export default async function CategoryPage({
 
         .storyCategory {
           margin-bottom: 8px;
+          color: #c8102e;
           font-size: 10px;
+          font-weight: 950;
           letter-spacing: .7px;
+          text-transform: uppercase;
         }
 
         .storyTitle {
@@ -1070,6 +1460,7 @@ export default async function CategoryPage({
           color: #111827;
           font-size: 19px;
           line-height: 1.27;
+          letter-spacing: -.25px;
           font-weight: 900;
         }
 
@@ -1089,9 +1480,14 @@ export default async function CategoryPage({
           font-size: 11px;
         }
 
+        /* =========================
+           EMPTY
+        ========================= */
+
         .emptyState {
           padding: 70px 25px;
-          border: 1px solid #e5e7eb;
+          border:
+            1px solid #e5e7eb;
           border-top: 4px solid #c8102e;
           border-radius: 15px;
           background: #ffffff;
@@ -1125,6 +1521,10 @@ export default async function CategoryPage({
           line-height: 1.65;
         }
 
+        /* =========================
+           FOOTER
+        ========================= */
+
         .footer {
           margin-top: 30px;
           padding: 35px 0;
@@ -1146,17 +1546,19 @@ export default async function CategoryPage({
           font-weight: 650;
         }
 
+        .footerLinks a:hover {
+          color: #ffffff;
+        }
+
         .footerCopyright {
           margin: 0;
           color: #9ca3af;
           font-size: 12px;
         }
 
-        .categoryGrid {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 12px;
-        }
+        /* =========================
+           RESPONSIVE
+        ========================= */
 
         @media (max-width: 1050px) {
           .featuredLayout {
@@ -1164,21 +1566,27 @@ export default async function CategoryPage({
           }
 
           .secondaryStories {
-            grid-template-columns: repeat(2, minmax(0,1fr));
+            grid-template-columns:
+              repeat(2, minmax(0,1fr));
+            display: grid;
+            gap: 12px;
           }
 
           .mostReadGrid {
-            grid-template-columns: repeat(3, minmax(0,1fr));
+            grid-template-columns:
+              repeat(3, minmax(0,1fr));
           }
 
           .storyGrid {
-            grid-template-columns: repeat(2, minmax(0,1fr));
+            grid-template-columns:
+              repeat(2, minmax(0,1fr));
           }
         }
 
         @media (max-width: 700px) {
           .container {
-            width: min(100% - 22px, 1200px);
+            width:
+              min(100% - 22px, 1200px);
           }
 
           .headerTop {
@@ -1205,21 +1613,35 @@ export default async function CategoryPage({
 
           .categoryTitle {
             font-size: 38px;
+            letter-spacing: -1.4px;
+          }
+
+          .featuredLayout {
+            gap: 18px;
+          }
+
+          .featuredTitle {
+            font-size: 29px;
+          }
+
+          .featuredBody {
+            padding: 20px;
           }
 
           .secondaryStories {
             grid-template-columns: 1fr;
           }
 
+          .mostReadSection {
+            padding: 19px;
+          }
+
           .mostReadGrid {
-            grid-template-columns: repeat(2, minmax(0,1fr));
+            grid-template-columns:
+              repeat(2, minmax(0,1fr));
           }
 
           .storyGrid {
-            grid-template-columns: 1fr;
-          }
-
-          .categoryGrid {
             grid-template-columns: 1fr;
           }
 
@@ -1228,9 +1650,17 @@ export default async function CategoryPage({
             flex-direction: column;
             gap: 9px;
           }
+
+          .latestLine {
+            width: 100%;
+          }
         }
 
         @media (max-width: 430px) {
+          .breakingInner {
+            gap: 7px;
+          }
+
           .breakingLive {
             display: none;
           }
@@ -1238,17 +1668,36 @@ export default async function CategoryPage({
           .mostReadGrid {
             grid-template-columns: 1fr;
           }
+
+          .featuredTitle {
+            font-size: 27px;
+          }
+
+          .storyTitle {
+            font-size: 18px;
+          }
         }
       `}</style>
 
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
+
       <header className="siteHeader">
         <div className="container headerTop">
-          <Link href="/" className="logo">
-            JNMulee <span>News</span>
+          <Link
+            href="/"
+            className="logo"
+          >
+            JNMulee{" "}
+            <span>News</span>
           </Link>
 
           <div className="headerSearch">
-            <form action="/search" method="GET">
+            <form
+              action="/search"
+              method="GET"
+            >
               <input
                 type="search"
                 name="q"
@@ -1264,22 +1713,29 @@ export default async function CategoryPage({
           aria-label="News categories"
         >
           <div className="container categoryNavInner">
-            {CATEGORIES.map((item) => (
-              <Link
-                key={item.slug}
-                href={`/category/${item.slug}`}
-                className={
-                  item.slug === config.slug
-                    ? "categoryNavLink active"
-                    : "categoryNavLink"
-                }
-              >
-                {item.name}
-              </Link>
-            ))}
+            {CATEGORIES.map(
+              (item) => (
+                <Link
+                  key={item.slug}
+                  href={`/category/${item.slug}`}
+                  className={
+                    item.slug ===
+                    config.slug
+                      ? "categoryNavLink active"
+                      : "categoryNavLink"
+                  }
+                >
+                  {item.name}
+                </Link>
+              )
+            )}
           </div>
         </nav>
       </header>
+
+      {/* =====================================================
+          BREAKING BAR
+      ===================================================== */}
 
       <div className="breakingBar">
         <div className="container breakingInner">
@@ -1305,11 +1761,21 @@ export default async function CategoryPage({
         </div>
       </div>
 
+      {/* =====================================================
+          MAIN CONTENT
+      ===================================================== */}
+
       <main className="container main">
         <div className="breadcrumb">
-          <Link href="/">Home</Link>
+          <Link href="/">
+            Home
+          </Link>
+
           <span>›</span>
-          <span>{config.name}</span>
+
+          <span>
+            {config.name}
+          </span>
         </div>
 
         <div className="categoryHeading">
@@ -1323,7 +1789,8 @@ export default async function CategoryPage({
             </h1>
 
             <p className="categoryDescription">
-              {config.slug === "news"
+              {config.slug ===
+              "news"
                 ? "The latest stories, breaking news and important updates from JNMulee News."
                 : `The latest ${config.name.toLowerCase()} news, stories, reports and updates from JNMulee News.`}
             </p>
@@ -1337,29 +1804,43 @@ export default async function CategoryPage({
           </div>
         </div>
 
+        {/* =================================================
+            FEATURED
+        ================================================= */}
+
         {featured ? (
           <section
             className="featuredLayout"
             aria-label="Featured stories"
           >
-            <FeaturedStory story={featured} />
+            <FeaturedStory
+              story={featured}
+            />
 
             <div className="secondaryPanel">
               <div className="secondaryHeader">
-                <strong>Latest</strong>
+                <strong>
+                  Latest
+                </strong>
 
-                <Link href="/category/news">
+                <Link
+                  href="/category/news"
+                >
                   More →
                 </Link>
               </div>
 
               <div className="secondaryStories">
-                {secondary.map((story) => (
-                  <CompactStory
-                    key={story.id}
-                    story={story}
-                  />
-                ))}
+                {secondary.map(
+                  (story) => (
+                    <CompactStory
+                      key={
+                        story.id
+                      }
+                      story={story}
+                    />
+                  )
+                )}
               </div>
             </div>
           </section>
@@ -1369,22 +1850,36 @@ export default async function CategoryPage({
               !
             </div>
 
-            <h2>No stories yet</h2>
+            <h2>
+              No stories yet
+            </h2>
 
             <p>
-              There are currently no published
-              stories in this category. New stories
-              will appear here automatically when
-              they are published.
+              There are currently no
+              published stories in this
+              category. New stories will
+              appear here automatically
+              when they are published.
             </p>
           </section>
         )}
 
+        {/* =================================================
+            AD
+        ================================================= */}
+
         <div className="adWrap">
-          <DirectAd placement="home_between" />
+          <DirectAd
+            placement="home_between"
+          />
         </div>
 
-        {mostRead.length > 0 && (
+        {/* =================================================
+            MOST READ
+        ================================================= */}
+
+        {mostRead.length >
+          0 && (
           <section className="mostReadSection">
             <div className="sectionHeader">
               <div>
@@ -1399,22 +1894,37 @@ export default async function CategoryPage({
             </div>
 
             <div className="mostReadGrid">
-              {mostRead.map((story, index) => (
-                <MostReadItem
-                  key={story.id}
-                  story={story}
-                  number={index + 1}
-                />
-              ))}
+              {mostRead.map(
+                (
+                  story,
+                  index
+                ) => (
+                  <MostReadItem
+                    key={
+                      story.id
+                    }
+                    story={story}
+                    number={
+                      index + 1
+                    }
+                  />
+                )
+              )}
             </div>
           </section>
         )}
 
-        {remaining.length > 0 && (
+        {/* =================================================
+            ALL STORIES
+        ================================================= */}
+
+        {remaining.length >
+          0 && (
           <>
             <div className="latestHeader">
               <h2>
-                Latest {config.name}
+                Latest{" "}
+                {config.name}
               </h2>
 
               <div className="latestLine" />
@@ -1424,19 +1934,33 @@ export default async function CategoryPage({
               className="storyGrid"
               aria-label={`Latest ${config.name} stories`}
             >
-              {remaining.map((story) => (
-                <StoryCard
-                  key={story.id}
-                  story={story}
-                />
-              ))}
+              {remaining.map(
+                (story) => (
+                  <StoryCard
+                    key={
+                      story.id
+                    }
+                    story={story}
+                  />
+                )
+              )}
             </section>
           </>
         )}
 
+        {/* =================================================
+            SECOND AD
+        ================================================= */}
+
         <div className="adWrap">
-          <DirectAd placement="home_bottom" />
+          <DirectAd
+            placement="home_bottom"
+          />
         </div>
+
+        {/* =================================================
+            OTHER CATEGORIES
+        ================================================= */}
 
         <section className="mostReadSection">
           <div className="sectionHeader">
@@ -1453,62 +1977,101 @@ export default async function CategoryPage({
 
           <div className="categoryGrid">
             {CATEGORIES.filter(
-              (item) => item.slug !== config.slug
-            ).map((item) => (
-              <Link
-                key={item.slug}
-                href={`/category/${item.slug}`}
-                className="compactStory"
-                style={{
-                  display: "block",
-                  padding: "14px",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "10px",
-                  background: "#ffffff",
-                }}
-              >
-                <div
+              (item) =>
+                item.slug !==
+                config.slug
+            ).map(
+              (item) => (
+                <Link
+                  key={
+                    item.slug
+                  }
+                  href={`/category/${item.slug}`}
+                  className="compactStory"
                   style={{
-                    color: "#c8102e",
-                    fontSize: "15px",
-                    fontWeight: 900,
+                    display:
+                      "block",
+                    padding:
+                      "14px",
+                    border:
+                      "1px solid #e5e7eb",
+                    borderRadius:
+                      "10px",
+                    background:
+                      "#ffffff",
                   }}
                 >
-                  {item.name}
-                </div>
+                  <div
+                    style={{
+                      color:
+                        "#c8102e",
+                      fontSize:
+                        "15px",
+                      fontWeight:
+                        900,
+                    }}
+                  >
+                    {item.name}
+                  </div>
 
-                <div
-                  style={{
-                    marginTop: "5px",
-                    color: "#6b7280",
-                    fontSize: "12px",
-                  }}
-                >
-                  View latest{" "}
-                  {item.name.toLowerCase()} stories →
-                </div>
-              </Link>
-            ))}
+                  <div
+                    style={{
+                      marginTop:
+                        "5px",
+                      color:
+                        "#6b7280",
+                      fontSize:
+                        "12px",
+                    }}
+                  >
+                    View latest{" "}
+                    {item.name.toLowerCase()}{" "}
+                    stories →
+                  </div>
+                </Link>
+              )
+            )}
           </div>
         </section>
       </main>
 
+      {/* =====================================================
+          FOOTER
+      ===================================================== */}
+
       <footer className="footer">
         <div className="container">
           <div className="footerLinks">
-            <Link href="/">Home</Link>
-            <Link href="/about">About</Link>
-            <Link href="/contact">Contact</Link>
+            <Link href="/">
+              Home
+            </Link>
+
+            <Link href="/about">
+              About
+            </Link>
+
+            <Link href="/contact">
+              Contact
+            </Link>
+
             <Link href="/privacy">
               Privacy Policy
             </Link>
-            <Link href="/terms">Terms</Link>
-            <Link href="/search">Search</Link>
+
+            <Link href="/terms">
+              Terms
+            </Link>
+
+            <Link href="/search">
+              Search
+            </Link>
           </div>
 
           <p className="footerCopyright">
-            © {new Date().getFullYear()} JNMulee News.
-            All rights reserved.
+            ©{" "}
+            {new Date().getFullYear()}{" "}
+            JNMulee News. All rights
+            reserved.
           </p>
         </div>
       </footer>
