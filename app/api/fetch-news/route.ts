@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 
@@ -19,21 +18,11 @@ const openai = process.env.OPENAI_API_KEY
 const AI_MODEL =
   process.env.OPENAI_MODEL || "gpt-4o-mini";
 
-/*
- * IMPORTER SETTINGS
- *
- * Vercel triggers this endpoint every 10 minutes.
- * The Supabase scheduler below allows only one
- * scheduled run every 50 minutes.
- */
 const MAX_SOURCES_PER_BATCH = 5;
 const MAX_FEED_ITEMS_PER_SOURCE = 3;
 
 const FEED_FETCH_TIMEOUT_MS = 7_000;
 const ARTICLE_FETCH_TIMEOUT_MS = 7_000;
-
-const IMPORT_INTERVAL_MS =
-  50 * 60 * 1000;
 
 const MIN_SOURCE_WORDS = 180;
 const MIN_FINAL_WORDS = 180;
@@ -52,8 +41,7 @@ const ALLOWED_CATEGORIES = [
   "Crypto",
 ] as const;
 
-type Category =
-  (typeof ALLOWED_CATEGORIES)[number];
+type Category = (typeof ALLOWED_CATEGORIES)[number];
 
 type SourceRow = {
   id: string;
@@ -148,9 +136,7 @@ function dedupeParagraphs(value: string): string {
       .replace(/[^a-z0-9]+/g, " ")
       .trim();
 
-    if (!key || seen.has(key)) {
-      continue;
-    }
+    if (!key || seen.has(key)) continue;
 
     seen.add(key);
     output.push(paragraph);
@@ -159,9 +145,7 @@ function dedupeParagraphs(value: string): string {
   return output.join("\n\n");
 }
 
-function removeSourceBoilerplate(
-  value: string
-): string {
+function removeSourceBoilerplate(value: string): string {
   let text = value;
 
   const patterns = [
@@ -175,12 +159,10 @@ function removeSourceBoilerplate(
     /follow us[\s\S]{0,300}/gi,
     /subscribe to our newsletter[\s\S]{0,500}/gi,
     /sign up for our newsletter[\s\S]{0,500}/gi,
-    /newsletter[\s\S]{0,300}/gi,
     /related stories[\s\S]{0,1000}/gi,
     /related articles[\s\S]{0,1000}/gi,
     /recommended stories[\s\S]{0,1000}/gi,
     /most read[\s\S]{0,1000}/gi,
-    /latest news[\s\S]{0,1000}/gi,
     /advertisement[\s\S]{0,500}/gi,
     /sponsored content[\s\S]{0,500}/gi,
     /sponsored[\s\S]{0,500}/gi,
@@ -197,9 +179,7 @@ function removeSourceBoilerplate(
   return text;
 }
 
-function removeAuthorBiography(
-  value: string
-): string {
+function removeAuthorBiography(value: string): string {
   const paragraphs = value
     .split(/\n{2,}/)
     .map((p) => normalizeWhitespace(p))
@@ -221,15 +201,11 @@ function removeAuthorBiography(
       paragraph.length < 1500;
 
     const isByline =
-      /^by\s+[a-z][a-z .,'’-]{2,100}$/i.test(
-        paragraph
-      ) ||
+      /^by\s+[a-z][a-z .,'’-]{2,100}$/i.test(paragraph) ||
       /^written by\s+/i.test(paragraph) ||
       /^reporting by\s+/i.test(paragraph);
 
-    if (isBiography || isByline) {
-      continue;
-    }
+    if (isBiography || isByline) continue;
 
     output.push(paragraph);
   }
@@ -245,7 +221,7 @@ function removeAdvertising(value: string): string {
     .filter((paragraph) => {
       const lower = paragraph.toLowerCase();
 
-      const advertising =
+      return !(
         lower.includes("buy now") ||
         lower.includes("shop now") ||
         lower.includes("limited time offer") ||
@@ -254,9 +230,8 @@ function removeAdvertising(value: string): string {
         lower.includes("affiliate link") ||
         lower.includes("promo code") ||
         lower.includes("use code ") ||
-        lower.includes("advertisement");
-
-      return !advertising;
+        lower.includes("advertisement")
+      );
     })
     .join("\n\n");
 }
@@ -284,20 +259,14 @@ function cleanText(value: string): string {
     " "
   );
 
-  text = text.replace(
-    /<br\s*\/?>/gi,
-    "\n"
-  );
+  text = text.replace(/<br\s*\/?>/gi, "\n");
 
   text = text.replace(
     /<\/(p|div|article|section|li|h1|h2|h3|h4|h5|h6)>/gi,
     "\n\n"
   );
 
-  text = text.replace(
-    /<[^>]+>/g,
-    " "
-  );
+  text = text.replace(/<[^>]+>/g, " ");
 
   text = normalizeWhitespace(text);
   text = removeSourceBoilerplate(text);
@@ -347,26 +316,18 @@ function extractAttribute(
   return match?.[1] || "";
 }
 
-function extractImage(
-  value: string
-): string | null {
-  if (!value) {
-    return null;
-  }
+function extractImage(value: string): string | null {
+  if (!value) return null;
 
   const direct =
     value.match(
       /https?:\/\/[^\s"'<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s"'<>]*)?/i
     )?.[0] || null;
 
-  if (direct) {
-    return direct;
-  }
+  if (direct) return direct;
 
   const contentUrl =
-    value.match(
-      /https?:\/\/[^\s"'<>]+/i
-    )?.[0] || null;
+    value.match(/https?:\/\/[^\s"'<>]+/i)?.[0] || null;
 
   if (contentUrl) {
     return contentUrl
@@ -381,14 +342,10 @@ function parseFeed(xml: string): FeedItem[] {
   const items: FeedItem[] = [];
 
   const rssItems =
-    xml.match(
-      /<item\b[\s\S]*?<\/item>/gi
-    ) || [];
+    xml.match(/<item\b[\s\S]*?<\/item>/gi) || [];
 
   const atomEntries =
-    xml.match(
-      /<entry\b[\s\S]*?<\/entry>/gi
-    ) || [];
+    xml.match(/<entry\b[\s\S]*?<\/entry>/gi) || [];
 
   const blocks =
     rssItems.length > 0
@@ -396,39 +353,29 @@ function parseFeed(xml: string): FeedItem[] {
       : atomEntries;
 
   for (const block of blocks) {
-    const title =
-      normalizeWhitespace(
-        extractTag(block, ["title"])
-      );
+    const title = normalizeWhitespace(
+      extractTag(block, ["title"])
+    );
 
-    const description =
-      extractTag(block, [
-        "content:encoded",
-        "content",
-        "description",
-        "summary",
-      ]);
+    const description = extractTag(block, [
+      "content:encoded",
+      "content",
+      "description",
+      "summary",
+    ]);
 
-    const content =
-      extractTag(block, [
-        "content:encoded",
-        "content",
-      ]);
+    const content = extractTag(block, [
+      "content:encoded",
+      "content",
+    ]);
 
-    let link =
-      extractTag(block, ["link"]);
+    let link = extractTag(block, ["link"]);
 
     if (!link) {
       const linkTag =
-        block.match(
-          /<link\b[^>]*>/i
-        )?.[0] || "";
+        block.match(/<link\b[^>]*>/i)?.[0] || "";
 
-      link =
-        extractAttribute(
-          linkTag,
-          "href"
-        );
+      link = extractAttribute(linkTag, "href");
     }
 
     const pubDate =
@@ -441,17 +388,13 @@ function parseFeed(xml: string): FeedItem[] {
         ])
       ) || null;
 
-    let imageUrl: string | null =
-      null;
+    let imageUrl: string | null = null;
 
     const mediaContent =
-      block.match(
-        /<media:content\b[^>]*>/gi
-      ) || [];
+      block.match(/<media:content\b[^>]*>/gi) || [];
 
     for (const tag of mediaContent) {
-      const url =
-        extractAttribute(tag, "url");
+      const url = extractAttribute(tag, "url");
 
       if (url) {
         imageUrl = url;
@@ -461,13 +404,10 @@ function parseFeed(xml: string): FeedItem[] {
 
     if (!imageUrl) {
       const mediaThumbnail =
-        block.match(
-          /<media:thumbnail\b[^>]*>/gi
-        ) || [];
+        block.match(/<media:thumbnail\b[^>]*>/gi) || [];
 
       for (const tag of mediaThumbnail) {
-        const url =
-          extractAttribute(tag, "url");
+        const url = extractAttribute(tag, "url");
 
         if (url) {
           imageUrl = url;
@@ -478,23 +418,15 @@ function parseFeed(xml: string): FeedItem[] {
 
     if (!imageUrl) {
       const enclosure =
-        block.match(
-          /<enclosure\b[^>]*>/gi
-        ) || [];
+        block.match(/<enclosure\b[^>]*>/gi) || [];
 
       for (const tag of enclosure) {
-        const type =
-          extractAttribute(tag, "type");
-
-        const url =
-          extractAttribute(tag, "url");
+        const type = extractAttribute(tag, "type");
+        const url = extractAttribute(tag, "url");
 
         if (
           url &&
-          (
-            !type ||
-            type.startsWith("image/")
-          )
+          (!type || type.startsWith("image/"))
         ) {
           imageUrl = url;
           break;
@@ -503,13 +435,11 @@ function parseFeed(xml: string): FeedItem[] {
     }
 
     if (!imageUrl) {
-      imageUrl =
-        extractImage(description);
+      imageUrl = extractImage(description);
     }
 
     if (!imageUrl) {
-      imageUrl =
-        extractImage(content);
+      imageUrl = extractImage(content);
     }
 
     if (
@@ -520,10 +450,8 @@ function parseFeed(xml: string): FeedItem[] {
       items.push({
         title,
         link: link.trim(),
-        description:
-          cleanText(description),
-        content:
-          cleanText(content),
+        description: cleanText(description),
+        content: cleanText(content),
         pubDate,
         imageUrl,
       });
@@ -615,12 +543,9 @@ function classifyCategory(
   return "News";
 }
 
-function isSafeUrl(
-  value: string
-): boolean {
+function isSafeUrl(value: string): boolean {
   try {
-    const url =
-      new URL(value);
+    const url = new URL(value);
 
     return (
       url.protocol === "http:" ||
@@ -633,35 +558,28 @@ function isSafeUrl(
 
 async function fetchExternalText(
   url: string,
-  timeoutMs: number = FEED_FETCH_TIMEOUT_MS
+  timeoutMs = FEED_FETCH_TIMEOUT_MS
 ): Promise<string> {
-  const controller =
-    new AbortController();
+  const controller = new AbortController();
 
-  const timeout =
-    setTimeout(
-      () =>
-        controller.abort(),
-      timeoutMs
-    );
+  const timeout = setTimeout(
+    () => controller.abort(),
+    timeoutMs
+  );
 
   try {
-    const response =
-      await fetch(url, {
-        signal:
-          controller.signal,
-        headers: {
-          "User-Agent":
-            "JNMuleeNewsBot/1.0 (+https://jnmulee-news-jnnation.vercel.app)",
-          Accept:
-            "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
-        },
-        cache: "no-store",
-      });
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "JNMuleeNewsBot/1.0 (+https://jnmulee-news-jnnation.vercel.app)",
+        Accept:
+          "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
+      },
+      cache: "no-store",
+    });
 
-    if (!response.ok) {
-      return "";
-    }
+    if (!response.ok) return "";
 
     return await response.text();
   } catch {
@@ -677,11 +595,10 @@ async function fetchArticlePage(
   text: string;
   imageUrl: string | null;
 }> {
-  const html =
-    await fetchExternalText(
-      url,
-      ARTICLE_FETCH_TIMEOUT_MS
-    );
+  const html = await fetchExternalText(
+    url,
+    ARTICLE_FETCH_TIMEOUT_MS
+  );
 
   if (!html) {
     return {
@@ -690,17 +607,14 @@ async function fetchArticlePage(
     };
   }
 
-  let imageUrl: string | null =
-    null;
+  let imageUrl: string | null = null;
 
   const ogImage =
     html.match(
       /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
     )?.[1] || null;
 
-  if (ogImage) {
-    imageUrl = ogImage;
-  }
+  if (ogImage) imageUrl = ogImage;
 
   if (!imageUrl) {
     const twitterImage =
@@ -708,9 +622,7 @@ async function fetchArticlePage(
         /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
       )?.[1] || null;
 
-    if (twitterImage) {
-      imageUrl = twitterImage;
-    }
+    if (twitterImage) imageUrl = twitterImage;
   }
 
   if (!imageUrl) {
@@ -720,30 +632,19 @@ async function fetchArticlePage(
       ) || [];
 
     for (const block of jsonLdMatches) {
-      const jsonText =
-        block
-          .replace(
-            /<script[^>]*>/i,
-            ""
-          )
-          .replace(
-            /<\/script>$/i,
-            ""
-          )
-          .trim();
+      const jsonText = block
+        .replace(/<script[^>]*>/i, "")
+        .replace(/<\/script>$/i, "")
+        .trim();
 
       try {
-        const data =
-          JSON.parse(jsonText);
+        const data = JSON.parse(jsonText);
 
         const candidates =
-          Array.isArray(data)
-            ? data
-            : [data];
+          Array.isArray(data) ? data : [data];
 
         for (const candidate of candidates) {
-          const image =
-            candidate?.image;
+          const image = candidate?.image;
 
           if (typeof image === "string") {
             imageUrl = image;
@@ -755,18 +656,14 @@ async function fetchArticlePage(
             typeof image === "object" &&
             typeof image.url === "string"
           ) {
-            imageUrl =
-              image.url;
+            imageUrl = image.url;
             break;
           }
 
           if (Array.isArray(image)) {
-            const first =
-              image.find(
-                (item) =>
-                  typeof item ===
-                  "string"
-              );
+            const first = image.find(
+              (item) => typeof item === "string"
+            );
 
             if (first) {
               imageUrl = first;
@@ -775,11 +672,9 @@ async function fetchArticlePage(
           }
         }
 
-        if (imageUrl) {
-          break;
-        }
+        if (imageUrl) break;
       } catch {
-        // Ignore malformed JSON-LD.
+        // Ignore invalid JSON-LD.
       }
     }
   }
@@ -792,9 +687,7 @@ async function fetchArticlePage(
     );
 
   if (articleMatch?.[1]) {
-    articleCandidates.push(
-      articleMatch[1]
-    );
+    articleCandidates.push(articleMatch[1]);
   }
 
   const mainMatch =
@@ -803,9 +696,7 @@ async function fetchArticlePage(
     );
 
   if (mainMatch?.[1]) {
-    articleCandidates.push(
-      mainMatch[1]
-    );
+    articleCandidates.push(mainMatch[1]);
   }
 
   const commonContainers = [
@@ -814,32 +705,25 @@ async function fetchArticlePage(
   ];
 
   for (const pattern of commonContainers) {
-    const match =
-      html.match(pattern);
+    const match = html.match(pattern);
 
     if (match?.[1]) {
-      articleCandidates.push(
-        match[1]
-      );
+      articleCandidates.push(match[1]);
     }
   }
 
   const cleanedCandidates =
     articleCandidates
-      .map((candidate) =>
-        cleanText(candidate)
-      )
+      .map((candidate) => cleanText(candidate))
       .filter(
         (candidate) =>
-          wordCount(candidate) >=
-          MIN_SOURCE_WORDS
+          wordCount(candidate) >= MIN_SOURCE_WORDS
       );
 
   let bestText =
     cleanedCandidates.sort(
       (a, b) =>
-        wordCount(b) -
-        wordCount(a)
+        wordCount(b) - wordCount(a)
     )[0] || "";
 
   if (!bestText) {
@@ -849,26 +733,16 @@ async function fetchArticlePage(
       ) || [];
 
     for (const block of jsonLdMatches) {
-      const jsonText =
-        block
-          .replace(
-            /<script[^>]*>/i,
-            ""
-          )
-          .replace(
-            /<\/script>$/i,
-            ""
-          )
-          .trim();
+      const jsonText = block
+        .replace(/<script[^>]*>/i, "")
+        .replace(/<\/script>$/i, "")
+        .trim();
 
       try {
-        const data =
-          JSON.parse(jsonText);
+        const data = JSON.parse(jsonText);
 
         const candidates =
-          Array.isArray(data)
-            ? data
-            : [data];
+          Array.isArray(data) ? data : [data];
 
         for (const candidate of candidates) {
           if (
@@ -876,23 +750,18 @@ async function fetchArticlePage(
             "string"
           ) {
             const candidateText =
-              cleanText(
-                candidate.articleBody
-              );
+              cleanText(candidate.articleBody);
 
             if (
-              wordCount(
-                candidateText
-              ) >
+              wordCount(candidateText) >
               wordCount(bestText)
             ) {
-              bestText =
-                candidateText;
+              bestText = candidateText;
             }
           }
         }
       } catch {
-        // Ignore malformed JSON-LD.
+        // Ignore invalid JSON-LD.
       }
     }
   }
@@ -900,8 +769,7 @@ async function fetchArticlePage(
   return {
     text: bestText,
     imageUrl:
-      imageUrl &&
-      isSafeUrl(imageUrl)
+      imageUrl && isSafeUrl(imageUrl)
         ? imageUrl
         : null,
   };
@@ -918,22 +786,14 @@ function buildSourceMaterial(
     item.description,
   ].filter(Boolean);
 
-  let text =
-    dedupeParagraphs(
-      textParts.join("\n\n")
-    );
+  let text = dedupeParagraphs(
+    textParts.join("\n\n")
+  );
 
-  text =
-    removeSourceBoilerplate(text);
-
-  text =
-    removeAdvertising(text);
-
-  text =
-    removeAuthorBiography(text);
-
-  text =
-    dedupeParagraphs(text);
+  text = removeSourceBoilerplate(text);
+  text = removeAdvertising(text);
+  text = removeAuthorBiography(text);
+  text = dedupeParagraphs(text);
 
   const imageUrl =
     articlePageImage ||
@@ -942,75 +802,42 @@ function buildSourceMaterial(
     extractImage(item.description);
 
   return {
-    title:
-      normalizeWhitespace(item.title),
-    url:
-      item.link,
-    publishedAt:
-      item.pubDate,
+    title: normalizeWhitespace(item.title),
+    url: item.link,
+    publishedAt: item.pubDate,
     imageUrl:
-      imageUrl &&
-      isSafeUrl(imageUrl)
+      imageUrl && isSafeUrl(imageUrl)
         ? imageUrl
         : null,
-    text:
-      normalizeWhitespace(text),
+    text: normalizeWhitespace(text),
   };
 }
 
-function cleanFinalArticle(
-  value: string
-): string {
-  let text =
-    value
-      .replace(
-        /^```(?:text|markdown)?/i,
-        ""
-      )
-      .replace(
-        /```$/i,
-        ""
-      )
-      .trim();
+function cleanFinalArticle(value: string): string {
+  let text = value
+    .replace(/^```(?:text|markdown)?/i, "")
+    .replace(/```$/i, "")
+    .trim();
 
-  text =
-    removeSourceBoilerplate(text);
-
-  text =
-    removeAdvertising(text);
-
-  text =
-    removeAuthorBiography(text);
-
-  text =
-    dedupeParagraphs(text);
+  text = removeSourceBoilerplate(text);
+  text = removeAdvertising(text);
+  text = removeAuthorBiography(text);
+  text = dedupeParagraphs(text);
 
   return normalizeWhitespace(text);
 }
 
-function textToHtml(
-  value: string
-): string {
-  const paragraphs =
-    value
-      .split(/\n{2,}/)
-      .map((p) =>
-        normalizeWhitespace(p)
-      )
-      .filter(Boolean);
+function textToHtml(value: string): string {
+  const paragraphs = value
+    .split(/\n{2,}/)
+    .map((p) => normalizeWhitespace(p))
+    .filter(Boolean);
 
   return paragraphs
     .map((paragraph) => {
-      if (
-        /^#{2,4}\s+/.test(
-          paragraph
-        )
-      ) {
+      if (/^#{2,4}\s+/.test(paragraph)) {
         const heading =
-          paragraph.replace(
-            /^#{2,4}\s+/,
-            ""
-          );
+          paragraph.replace(/^#{2,4}\s+/, "");
 
         return `<h2>${escapeHtml(
           heading
@@ -1027,8 +854,7 @@ function textToHtml(
 function containsForbiddenContent(
   value: string
 ): boolean {
-  const lower =
-    value.toLowerCase();
+  const lower = value.toLowerCase();
 
   const forbidden = [
     "originally published by",
@@ -1051,52 +877,28 @@ function containsForbiddenContent(
     "author bio",
   ];
 
-  return forbidden.some(
-    (phrase) =>
-      lower.includes(phrase)
+  return forbidden.some((phrase) =>
+    lower.includes(phrase)
   );
 }
 
-function qualityScore(
-  value: string
-): number {
-  const words =
-    wordCount(value);
+function qualityScore(value: string): number {
+  const words = wordCount(value);
 
-  if (words < 180) {
-    return 0;
-  }
+  if (words < 180) return 0;
 
   let score = 50;
 
-  if (words >= 250) {
-    score += 10;
-  }
+  if (words >= 250) score += 10;
+  if (words >= 400) score += 10;
+  if (words >= 600) score += 5;
 
-  if (words >= 400) {
-    score += 10;
-  }
+  const paragraphs = value
+    .split(/\n{2,}/)
+    .filter(Boolean);
 
-  if (words >= 600) {
-    score += 5;
-  }
-
-  const paragraphs =
-    value
-      .split(/\n{2,}/)
-      .filter(Boolean);
-
-  if (
-    paragraphs.length >= 5
-  ) {
-    score += 10;
-  }
-
-  if (
-    paragraphs.length >= 8
-  ) {
-    score += 5;
-  }
+  if (paragraphs.length >= 5) score += 10;
+  if (paragraphs.length >= 8) score += 5;
 
   if (
     /\bsaid\b|\btold\b|\baccording to\b|\bannounced\b/i.test(
@@ -1106,15 +908,12 @@ function qualityScore(
     score += 5;
   }
 
-  const repeated =
-    paragraphs.filter(
-      (p, index) =>
-        paragraphs.indexOf(p) !==
-        index
-    ).length;
+  const repeated = paragraphs.filter(
+    (p, index) =>
+      paragraphs.indexOf(p) !== index
+  ).length;
 
-  score -=
-    repeated * 10;
+  score -= repeated * 10;
 
   return Math.max(
     0,
@@ -1125,9 +924,7 @@ function qualityScore(
 async function generateJnmuleeArticle(
   material: Material
 ): Promise<string | null> {
-  if (!openai) {
-    return null;
-  }
+  if (!openai) return null;
 
   const prompt = `
 SOURCE MATERIAL
@@ -1251,9 +1048,7 @@ Return only the article.
     const result =
       completion.choices[0]?.message?.content?.trim();
 
-    if (!result) {
-      return null;
-    }
+    if (!result) return null;
 
     if (
       result.trim().toUpperCase() ===
@@ -1274,8 +1069,7 @@ Return only the article.
       error !== null &&
       "status" in error
         ? Number(
-            (error as { status?: number })
-              .status
+            (error as { status?: number }).status
           )
         : undefined;
 
@@ -1306,12 +1100,9 @@ async function insertArticle(
   source: SourceRow
 ) {
   const title =
-    normalizeWhitespace(
-      material.title
-    );
+    normalizeWhitespace(material.title);
 
-  const slugBase =
-    slugify(title);
+  const slugBase = slugify(title);
 
   let slug =
     slugBase ||
@@ -1328,39 +1119,27 @@ async function insertArticle(
     existingSlug &&
     existingSlug.length > 0
   ) {
-    slug =
-      `${slugBase}-${Date.now()}`;
+    slug = `${slugBase}-${Date.now()}`;
   }
 
-  const content =
-    textToHtml(article);
+  const content = textToHtml(article);
 
   const payload = {
     title,
     slug,
     content,
-    image_url:
-      material.imageUrl,
+    image_url: material.imageUrl,
     Published: true,
-    source_url:
-      material.url,
+    source_url: material.url,
     category,
-    content_type:
-      "syndicated",
+    content_type: "syndicated",
     source_name:
       source.name || "Unknown Source",
-    canonical_url:
-      material.url,
+    canonical_url: material.url,
     attribution_text:
       "Published by JNMulee News",
   };
 
-  /*
-   * Upsert prevents the 23505 duplicate
-   * source_url errors caused when two
-   * importer invocations see the same
-   * article at nearly the same time.
-   */
   const { error } =
     await supabase
       .from("news")
@@ -1372,114 +1151,14 @@ async function insertArticle(
   return error;
 }
 
-/*
- * Atomically claim the 50-minute window
- * as far as possible through Supabase's
- * conditional update.
- *
- * The scheduler table has:
- * id = 1
- * last_run_at
- * last_batch
- */
-async function claimScheduledRun(): Promise<boolean> {
-  const now =
-    new Date();
-
-  const cutoff =
-    new Date(
-      now.getTime() -
-        IMPORT_INTERVAL_MS
-    ).toISOString();
-
-  /*
-   * First try the normal elapsed-time case.
-   *
-   * The UPDATE itself contains the timing
-   * condition, so the check is not simply
-   * performed in JavaScript.
-   */
-  const { data, error } =
-    await supabase
-      .from(
-        "news_import_scheduler"
-      )
-      .update({
-        last_run_at:
-          now.toISOString(),
-        updated_at:
-          now.toISOString(),
-      })
-      .eq("id", 1)
-      .lt(
-        "last_run_at",
-        cutoff
-      )
-      .select("id")
-      .maybeSingle();
-
-  if (error) {
-    throw new Error(
-      `Scheduler update failed: ${error.message}`
-    );
-  }
-
-  if (data) {
-    return true;
-  }
-
-  /*
-   * Handle the initial NULL state.
-   */
-  const { data: initialData,
-    error: initialError } =
-    await supabase
-      .from(
-        "news_import_scheduler"
-      )
-      .update({
-        last_run_at:
-          now.toISOString(),
-        updated_at:
-          now.toISOString(),
-      })
-      .eq("id", 1)
-      .is(
-        "last_run_at",
-        null
-      )
-      .select("id")
-      .maybeSingle();
-
-  if (initialError) {
-    throw new Error(
-      `Initial scheduler update failed: ${initialError.message}`
-    );
-  }
-
-  return Boolean(
-    initialData
-  );
-}
-
 export async function GET(
   request: Request
 ) {
-  const startedAt =
-    Date.now();
+  const startedAt = Date.now();
 
   const { searchParams } =
     new URL(request.url);
 
-  /*
-   * Manual testing:
-   *
-   * /api/fetch-news?batch=0
-   *
-   * A manual batch bypasses the
-   * 50-minute scheduler so you can
-   * test a particular batch directly.
-   */
   const batchParam =
     searchParams.get("batch");
 
@@ -1489,15 +1168,11 @@ export async function GET(
 
   let requestedBatch =
     isManualBatch
-      ? Math.floor(
-          Number(batchParam)
-        )
+      ? Math.floor(Number(batchParam))
       : 0;
 
   if (
-    !Number.isFinite(
-      requestedBatch
-    ) ||
+    !Number.isFinite(requestedBatch) ||
     requestedBatch < 0
   ) {
     requestedBatch = 0;
@@ -1518,15 +1193,9 @@ export async function GET(
 
   const errors: string[] = [];
 
-  let aiCreditsUnavailable =
-    false;
+  let aiCreditsUnavailable = false;
 
   try {
-    /*
-     * Load active sources first so the
-     * number of batches can be calculated
-     * dynamically.
-     */
     const {
       data: sources,
       error: sourcesError,
@@ -1559,15 +1228,42 @@ export async function GET(
       );
 
     /*
-     * Scheduled Vercel calls use the
-     * 50-minute scheduler.
+     * SCHEDULED IMPORT
+     *
+     * The Supabase RPC performs the
+     * timing check AND batch assignment
+     * atomically.
+     *
+     * This prevents two simultaneous
+     * Vercel cron requests from claiming
+     * different batches at the same time.
      */
     if (!isManualBatch) {
-      const claimed =
-        await claimScheduledRun();
+      const {
+        data: claimedBatch,
+        error: claimError,
+      } = await supabase.rpc(
+        "claim_news_import_batch",
+        {
+          p_batch_count: totalBatches,
+        }
+      );
 
-      if (!claimed) {
-        return NextResponse.json(
+      if (claimError) {
+        throw new Error(
+          `Unable to claim importer batch: ${claimError.message}`
+        );
+      }
+
+      const batch =
+        Number(claimedBatch);
+
+      /*
+       * -1 means the 50-minute window
+       * has not elapsed.
+       */
+      if (batch < 0) {
+        return Response.json(
           {
             success: true,
             skipped: true,
@@ -1577,8 +1273,7 @@ export async function GET(
               allSources.length,
             totalBatches,
             durationMs:
-              Date.now() -
-              startedAt,
+              Date.now() - startedAt,
           },
           {
             status: 200,
@@ -1590,69 +1285,7 @@ export async function GET(
         );
       }
 
-      /*
-       * Read the previous batch after
-       * claiming the scheduler window.
-       */
-      const {
-        data: scheduler,
-        error: schedulerError,
-      } = await supabase
-        .from(
-          "news_import_scheduler"
-        )
-        .select(
-          "last_batch"
-        )
-        .eq("id", 1)
-        .maybeSingle();
-
-      if (schedulerError) {
-        throw new Error(
-          `Unable to read scheduler state: ${schedulerError.message}`
-        );
-      }
-
-      /*
-       * last_batch is advanced here.
-       *
-       * First scheduled run starts at 0.
-       * Then 1, 2, 3, etc.
-       */
-      const previousBatch =
-        Number(
-          scheduler?.last_batch ??
-            -1
-        );
-
-      const nextBatch =
-        (
-          previousBatch +
-          1
-        ) % totalBatches;
-
-      const {
-        error: saveBatchError,
-      } = await supabase
-        .from(
-          "news_import_scheduler"
-        )
-        .update({
-          last_batch:
-            nextBatch,
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq("id", 1);
-
-      if (saveBatchError) {
-        throw new Error(
-          `Unable to save scheduler batch: ${saveBatchError.message}`
-        );
-      }
-
-      requestedBatch =
-        nextBatch;
+      requestedBatch = batch;
     }
 
     const batch =
@@ -1673,7 +1306,7 @@ export async function GET(
     if (
       batchSources.length === 0
     ) {
-      return NextResponse.json(
+      return Response.json(
         {
           success: true,
           message:
@@ -1687,8 +1320,7 @@ export async function GET(
           articlesPublished: 0,
           articlesSkipped: 0,
           durationMs:
-            Date.now() -
-            startedAt,
+            Date.now() - startedAt,
         },
         {
           status: 200,
@@ -1700,33 +1332,18 @@ export async function GET(
       );
     }
 
-    /*
-     * Process only this batch.
-     */
     for (const source of batchSources) {
-      /*
-       * Once OpenAI reports that the
-       * account has no credits, stop the
-       * entire batch immediately.
-       */
-      if (
-        aiCreditsUnavailable
-      ) {
-        break;
-      }
+      if (aiCreditsUnavailable) break;
 
       stats.sourcesProcessed++;
 
       if (
         !source.feed_url ||
-        !isSafeUrl(
-          source.feed_url
-        )
+        !isSafeUrl(source.feed_url)
       ) {
         errors.push(
           `${source.name || source.id}: invalid feed URL`
         );
-
         continue;
       }
 
@@ -1737,13 +1354,7 @@ export async function GET(
             FEED_FETCH_TIMEOUT_MS
           );
 
-        /*
-         * Do not treat an inaccessible
-         * feed as a fatal importer error.
-         */
-        if (!feedXml) {
-          continue;
-        }
+        if (!feedXml) continue;
 
         const items =
           parseFeed(feedXml).slice(
@@ -1755,11 +1366,7 @@ export async function GET(
           items.length;
 
         for (const item of items) {
-          if (
-            aiCreditsUnavailable
-          ) {
-            break;
-          }
+          if (aiCreditsUnavailable) break;
 
           try {
             if (
@@ -1771,11 +1378,7 @@ export async function GET(
             }
 
             /*
-             * Fast duplicate check.
-             *
-             * The database upsert below is
-             * the final protection against
-             * concurrent duplicates.
+             * Duplicate protection.
              */
             const {
               data: existing,
@@ -1809,18 +1412,14 @@ export async function GET(
             }
 
             /*
-             * Fetch the actual article page
-             * to obtain the full article text
-             * and a reliable image.
+             * Get full article page.
              */
             const articlePage =
               await fetchArticlePage(
                 item.link
               );
 
-            if (
-              articlePage.text
-            ) {
+            if (articlePage.text) {
               stats.articlePagesFetched++;
             }
 
@@ -1832,7 +1431,8 @@ export async function GET(
               );
 
             /*
-             * No image = do not publish.
+             * Every published article
+             * must have an image.
              */
             if (
               !material.imageUrl ||
@@ -1846,14 +1446,12 @@ export async function GET(
             }
 
             /*
-             * Thin source material = do
-             * not send it to OpenAI.
+             * Reject thin source material.
              */
             if (
               wordCount(
                 material.text
-              ) <
-              MIN_SOURCE_WORDS
+              ) < MIN_SOURCE_WORDS
             ) {
               stats.skippedShortSource++;
               stats.articlesSkipped++;
@@ -1866,15 +1464,14 @@ export async function GET(
                 material.text
               );
 
+            /*
+             * Generate original article.
+             */
             const article =
               await generateJnmuleeArticle(
                 material
               );
 
-            /*
-             * OpenAI has no credits.
-             * Stop processing immediately.
-             */
             if (!article) {
               stats.articlesSkipped++;
               continue;
@@ -1922,12 +1519,6 @@ export async function GET(
               );
 
             if (insertError) {
-              /*
-               * A duplicate can still happen
-               * if another importer inserts the
-               * article between the check and
-               * this operation.
-               */
               if (
                 insertError.code ===
                 "23505"
@@ -1969,10 +1560,6 @@ export async function GET(
           }
         }
       } catch (error) {
-        /*
-         * One bad source must never stop
-         * the remaining sources.
-         */
         const message =
           error instanceof Error
             ? error.message
@@ -1984,7 +1571,7 @@ export async function GET(
       }
     }
 
-    return NextResponse.json(
+    return Response.json(
       {
         success: true,
         message:
@@ -1999,8 +1586,7 @@ export async function GET(
         aiCreditsUnavailable,
         ...stats,
         durationMs:
-          Date.now() -
-          startedAt,
+          Date.now() - startedAt,
         errors,
       },
       {
@@ -2012,7 +1598,7 @@ export async function GET(
       }
     );
   } catch (error) {
-    return NextResponse.json(
+    return Response.json(
       {
         success: false,
         message:
@@ -2022,8 +1608,7 @@ export async function GET(
         ...stats,
         aiCreditsUnavailable,
         durationMs:
-          Date.now() -
-          startedAt,
+          Date.now() - startedAt,
         errors,
       },
       {
