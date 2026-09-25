@@ -23,46 +23,16 @@ const supabase = createClient(
 ========================================================= */
 
 const CATEGORIES = [
-  {
-    name: "Top Stories",
-    slug: "news",
-  },
-  {
-    name: "Nigeria",
-    slug: "nigeria",
-  },
-  {
-    name: "World",
-    slug: "world",
-  },
-  {
-    name: "Politics",
-    slug: "politics",
-  },
-  {
-    name: "Business",
-    slug: "business",
-  },
-  {
-    name: "Technology",
-    slug: "technology",
-  },
-  {
-    name: "Sports",
-    slug: "sports",
-  },
-  {
-    name: "Entertainment",
-    slug: "entertainment",
-  },
-  {
-    name: "Gossip",
-    slug: "gossip",
-  },
-  {
-    name: "Crypto",
-    slug: "crypto",
-  },
+  { name: "Top Stories", slug: "news" },
+  { name: "Nigeria", slug: "nigeria" },
+  { name: "World", slug: "world" },
+  { name: "Politics", slug: "politics" },
+  { name: "Business", slug: "business" },
+  { name: "Technology", slug: "technology" },
+  { name: "Sports", slug: "sports" },
+  { name: "Entertainment", slug: "entertainment" },
+  { name: "Gossip", slug: "gossip" },
+  { name: "Crypto", slug: "crypto" },
 ] as const;
 
 type CategoryConfig = (typeof CATEGORIES)[number];
@@ -79,21 +49,14 @@ type Story = {
 };
 
 /* =========================================================
-   CATEGORY HELPERS
+   HELPERS
 ========================================================= */
 
 function getCategoryBySlug(
   slug: string
 ): CategoryConfig | null {
-  const normalized = slug
-    .trim()
-    .toLowerCase();
+  const normalized = slug.trim().toLowerCase();
 
-  /*
-   * "sport" is accepted as an alias for
-   * "sports" because older links on the
-   * site used /category/sport.
-   */
   const actualSlug =
     normalized === "sport"
       ? "sports"
@@ -110,9 +73,7 @@ function getCategoryBySlug(
 function cleanText(
   content: string | null
 ): string {
-  if (!content) {
-    return "";
-  }
+  if (!content) return "";
 
   return content
     .replace(
@@ -123,38 +84,14 @@ function cleanText(
       /<style[\s\S]*?<\/style>/gi,
       " "
     )
-    .replace(
-      /<[^>]*>/g,
-      " "
-    )
-    .replace(
-      /&nbsp;/gi,
-      " "
-    )
-    .replace(
-      /&amp;/gi,
-      "&"
-    )
-    .replace(
-      /&quot;/gi,
-      '"'
-    )
-    .replace(
-      /&#39;/gi,
-      "'"
-    )
-    .replace(
-      /&lt;/gi,
-      "<"
-    )
-    .replace(
-      /&gt;/gi,
-      ">"
-    )
-    .replace(
-      /\s+/g,
-      " "
-    )
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -172,11 +109,10 @@ function getExcerpt(
     return text;
   }
 
-  const shortened =
-    text
-      .slice(0, length)
-      .replace(/\s+\S*$/, "")
-      .trim();
+  const shortened = text
+    .slice(0, length)
+    .replace(/\s+\S*$/, "")
+    .trim();
 
   return `${shortened}...`;
 }
@@ -184,9 +120,7 @@ function getExcerpt(
 function formatDate(
   value: string | null
 ): string {
-  if (!value) {
-    return "";
-  }
+  if (!value) return "";
 
   const date = new Date(value);
 
@@ -207,9 +141,7 @@ function formatDate(
 function timeAgo(
   value: string | null
 ): string {
-  if (!value) {
-    return "";
-  }
+  if (!value) return "";
 
   const timestamp =
     new Date(value).getTime();
@@ -221,8 +153,7 @@ function timeAgo(
   const seconds = Math.max(
     0,
     Math.floor(
-      (Date.now() - timestamp) /
-        1000
+      (Date.now() - timestamp) / 1000
     )
   );
 
@@ -257,40 +188,7 @@ function timeAgo(
 function validImage(
   value: string | null
 ): boolean {
-  if (!value) {
-    return false;
-  }
-
-  return /^https?:\/\//i.test(
-    value
-  );
-}
-
-function categoryHref(
-  category: string | null
-): string {
-  if (!category) {
-    return "/category/news";
-  }
-
-  const normalized =
-    category
-      .trim()
-      .toLowerCase();
-
-  const found =
-    CATEGORIES.find(
-      (item) =>
-        item.name.toLowerCase() ===
-        normalized ||
-        item.slug === normalized
-    );
-
-  if (!found) {
-    return "/category/news";
-  }
-
-  return `/category/${found.slug}`;
+  return !!value && /^https?:\/\//i.test(value);
 }
 
 /* =========================================================
@@ -306,13 +204,13 @@ function StoryCard({
     validImage(story.image_url);
 
   return (
-    <article className="storyCard">
+    <article className="category-story-card">
       <Link
         href={`/news/${story.slug}`}
-        className="storyLink"
+        className="category-story-link"
       >
         {hasImage ? (
-          <div className="storyImage">
+          <div className="category-story-image">
             <Image
               src={story.image_url!}
               alt={
@@ -321,49 +219,41 @@ function StoryCard({
               }
               fill
               sizes="
-                (max-width: 650px) 100vw,
-                (max-width: 1000px) 50vw,
+                (max-width: 700px) 100vw,
+                (max-width: 1100px) 50vw,
                 33vw
               "
-              className="storyImageElement"
+              className="category-story-image-element"
             />
           </div>
         ) : (
-          <div className="imagePlaceholder">
+          <div className="category-image-placeholder">
             JNMulee News
           </div>
         )}
 
-        <div className="storyBody">
-          <div className="storyCategory">
-            {story.category ||
-              "News"}
+        <div className="category-story-body">
+          <div className="category-story-label">
+            {story.category || "News"}
           </div>
 
-          <h2 className="storyTitle">
+          <h2 className="category-story-title">
             {story.title ||
               "Untitled Story"}
           </h2>
 
-          <p className="storyExcerpt">
-            {getExcerpt(
-              story.content
-            )}
+          <p className="category-story-excerpt">
+            {getExcerpt(story.content)}
           </p>
 
-          <div className="storyMeta">
-            <time
-              dateTime={
-                story.created_at ||
-                undefined
-              }
-            >
-              {timeAgo(
-                story.created_at
-              )}
-            </time>
+          <div className="category-story-meta">
+            <span>
+              {timeAgo(story.created_at)}
+            </span>
 
-            <span>•</span>
+            <span className="meta-dot">
+              •
+            </span>
 
             <span>
               {formatDate(
@@ -390,13 +280,13 @@ function FeaturedStory({
     validImage(story.image_url);
 
   return (
-    <article className="featuredStory">
+    <article className="category-featured">
       <Link
         href={`/news/${story.slug}`}
-        className="featuredLink"
+        className="category-featured-link"
       >
-        {hasImage ? (
-          <div className="featuredImage">
+        <div className="category-featured-image">
+          {hasImage ? (
             <Image
               src={story.image_url!}
               alt={
@@ -406,40 +296,39 @@ function FeaturedStory({
               fill
               priority
               sizes="
-                (max-width: 800px) 100vw,
+                (max-width: 900px) 100vw,
                 66vw
               "
-              className="featuredImageElement"
+              className="category-featured-image-element"
             />
-          </div>
-        ) : (
-          <div className="featuredPlaceholder">
-            JNMulee News
-          </div>
-        )}
+          ) : (
+            <div className="category-featured-placeholder">
+              JNMulee News
+            </div>
+          )}
 
-        <div className="featuredBody">
-          <div className="featuredCategory">
-            {story.category ||
-              "News"}
-          </div>
+          <div className="category-featured-overlay" />
 
-          <h2 className="featuredTitle">
-            {story.title ||
-              "Latest News"}
-          </h2>
+          <div className="category-featured-content">
+            <div className="category-featured-tag">
+              {story.category || "News"}
+            </div>
 
-          <p className="featuredExcerpt">
-            {getExcerpt(
-              story.content,
-              260
-            )}
-          </p>
+            <h2 className="category-featured-title">
+              {story.title ||
+                "Latest News"}
+            </h2>
 
-          <div className="featuredMeta">
-            {timeAgo(
-              story.created_at
-            )}
+            <p className="category-featured-excerpt">
+              {getExcerpt(
+                story.content,
+                250
+              )}
+            </p>
+
+            <div className="category-featured-meta">
+              {timeAgo(story.created_at)}
+            </div>
           </div>
         </div>
       </Link>
@@ -462,10 +351,10 @@ function CompactStory({
   return (
     <Link
       href={`/news/${story.slug}`}
-      className="compactStory"
+      className="category-compact"
     >
       {hasImage ? (
-        <div className="compactImage">
+        <div className="category-compact-image">
           <Image
             src={story.image_url!}
             alt={
@@ -473,31 +362,28 @@ function CompactStory({
               "JNMulee News"
             }
             fill
-            sizes="90px"
-            className="compactImageElement"
+            sizes="96px"
+            className="category-compact-image-element"
           />
         </div>
       ) : (
-        <div className="compactPlaceholder">
+        <div className="category-compact-placeholder">
           News
         </div>
       )}
 
-      <div className="compactBody">
-        <div className="compactCategory">
-          {story.category ||
-            "News"}
+      <div className="category-compact-body">
+        <div className="category-compact-label">
+          {story.category || "News"}
         </div>
 
-        <div className="compactTitle">
+        <div className="category-compact-title">
           {story.title ||
             "Latest News"}
         </div>
 
-        <div className="compactDate">
-          {timeAgo(
-            story.created_at
-          )}
+        <div className="category-compact-date">
+          {timeAgo(story.created_at)}
         </div>
       </div>
     </Link>
@@ -518,27 +404,23 @@ function MostReadItem({
   return (
     <Link
       href={`/news/${story.slug}`}
-      className="mostReadItem"
+      className="category-most-read-item"
     >
-      <div className="mostReadNumber">
-        {String(number).padStart(
-          2,
-          "0"
-        )}
+      <div className="category-most-read-number">
+        {String(number).padStart(2, "0")}
       </div>
 
-      <div className="mostReadContent">
-        <div className="mostReadCategory">
-          {story.category ||
-            "News"}
+      <div>
+        <div className="category-most-read-label">
+          {story.category || "News"}
         </div>
 
-        <div className="mostReadTitle">
+        <div className="category-most-read-title">
           {story.title ||
             "Latest News"}
         </div>
 
-        <div className="mostReadViews">
+        <div className="category-most-read-views">
           {Number(
             story.view_count || 0
           ).toLocaleString()}{" "}
@@ -556,8 +438,7 @@ function MostReadItem({
 export function generateStaticParams() {
   return CATEGORIES.map(
     (category) => ({
-      category:
-        category.slug,
+      category: category.slug,
     })
   );
 }
@@ -616,8 +497,7 @@ export async function generateMetadata({
     robots: {
       index: true,
       follow: true,
-      "max-image-preview":
-        "large",
+      "max-image-preview": "large",
       "max-snippet": -1,
       "max-video-preview": -1,
     },
@@ -628,12 +508,11 @@ export async function generateMetadata({
       description,
       url:
         `${SITE_URL}/category/${config.slug}`,
-      siteName:
-        "JNMulee News",
+      siteName: "JNMulee News",
     },
 
     twitter: {
-      card: "summary",
+      card: "summary_large_image",
       title,
       description,
     },
@@ -661,16 +540,6 @@ export default async function CategoryPage({
     notFound();
   }
 
-  /*
-   * IMPORTANT:
-   *
-   * "news" means Top Stories and therefore
-   * displays all published stories.
-   *
-   * Every other category uses the exact
-   * category value stored in Supabase.
-   */
-
   const storySelect =
     "id,title,slug,content,image_url,category,created_at,view_count";
 
@@ -679,39 +548,24 @@ export default async function CategoryPage({
       .from("news")
       .select(storySelect)
       .eq("Published", true)
-      .not(
-        "image_url",
-        "is",
-        null
-      )
-      .neq(
-        "image_url",
-        ""
-      )
-      .not(
-        "slug",
-        "is",
-        null
-      );
+      .not("image_url", "is", null)
+      .neq("image_url", "")
+      .not("slug", "is", null);
 
   if (config.slug !== "news") {
-    query =
-      query.eq(
-        "category",
-        config.name
-      );
+    query = query.eq(
+      "category",
+      config.name
+    );
   }
 
   const {
     data,
     error,
   } = await query
-    .order(
-      "created_at",
-      {
-        ascending: false,
-      }
-    )
+    .order("created_at", {
+      ascending: false,
+    })
     .limit(60);
 
   if (error) {
@@ -724,51 +578,25 @@ export default async function CategoryPage({
   const stories =
     (data || []) as Story[];
 
-  /*
-   * Most-read stories.
-   */
-
   const {
     data: mostReadData,
   } = await supabase
     .from("news")
     .select(storySelect)
     .eq("Published", true)
-    .not(
-      "image_url",
-      "is",
-      null
-    )
-    .neq(
-      "image_url",
-      ""
-    )
-    .not(
-      "slug",
-      "is",
-      null
-    )
-    .order(
-      "view_count",
-      {
-        ascending: false,
-      }
-    )
-    .order(
-      "created_at",
-      {
-        ascending: false,
-      }
-    )
+    .not("image_url", "is", null)
+    .neq("image_url", "")
+    .not("slug", "is", null)
+    .order("view_count", {
+      ascending: false,
+    })
+    .order("created_at", {
+      ascending: false,
+    })
     .limit(5);
 
   const mostRead =
-    (mostReadData ||
-      []) as Story[];
-
-  /*
-   * Featured story + secondary stories.
-   */
+    (mostReadData || []) as Story[];
 
   const featured =
     stories[0] || null;
@@ -779,661 +607,497 @@ export default async function CategoryPage({
   const remaining =
     stories.slice(5);
 
-  /*
-   * Other categories for the
-   * navigation bar.
-   */
-
   return (
-    <main className="categoryPage">
+    <main className="jn-category-page">
       <style>{`
-        * {
-          box-sizing: border-box;
-        }
-
-        .categoryPage {
+        .jn-category-page {
           min-height: 100vh;
-          background: #f5f6f8;
-          color: #111827;
+          background: #f7f9fc;
+          color: #172033;
+          padding: 30px 0 70px;
         }
 
-        .container {
-          width: min(1200px, calc(100% - 32px));
+        .jn-category-container {
+          width: min(1240px, calc(100% - 32px));
           margin: 0 auto;
         }
 
-        /* =========================
-           HEADER
-        ========================= */
-
-        .siteHeader {
-          position: sticky;
-          top: 0;
-          z-index: 100;
-          background: #c8102e;
-          color: #ffffff;
-          box-shadow:
-            0 2px 12px rgba(0,0,0,.12);
-        }
-
-        .headerTop {
-          min-height: 68px;
+        .jn-category-breadcrumb {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 20px;
-        }
-
-        .logo {
-          color: #ffffff;
-          text-decoration: none;
-          font-size: 25px;
-          line-height: 1;
-          font-weight: 950;
-          letter-spacing: -.9px;
-          white-space: nowrap;
-        }
-
-        .logo span {
-          font-weight: 500;
-          opacity: .92;
-        }
-
-        .headerSearch {
-          width: min(390px, 100%);
-        }
-
-        .headerSearch form {
-          width: 100%;
-        }
-
-        .headerSearch input {
-          width: 100%;
-          height: 40px;
-          border: 0;
-          border-radius: 999px;
-          padding: 0 18px;
-          outline: none;
-          background: #ffffff;
-          color: #111827;
-          font-size: 14px;
-        }
-
-        .categoryNav {
-          background: #a90d27;
-          border-top:
-            1px solid
-            rgba(255,255,255,.14);
-          overflow-x: auto;
-          scrollbar-width: none;
-        }
-
-        .categoryNav::-webkit-scrollbar {
-          display: none;
-        }
-
-        .categoryNavInner {
-          display: flex;
-          align-items: center;
-          min-height: 43px;
-          white-space: nowrap;
-        }
-
-        .categoryNavLink {
-          color:
-            rgba(255,255,255,.96);
-          text-decoration: none;
-          padding: 12px 14px;
-          font-size: 13px;
-          font-weight: 800;
-        }
-
-        .categoryNavLink:hover {
-          background:
-            rgba(255,255,255,.12);
-        }
-
-        .categoryNavLink.active {
-          background:
-            rgba(255,255,255,.18);
-        }
-
-        /* =========================
-           BREAKING BAR
-        ========================= */
-
-        .breakingBar {
-          background: #111827;
-          color: #ffffff;
-        }
-
-        .breakingInner {
-          min-height: 40px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          overflow: hidden;
-        }
-
-        .breakingLabel {
-          flex: 0 0 auto;
-          background: #c8102e;
-          border-radius: 4px;
-          padding: 5px 9px;
-          font-size: 10px;
-          font-weight: 950;
-          letter-spacing: .6px;
-        }
-
-        .breakingLive {
-          flex: 0 0 auto;
-          color: #ff617b;
-          font-size: 11px;
-          font-weight: 900;
-        }
-
-        .breakingTitle {
-          min-width: 0;
-          overflow: hidden;
-          color: #ffffff;
-          text-decoration: none;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          font-size: 13px;
-          font-weight: 650;
-        }
-
-        .breakingTitle:hover {
-          text-decoration: underline;
-        }
-
-        /* =========================
-           MAIN
-        ========================= */
-
-        .main {
-          padding-top: 32px;
-          padding-bottom: 70px;
-        }
-
-        .breadcrumb {
-          display: flex;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 7px;
+          gap: 8px;
           margin-bottom: 18px;
-          color: #6b7280;
+          color: #718096;
           font-size: 13px;
         }
 
-        .breadcrumb a {
-          color: #c8102e;
+        .jn-category-breadcrumb a {
+          color: #2563eb;
           text-decoration: none;
           font-weight: 800;
         }
 
-        .breadcrumb a:hover {
+        .jn-category-breadcrumb a:hover {
           text-decoration: underline;
         }
 
-        .categoryHeading {
+        .jn-category-heading {
           display: flex;
           align-items: flex-end;
           justify-content: space-between;
           gap: 25px;
-          margin-bottom: 25px;
+          margin-bottom: 28px;
         }
 
-        .headingEyebrow {
-          margin-bottom: 7px;
-          color: #c8102e;
+        .jn-category-eyebrow {
+          margin-bottom: 8px;
+          color: #2563eb;
           font-size: 11px;
-          font-weight: 950;
-          letter-spacing: 1.2px;
+          font-weight: 900;
+          letter-spacing: 1.5px;
           text-transform: uppercase;
         }
 
-        .categoryTitle {
+        .jn-category-title {
           margin: 0;
-          color: #111827;
-          font-size: clamp(
-            34px,
-            5vw,
-            52px
-          );
-          line-height: 1;
-          letter-spacing: -2px;
+          color: #0b1220;
+          font-size: clamp(38px, 5vw, 58px);
+          line-height: .98;
+          letter-spacing: -2.5px;
           font-weight: 950;
         }
 
-        .categoryDescription {
-          max-width: 650px;
-          margin: 11px 0 0;
-          color: #687284;
+        .jn-category-description {
+          max-width: 680px;
+          margin: 13px 0 0;
+          color: #657085;
           font-size: 15px;
-          line-height: 1.65;
+          line-height: 1.7;
         }
 
-        .storyCount {
+        .jn-category-count {
           flex: 0 0 auto;
-          color: #6b7280;
-          font-size: 13px;
-          font-weight: 700;
+          padding: 9px 13px;
+          border: 1px solid #dce3ed;
+          border-radius: 999px;
+          background: #ffffff;
+          color: #526078;
+          font-size: 12px;
+          font-weight: 800;
         }
 
-        /* =========================
-           FEATURED
-        ========================= */
-
-        .featuredLayout {
+        .jn-category-featured-layout {
           display: grid;
           grid-template-columns:
             minmax(0, 1.55fr)
             minmax(300px, .75fr);
-          gap: 25px;
+          gap: 24px;
           margin-bottom: 35px;
         }
 
-        .featuredStory {
+        .category-featured {
+          min-width: 0;
           overflow: hidden;
-          border:
-            1px solid #e5e7eb;
-          border-radius: 17px;
-          background: #ffffff;
+          border: 1px solid #dce3ed;
+          border-radius: 20px;
+          background: #0b1220;
           box-shadow:
-            0 8px 28px
-            rgba(15,23,42,.06);
+            0 14px 40px rgba(11,18,32,.09);
         }
 
-        .featuredLink {
+        .category-featured-link {
           display: block;
           color: inherit;
           text-decoration: none;
         }
 
-        .featuredImage {
+        .category-featured-image {
           position: relative;
           aspect-ratio: 16 / 9;
           overflow: hidden;
-          background: #e5e7eb;
         }
 
-        .featuredImageElement {
+        .category-featured-image-element {
           object-fit: cover;
-          transition:
-            transform .35s ease;
+          transition: transform .4s ease;
         }
 
-        .featuredStory:hover
-        .featuredImageElement {
+        .category-featured:hover
+        .category-featured-image-element {
           transform: scale(1.035);
         }
 
-        .featuredPlaceholder {
-          min-height: 360px;
+        .category-featured-placeholder {
+          position: absolute;
+          inset: 0;
           display: flex;
           align-items: center;
           justify-content: center;
           background:
             linear-gradient(
               135deg,
-              #d7193f,
-              #790d28
+              #0b1220,
+              #1d4ed8
             );
           color: #ffffff;
-          font-size: 18px;
+          font-size: 20px;
           font-weight: 950;
-          letter-spacing: 1px;
         }
 
-        .featuredBody {
-          padding: 23px 25px 26px;
-          border-top: 4px solid #c8102e;
+        .category-featured-overlay {
+          position: absolute;
+          inset: 0;
+          background:
+            linear-gradient(
+              to top,
+              rgba(5,10,20,.92) 0%,
+              rgba(5,10,20,.48) 42%,
+              rgba(5,10,20,.02) 78%
+            );
         }
 
-        .featuredCategory {
-          margin-bottom: 9px;
-          color: #c8102e;
-          font-size: 11px;
-          font-weight: 950;
-          letter-spacing: .8px;
+        .category-featured-content {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          padding: 26px;
+          color: #ffffff;
+        }
+
+        .category-featured-tag {
+          display: inline-flex;
+          margin-bottom: 10px;
+          padding: 5px 9px;
+          border-radius: 999px;
+          background: #2563eb;
+          color: #ffffff;
+          font-size: 10px;
+          font-weight: 900;
+          letter-spacing: .7px;
           text-transform: uppercase;
         }
 
-        .featuredTitle {
+        .category-featured-title {
           margin: 0;
-          color: #111827;
-          font-size: clamp(
-            27px,
-            4vw,
-            43px
-          );
-          line-height: 1.08;
-          letter-spacing: -1.3px;
+          max-width: 850px;
+          color: #ffffff;
+          font-size: clamp(27px, 4vw, 44px);
+          line-height: 1.06;
+          letter-spacing: -1.4px;
           font-weight: 950;
         }
 
-        .featuredExcerpt {
-          margin: 15px 0 0;
-          color: #596273;
-          font-size: 16px;
-          line-height: 1.65;
+        .category-featured-excerpt {
+          max-width: 760px;
+          margin: 12px 0 0;
+          color: rgba(255,255,255,.82);
+          font-size: 14px;
+          line-height: 1.6;
         }
 
-        .featuredMeta {
-          margin-top: 16px;
-          color: #8a93a3;
-          font-size: 12px;
-          font-weight: 650;
+        .category-featured-meta {
+          margin-top: 12px;
+          color: #bfdbfe;
+          font-size: 11px;
+          font-weight: 700;
         }
 
-        /* =========================
-           SECONDARY STORIES
-        ========================= */
-
-        .secondaryPanel {
+        .jn-category-secondary {
           min-width: 0;
+          padding: 21px;
+          border: 1px solid #dce3ed;
+          border-radius: 18px;
+          background: #ffffff;
+          box-shadow:
+            0 8px 28px rgba(11,18,32,.05);
         }
 
-        .secondaryHeader {
+        .jn-category-secondary-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 10px;
-          margin-bottom: 11px;
-          padding-bottom: 10px;
-          border-bottom: 3px solid #c8102e;
+          margin-bottom: 14px;
+          padding-bottom: 12px;
+          border-bottom: 2px solid #e7edf5;
         }
 
-        .secondaryHeader strong {
-          color: #111827;
-          font-size: 18px;
+        .jn-category-secondary-header strong {
+          color: #0b1220;
+          font-size: 19px;
           font-weight: 950;
         }
 
-        .secondaryHeader a {
-          color: #c8102e;
+        .jn-category-secondary-header a {
+          color: #2563eb;
           text-decoration: none;
           font-size: 12px;
           font-weight: 850;
         }
 
-        .secondaryStories {
+        .jn-category-secondary-list {
           display: grid;
-          gap: 12px;
+          gap: 13px;
         }
 
-        .compactStory {
+        .category-compact {
           display: grid;
-          grid-template-columns: 88px minmax(0,1fr);
+          grid-template-columns: 94px minmax(0,1fr);
           gap: 12px;
           min-width: 0;
-          padding-bottom: 12px;
-          border-bottom:
-            1px solid #e5e7eb;
+          padding-bottom: 13px;
+          border-bottom: 1px solid #e8edf4;
           color: inherit;
           text-decoration: none;
         }
 
-        .compactImage,
-        .compactPlaceholder {
+        .category-compact:last-child {
+          padding-bottom: 0;
+          border-bottom: 0;
+        }
+
+        .category-compact-image,
+        .category-compact-placeholder {
           position: relative;
-          width: 88px;
-          height: 70px;
+          width: 94px;
+          height: 72px;
           overflow: hidden;
-          border-radius: 8px;
-          background: #e5e7eb;
+          border-radius: 9px;
+          background: #e9eef5;
         }
 
-        .compactImageElement {
+        .category-compact-image-element {
           object-fit: cover;
+          transition: transform .3s ease;
         }
 
-        .compactPlaceholder {
+        .category-compact:hover
+        .category-compact-image-element {
+          transform: scale(1.05);
+        }
+
+        .category-compact-placeholder {
           display: flex;
           align-items: center;
           justify-content: center;
-          background: #e5e7eb;
-          color: #8a93a3;
-          font-size: 11px;
+          color: #718096;
+          font-size: 10px;
           font-weight: 800;
         }
 
-        .compactBody {
+        .category-compact-body {
           min-width: 0;
         }
 
-        .compactCategory {
+        .category-compact-label {
           margin-bottom: 4px;
           overflow: hidden;
-          color: #c8102e;
+          color: #2563eb;
           text-overflow: ellipsis;
-          text-transform: uppercase;
           white-space: nowrap;
           font-size: 9px;
-          font-weight: 950;
-          letter-spacing: .6px;
+          font-weight: 900;
+          letter-spacing: .7px;
+          text-transform: uppercase;
         }
 
-        .compactTitle {
+        .category-compact-title {
           display: -webkit-box;
           overflow: hidden;
-          color: #111827;
+          color: #172033;
           font-size: 14px;
-          line-height: 1.3;
+          line-height: 1.32;
           font-weight: 850;
           -webkit-box-orient: vertical;
           -webkit-line-clamp: 3;
         }
 
-        .compactDate {
+        .category-compact-date {
           margin-top: 5px;
-          color: #9299a7;
+          color: #8a95a8;
           font-size: 10px;
         }
 
-        .compactStory:hover
-        .compactTitle {
-          color: #c8102e;
+        .category-compact:hover
+        .category-compact-title {
+          color: #2563eb;
         }
 
-        /* =========================
-           ADS
-        ========================= */
-
-        .adWrap {
+        .jn-category-ad {
           margin: 30px 0;
         }
 
-        /* =========================
-           MOST READ
-        ========================= */
-
-        .mostReadSection {
+        .jn-category-most-read {
           margin: 40px 0;
           padding: 24px;
-          border:
-            1px solid #e5e7eb;
-          border-top: 4px solid #c8102e;
-          border-radius: 15px;
+          border: 1px solid #dce3ed;
+          border-top: 4px solid #2563eb;
+          border-radius: 17px;
           background: #ffffff;
+          box-shadow:
+            0 8px 28px rgba(11,18,32,.04);
         }
 
-        .sectionHeader {
-          display: flex;
-          align-items: flex-end;
-          justify-content: space-between;
-          gap: 15px;
+        .jn-category-section-header {
           margin-bottom: 20px;
         }
 
-        .sectionEyebrow {
-          margin-bottom: 5px;
-          color: #c8102e;
+        .jn-category-section-eyebrow {
+          margin-bottom: 6px;
+          color: #2563eb;
           font-size: 10px;
-          font-weight: 950;
-          letter-spacing: 1px;
+          font-weight: 900;
+          letter-spacing: 1.2px;
           text-transform: uppercase;
         }
 
-        .sectionTitle {
+        .jn-category-section-title {
           margin: 0;
-          color: #111827;
-          font-size: 28px;
+          color: #0b1220;
+          font-size: 29px;
           line-height: 1;
-          letter-spacing: -.8px;
+          letter-spacing: -.9px;
           font-weight: 950;
         }
 
-        .mostReadGrid {
+        .jn-category-most-read-grid {
           display: grid;
           grid-template-columns:
             repeat(5, minmax(0,1fr));
-          gap: 16px;
+          gap: 17px;
         }
 
-        .mostReadItem {
+        .category-most-read-item {
           display: block;
+          min-width: 0;
           color: inherit;
           text-decoration: none;
-          min-width: 0;
         }
 
-        .mostReadNumber {
+        .category-most-read-number {
           margin-bottom: 9px;
-          color: #c8102e;
-          font-size: 28px;
+          color: #2563eb;
+          font-size: 29px;
           line-height: 1;
           font-weight: 950;
         }
 
-        .mostReadContent {
-          min-width: 0;
-        }
-
-        .mostReadCategory {
+        .category-most-read-label {
           margin-bottom: 5px;
-          color: #c8102e;
+          color: #2563eb;
           font-size: 9px;
-          font-weight: 950;
-          letter-spacing: .5px;
+          font-weight: 900;
+          letter-spacing: .6px;
           text-transform: uppercase;
         }
 
-        .mostReadTitle {
+        .category-most-read-title {
           display: -webkit-box;
           overflow: hidden;
-          color: #111827;
+          color: #172033;
           font-size: 14px;
-          line-height: 1.35;
+          line-height: 1.38;
           font-weight: 850;
           -webkit-box-orient: vertical;
           -webkit-line-clamp: 4;
         }
 
-        .mostReadViews {
+        .category-most-read-views {
           margin-top: 7px;
-          color: #8a93a3;
+          color: #8a95a8;
           font-size: 10px;
         }
 
-        .mostReadItem:hover
-        .mostReadTitle {
-          color: #c8102e;
+        .category-most-read-item:hover
+        .category-most-read-title {
+          color: #2563eb;
         }
 
-        /* =========================
-           STORY GRID
-        ========================= */
-
-        .latestHeader {
+        .jn-category-latest-heading {
           display: flex;
           align-items: center;
           gap: 18px;
           margin: 45px 0 20px;
         }
 
-        .latestHeader h2 {
+        .jn-category-latest-heading h2 {
           flex: 0 0 auto;
           margin: 0;
-          color: #111827;
-          font-size: 29px;
+          color: #0b1220;
+          font-size: 30px;
           line-height: 1;
-          letter-spacing: -.8px;
+          letter-spacing: -1px;
           font-weight: 950;
         }
 
-        .latestLine {
+        .jn-category-latest-line {
           width: 100%;
-          height: 3px;
-          background: #c8102e;
+          height: 2px;
+          background: #2563eb;
           opacity: .28;
         }
 
-        .storyGrid {
+        .jn-category-story-grid {
           display: grid;
           grid-template-columns:
             repeat(3, minmax(0,1fr));
           gap: 21px;
         }
 
-        .storyCard {
+        .category-story-card {
           min-width: 0;
           overflow: hidden;
-          border:
-            1px solid #e5e7eb;
-          border-radius: 14px;
+          border: 1px solid #dce3ed;
+          border-radius: 15px;
           background: #ffffff;
           box-shadow:
-            0 7px 25px
-            rgba(15,23,42,.05);
+            0 7px 25px rgba(11,18,32,.045);
           transition:
             transform .2s ease,
             box-shadow .2s ease;
         }
 
-        .storyCard:hover {
+        .category-story-card:hover {
           transform: translateY(-3px);
           box-shadow:
-            0 14px 32px
-            rgba(15,23,42,.1);
+            0 16px 34px rgba(11,18,32,.09);
         }
 
-        .storyLink {
+        .category-story-link {
           display: block;
           color: inherit;
           text-decoration: none;
         }
 
-        .storyImage,
-        .imagePlaceholder {
+        .category-story-image,
+        .category-image-placeholder {
           position: relative;
           width: 100%;
           aspect-ratio: 16 / 9;
           overflow: hidden;
-          background: #e5e7eb;
+          background: #e9eef5;
         }
 
-        .storyImageElement {
+        .category-story-image-element {
           object-fit: cover;
-          transition:
-            transform .3s ease;
+          transition: transform .3s ease;
         }
 
-        .storyCard:hover
-        .storyImageElement {
+        .category-story-card:hover
+        .category-story-image-element {
           transform: scale(1.035);
         }
 
-        .imagePlaceholder {
+        .category-image-placeholder {
           display: flex;
           align-items: center;
           justify-content: center;
           background:
             linear-gradient(
               135deg,
-              #d7193f,
-              #790d28
+              #0b1220,
+              #2563eb
             );
           color: #ffffff;
           font-size: 14px;
@@ -1441,60 +1105,60 @@ export default async function CategoryPage({
           letter-spacing: .7px;
         }
 
-        .storyBody {
+        .category-story-body {
           padding: 17px;
-          border-top: 3px solid #c8102e;
+          border-top: 3px solid #2563eb;
         }
 
-        .storyCategory {
+        .category-story-label {
           margin-bottom: 8px;
-          color: #c8102e;
+          color: #2563eb;
           font-size: 10px;
-          font-weight: 950;
+          font-weight: 900;
           letter-spacing: .7px;
           text-transform: uppercase;
         }
 
-        .storyTitle {
+        .category-story-title {
           margin: 0;
-          color: #111827;
+          color: #172033;
           font-size: 19px;
           line-height: 1.27;
-          letter-spacing: -.25px;
+          letter-spacing: -.3px;
           font-weight: 900;
         }
 
-        .storyExcerpt {
+        .category-story-excerpt {
           margin: 10px 0 13px;
-          color: #687284;
+          color: #68758a;
           font-size: 13px;
           line-height: 1.6;
         }
 
-        .storyMeta {
+        .category-story-meta {
           display: flex;
           align-items: center;
           flex-wrap: wrap;
           gap: 7px;
-          color: #8a93a3;
+          color: #8a95a8;
           font-size: 11px;
         }
 
-        /* =========================
-           EMPTY
-        ========================= */
+        .meta-dot {
+          color: #2563eb;
+          font-weight: 900;
+        }
 
-        .emptyState {
+        .jn-category-empty {
           padding: 70px 25px;
-          border:
-            1px solid #e5e7eb;
-          border-top: 4px solid #c8102e;
-          border-radius: 15px;
+          border: 1px solid #dce3ed;
+          border-top: 4px solid #2563eb;
+          border-radius: 17px;
           background: #ffffff;
           text-align: center;
         }
 
-        .emptyStateIcon {
+        .jn-category-empty-icon {
           width: 62px;
           height: 62px;
           margin: 0 auto 17px;
@@ -1502,271 +1166,168 @@ export default async function CategoryPage({
           align-items: center;
           justify-content: center;
           border-radius: 50%;
-          background: #fef2f2;
-          color: #c8102e;
-          font-size: 25px;
+          background: #eff6ff;
+          color: #2563eb;
+          font-size: 24px;
           font-weight: 950;
         }
 
-        .emptyState h2 {
+        .jn-category-empty h2 {
           margin: 0 0 9px;
-          color: #111827;
+          color: #0b1220;
           font-size: 25px;
         }
 
-        .emptyState p {
+        .jn-category-empty p {
           max-width: 550px;
           margin: 0 auto;
-          color: #6b7280;
+          color: #6b7587;
           line-height: 1.65;
         }
 
-        /* =========================
-           FOOTER
-        ========================= */
-
-        .footer {
-          margin-top: 30px;
-          padding: 35px 0;
-          background: #111827;
-          color: #ffffff;
+        .jn-category-more-grid {
+          display: grid;
+          grid-template-columns:
+            repeat(4, minmax(0,1fr));
+          gap: 13px;
         }
 
-        .footerLinks {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 20px;
-          margin-bottom: 18px;
-        }
-
-        .footerLinks a {
-          color: #d1d5db;
+        .jn-category-more-card {
+          display: block;
+          padding: 16px;
+          border: 1px solid #dce3ed;
+          border-radius: 12px;
+          background: #ffffff;
+          color: inherit;
           text-decoration: none;
-          font-size: 13px;
-          font-weight: 650;
+          transition:
+            transform .2s ease,
+            border-color .2s ease,
+            box-shadow .2s ease;
         }
 
-        .footerLinks a:hover {
-          color: #ffffff;
+        .jn-category-more-card:hover {
+          transform: translateY(-2px);
+          border-color: #93b4f8;
+          box-shadow:
+            0 10px 24px rgba(11,18,32,.06);
         }
 
-        .footerCopyright {
-          margin: 0;
-          color: #9ca3af;
-          font-size: 12px;
+        .jn-category-more-name {
+          color: #2563eb;
+          font-size: 14px;
+          font-weight: 900;
         }
 
-        /* =========================
-           RESPONSIVE
-        ========================= */
+        .jn-category-more-text {
+          margin-top: 5px;
+          color: #718096;
+          font-size: 11px;
+          line-height: 1.45;
+        }
 
         @media (max-width: 1050px) {
-          .featuredLayout {
+          .jn-category-featured-layout {
             grid-template-columns: 1fr;
           }
 
-          .secondaryStories {
-            grid-template-columns:
-              repeat(2, minmax(0,1fr));
-            display: grid;
-            gap: 12px;
-          }
-
-          .mostReadGrid {
+          .jn-category-most-read-grid {
             grid-template-columns:
               repeat(3, minmax(0,1fr));
           }
 
-          .storyGrid {
+          .jn-category-story-grid {
             grid-template-columns:
               repeat(2, minmax(0,1fr));
+          }
+
+          .jn-category-more-grid {
+            grid-template-columns:
+              repeat(3, minmax(0,1fr));
           }
         }
 
         @media (max-width: 700px) {
-          .container {
+          .jn-category-page {
+            padding-top: 22px;
+          }
+
+          .jn-category-container {
             width:
-              min(100% - 22px, 1200px);
+              min(100% - 22px, 1240px);
           }
 
-          .headerTop {
-            min-height: 58px;
-          }
-
-          .logo {
-            font-size: 21px;
-          }
-
-          .headerSearch {
-            display: none;
-          }
-
-          .main {
-            padding-top: 23px;
-          }
-
-          .categoryHeading {
+          .jn-category-heading {
             align-items: flex-start;
             flex-direction: column;
-            gap: 8px;
+            gap: 10px;
           }
 
-          .categoryTitle {
-            font-size: 38px;
-            letter-spacing: -1.4px;
+          .jn-category-title {
+            font-size: 40px;
+            letter-spacing: -1.6px;
           }
 
-          .featuredLayout {
-            gap: 18px;
-          }
-
-          .featuredTitle {
-            font-size: 29px;
-          }
-
-          .featuredBody {
+          .category-featured-content {
             padding: 20px;
           }
 
-          .secondaryStories {
-            grid-template-columns: 1fr;
+          .category-featured-title {
+            font-size: 29px;
           }
 
-          .mostReadSection {
+          .jn-category-secondary {
+            padding: 18px;
+          }
+
+          .jn-category-most-read {
             padding: 19px;
           }
 
-          .mostReadGrid {
+          .jn-category-most-read-grid {
             grid-template-columns:
               repeat(2, minmax(0,1fr));
           }
 
-          .storyGrid {
+          .jn-category-story-grid {
             grid-template-columns: 1fr;
           }
 
-          .latestHeader {
+          .jn-category-more-grid {
+            grid-template-columns:
+              repeat(2, minmax(0,1fr));
+          }
+
+          .jn-category-latest-heading {
             align-items: flex-start;
             flex-direction: column;
             gap: 9px;
           }
-
-          .latestLine {
-            width: 100%;
-          }
         }
 
         @media (max-width: 430px) {
-          .breakingInner {
-            gap: 7px;
-          }
-
-          .breakingLive {
-            display: none;
-          }
-
-          .mostReadGrid {
+          .jn-category-most-read-grid {
             grid-template-columns: 1fr;
           }
 
-          .featuredTitle {
-            font-size: 27px;
+          .jn-category-more-grid {
+            grid-template-columns: 1fr;
           }
 
-          .storyTitle {
+          .category-featured-title {
+            font-size: 26px;
+          }
+
+          .category-story-title {
             font-size: 18px;
           }
         }
       `}</style>
 
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
+      <div className="jn-category-container">
+        {/* BREADCRUMB */}
 
-      <header className="siteHeader">
-        <div className="container headerTop">
-          <Link
-            href="/"
-            className="logo"
-          >
-            JNMulee{" "}
-            <span>News</span>
-          </Link>
-
-          <div className="headerSearch">
-            <form
-              action="/search"
-              method="GET"
-            >
-              <input
-                type="search"
-                name="q"
-                placeholder="Search JNMulee News..."
-                aria-label="Search JNMulee News"
-              />
-            </form>
-          </div>
-        </div>
-
-        <nav
-          className="categoryNav"
-          aria-label="News categories"
-        >
-          <div className="container categoryNavInner">
-            {CATEGORIES.map(
-              (item) => (
-                <Link
-                  key={item.slug}
-                  href={`/category/${item.slug}`}
-                  className={
-                    item.slug ===
-                    config.slug
-                      ? "categoryNavLink active"
-                      : "categoryNavLink"
-                  }
-                >
-                  {item.name}
-                </Link>
-              )
-            )}
-          </div>
-        </nav>
-      </header>
-
-      {/* =====================================================
-          BREAKING BAR
-      ===================================================== */}
-
-      <div className="breakingBar">
-        <div className="container breakingInner">
-          <span className="breakingLabel">
-            BREAKING
-          </span>
-
-          <span className="breakingLive">
-            ● LIVE
-          </span>
-
-          <Link
-            href={
-              featured
-                ? `/news/${featured.slug}`
-                : "/"
-            }
-            className="breakingTitle"
-          >
-            {featured?.title ||
-              "Latest news and updates from JNMulee News."}
-          </Link>
-        </div>
-      </div>
-
-      {/* =====================================================
-          MAIN CONTENT
-      ===================================================== */}
-
-      <main className="container main">
-        <div className="breadcrumb">
+        <div className="jn-category-breadcrumb">
           <Link href="/">
             Home
           </Link>
@@ -1778,25 +1339,26 @@ export default async function CategoryPage({
           </span>
         </div>
 
-        <div className="categoryHeading">
+        {/* HEADING */}
+
+        <div className="jn-category-heading">
           <div>
-            <div className="headingEyebrow">
+            <div className="jn-category-eyebrow">
               JNMULEE NEWS
             </div>
 
-            <h1 className="categoryTitle">
+            <h1 className="jn-category-title">
               {config.name}
             </h1>
 
-            <p className="categoryDescription">
-              {config.slug ===
-              "news"
+            <p className="jn-category-description">
+              {config.slug === "news"
                 ? "The latest stories, breaking news and important updates from JNMulee News."
                 : `The latest ${config.name.toLowerCase()} news, stories, reports and updates from JNMulee News.`}
             </p>
           </div>
 
-          <div className="storyCount">
+          <div className="jn-category-count">
             {stories.length.toLocaleString()}{" "}
             {stories.length === 1
               ? "story"
@@ -1804,39 +1366,33 @@ export default async function CategoryPage({
           </div>
         </div>
 
-        {/* =================================================
-            FEATURED
-        ================================================= */}
+        {/* FEATURED */}
 
         {featured ? (
           <section
-            className="featuredLayout"
+            className="jn-category-featured-layout"
             aria-label="Featured stories"
           >
             <FeaturedStory
               story={featured}
             />
 
-            <div className="secondaryPanel">
-              <div className="secondaryHeader">
+            <div className="jn-category-secondary">
+              <div className="jn-category-secondary-header">
                 <strong>
                   Latest
                 </strong>
 
-                <Link
-                  href="/category/news"
-                >
-                  More →
+                <Link href="/">
+                  View all →
                 </Link>
               </div>
 
-              <div className="secondaryStories">
+              <div className="jn-category-secondary-list">
                 {secondary.map(
                   (story) => (
                     <CompactStory
-                      key={
-                        story.id
-                      }
+                      key={story.id}
                       story={story}
                     />
                   )
@@ -1845,8 +1401,8 @@ export default async function CategoryPage({
             </div>
           </section>
         ) : (
-          <section className="emptyState">
-            <div className="emptyStateIcon">
+          <section className="jn-category-empty">
+            <div className="jn-category-empty-icon">
               !
             </div>
 
@@ -1864,49 +1420,35 @@ export default async function CategoryPage({
           </section>
         )}
 
-        {/* =================================================
-            AD
-        ================================================= */}
+        {/* AD */}
 
-        <div className="adWrap">
+        <div className="jn-category-ad">
           <DirectAd
             placement="home_between"
           />
         </div>
 
-        {/* =================================================
-            MOST READ
-        ================================================= */}
+        {/* MOST READ */}
 
-        {mostRead.length >
-          0 && (
-          <section className="mostReadSection">
-            <div className="sectionHeader">
-              <div>
-                <div className="sectionEyebrow">
-                  POPULAR STORIES
-                </div>
-
-                <h2 className="sectionTitle">
-                  Most Read
-                </h2>
+        {mostRead.length > 0 && (
+          <section className="jn-category-most-read">
+            <div className="jn-category-section-header">
+              <div className="jn-category-section-eyebrow">
+                POPULAR STORIES
               </div>
+
+              <h2 className="jn-category-section-title">
+                Most Read
+              </h2>
             </div>
 
-            <div className="mostReadGrid">
+            <div className="jn-category-most-read-grid">
               {mostRead.map(
-                (
-                  story,
-                  index
-                ) => (
+                (story, index) => (
                   <MostReadItem
-                    key={
-                      story.id
-                    }
+                    key={story.id}
                     story={story}
-                    number={
-                      index + 1
-                    }
+                    number={index + 1}
                   />
                 )
               )}
@@ -1914,32 +1456,26 @@ export default async function CategoryPage({
           </section>
         )}
 
-        {/* =================================================
-            ALL STORIES
-        ================================================= */}
+        {/* LATEST STORIES */}
 
-        {remaining.length >
-          0 && (
+        {remaining.length > 0 && (
           <>
-            <div className="latestHeader">
+            <div className="jn-category-latest-heading">
               <h2>
-                Latest{" "}
-                {config.name}
+                Latest {config.name}
               </h2>
 
-              <div className="latestLine" />
+              <div className="jn-category-latest-line" />
             </div>
 
             <section
-              className="storyGrid"
+              className="jn-category-story-grid"
               aria-label={`Latest ${config.name} stories`}
             >
               {remaining.map(
                 (story) => (
                   <StoryCard
-                    key={
-                      story.id
-                    }
+                    key={story.id}
                     story={story}
                   />
                 )
@@ -1948,133 +1484,52 @@ export default async function CategoryPage({
           </>
         )}
 
-        {/* =================================================
-            SECOND AD
-        ================================================= */}
+        {/* SECOND AD */}
 
-        <div className="adWrap">
+        <div className="jn-category-ad">
           <DirectAd
             placement="home_bottom"
           />
         </div>
 
-        {/* =================================================
-            OTHER CATEGORIES
-        ================================================= */}
+        {/* MORE CATEGORIES */}
 
-        <section className="mostReadSection">
-          <div className="sectionHeader">
-            <div>
-              <div className="sectionEyebrow">
-                EXPLORE JNMULEE
-              </div>
-
-              <h2 className="sectionTitle">
-                More Categories
-              </h2>
+        <section className="jn-category-most-read">
+          <div className="jn-category-section-header">
+            <div className="jn-category-section-eyebrow">
+              EXPLORE JNMULEE
             </div>
+
+            <h2 className="jn-category-section-title">
+              More Categories
+            </h2>
           </div>
 
-          <div className="categoryGrid">
+          <div className="jn-category-more-grid">
             {CATEGORIES.filter(
               (item) =>
                 item.slug !==
                 config.slug
-            ).map(
-              (item) => (
-                <Link
-                  key={
-                    item.slug
-                  }
-                  href={`/category/${item.slug}`}
-                  className="compactStory"
-                  style={{
-                    display:
-                      "block",
-                    padding:
-                      "14px",
-                    border:
-                      "1px solid #e5e7eb",
-                    borderRadius:
-                      "10px",
-                    background:
-                      "#ffffff",
-                  }}
-                >
-                  <div
-                    style={{
-                      color:
-                        "#c8102e",
-                      fontSize:
-                        "15px",
-                      fontWeight:
-                        900,
-                    }}
-                  >
-                    {item.name}
-                  </div>
+            ).map((item) => (
+              <Link
+                key={item.slug}
+                href={`/category/${item.slug}`}
+                className="jn-category-more-card"
+              >
+                <div className="jn-category-more-name">
+                  {item.name}
+                </div>
 
-                  <div
-                    style={{
-                      marginTop:
-                        "5px",
-                      color:
-                        "#6b7280",
-                      fontSize:
-                        "12px",
-                    }}
-                  >
-                    View latest{" "}
-                    {item.name.toLowerCase()}{" "}
-                    stories →
-                  </div>
-                </Link>
-              )
-            )}
+                <div className="jn-category-more-text">
+                  View latest{" "}
+                  {item.name.toLowerCase()}{" "}
+                  stories →
+                </div>
+              </Link>
+            ))}
           </div>
         </section>
-      </main>
-
-      {/* =====================================================
-          FOOTER
-      ===================================================== */}
-
-      <footer className="footer">
-        <div className="container">
-          <div className="footerLinks">
-            <Link href="/">
-              Home
-            </Link>
-
-            <Link href="/about">
-              About
-            </Link>
-
-            <Link href="/contact">
-              Contact
-            </Link>
-
-            <Link href="/privacy">
-              Privacy Policy
-            </Link>
-
-            <Link href="/terms">
-              Terms
-            </Link>
-
-            <Link href="/search">
-              Search
-            </Link>
-          </div>
-
-          <p className="footerCopyright">
-            ©{" "}
-            {new Date().getFullYear()}{" "}
-            JNMulee News. All rights
-            reserved.
-          </p>
-        </div>
-      </footer>
+      </div>
     </main>
   );
 }
