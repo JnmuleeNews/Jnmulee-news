@@ -88,14 +88,6 @@ function sanitizeArticleHtml(value: string): string {
     ""
   );
 
-  /*
-   * Remove obvious imported byline/source blocks from the
-   * visible article body.
-   *
-   * These patterns are intentionally narrow so normal mentions
-   * of people, authors, journalists, companies, etc. remain.
-   */
-
   html = html
     .replace(
       /<(p|div|span|strong|em)[^>]*>\s*(?:by|written by|author)\s+[^<]{1,160}<\/\1>/gi,
@@ -109,11 +101,6 @@ function sanitizeArticleHtml(value: string): string {
       /<a[^>]*>\s*(?:read the original story|view original|original story)\s*<\/a>/gi,
       ""
     );
-
-  /*
-   * Remove common source-site boilerplate that sometimes
-   * arrives inside RSS/article HTML.
-   */
 
   html = html
     .replace(
@@ -412,7 +399,6 @@ export default async function NewsArticlePage({
   searchParams: Promise<{ comment?: string }>;
 }) {
   const { slug } = await params;
-
   const query = await searchParams;
 
   const result = await supabase
@@ -434,108 +420,82 @@ export default async function NewsArticlePage({
     .eq("Published", true)
     .maybeSingle();
 
-  const story = mapArticleStory(
-    result.data as unknown
-  );
+  const story = mapArticleStory(result.data as unknown);
 
   if (result.error || !story) {
     notFound();
   }
 
-  const title =
-    story.title || "JNMulee News";
+  const title = story.title || "JNMulee News";
+  const content = story.content || "";
+  const category = formatCategory(story.category);
+  const safeContent = sanitizeArticleHtml(content);
+  const readingTime = estimateReadingTime(content);
+  const wordCount = getWordCount(content);
+  const articleUrl = `${SITE_URL}/news/${story.slug}`;
 
-  const content =
-    story.content || "";
+  const { data: commentsData } = await supabase
+    .from("comments")
+    .select("id,name,comment,created_at")
+    .eq("news_id", story.id)
+    .eq("approved", true)
+    .order("created_at", {
+      ascending: false,
+    })
+    .limit(100);
 
-  const category =
-    formatCategory(story.category);
-
-  const safeContent =
-    sanitizeArticleHtml(content);
-
-  const readingTime =
-    estimateReadingTime(content);
-
-  const wordCount =
-    getWordCount(content);
-
-  const articleUrl =
-    `${SITE_URL}/news/${story.slug}`;
-
-  const { data: commentsData } =
-    await supabase
-      .from("comments")
-      .select(
-        "id,name,comment,created_at"
-      )
-      .eq("news_id", story.id)
-      .eq("approved", true)
-      .order("created_at", {
-        ascending: false,
-      })
-      .limit(100);
-
-  const comments =
-    (commentsData || []) as Comment[];
+  const comments = (commentsData || []) as Comment[];
 
   let relatedStories: RelatedStory[] = [];
 
   if (story.category) {
-    const { data: relatedData } =
-      await supabase
-        .from("news")
-        .select(
-          "id,title,slug,image_url,category,created_at"
-        )
-        .eq("Published", true)
-        .eq("category", story.category)
-        .neq("id", story.id)
-        .not("image_url", "is", null)
-        .neq("image_url", "")
-        .order("created_at", {
-          ascending: false,
-        })
-        .limit(6);
+    const { data: relatedData } = await supabase
+      .from("news")
+      .select(
+        "id,title,slug,image_url,category,created_at"
+      )
+      .eq("Published", true)
+      .eq("category", story.category)
+      .neq("id", story.id)
+      .not("image_url", "is", null)
+      .neq("image_url", "")
+      .order("created_at", {
+        ascending: false,
+      })
+      .limit(6);
 
     relatedStories =
       (relatedData || []) as RelatedStory[];
   }
 
   if (relatedStories.length < 6) {
-    const existingIds =
-      new Set(
-        relatedStories.map(
-          (item) => item.id
-        )
-      );
+    const existingIds = new Set(
+      relatedStories.map((item) => item.id)
+    );
 
     existingIds.add(story.id);
 
-    const { data: latestData } =
-      await supabase
-        .from("news")
-        .select(
-          "id,title,slug,image_url,category,created_at"
-        )
-        .eq("Published", true)
-        .not("image_url", "is", null)
-        .neq("image_url", "")
-        .order("created_at", {
-          ascending: false,
-        })
-        .limit(12);
+    const { data: latestData } = await supabase
+      .from("news")
+      .select(
+        "id,title,slug,image_url,category,created_at"
+      )
+      .eq("Published", true)
+      .not("image_url", "is", null)
+      .neq("image_url", "")
+      .order("created_at", {
+        ascending: false,
+      })
+      .limit(12);
 
     for (
-      const item of
-        (latestData || []) as RelatedStory[]
+      const item of (latestData || []) as RelatedStory[]
     ) {
       if (existingIds.has(item.id)) {
         continue;
       }
 
       relatedStories.push(item);
-
       existingIds.add(item.id);
 
       if (relatedStories.length >= 6) {
@@ -553,19 +513,11 @@ export default async function NewsArticlePage({
 
   const structuredData = {
     "@context": "https://schema.org",
-
     "@type": "NewsArticle",
-
     headline: title,
-
-    description:
-      getDescription(content),
-
-    datePublished:
-      story.created_at,
-
-    dateModified:
-      story.created_at,
+    description: getDescription(content),
+    datePublished: story.created_at,
+    dateModified: story.created_at,
 
     mainEntityOfPage: {
       "@type": "WebPage",
@@ -583,15 +535,11 @@ export default async function NewsArticlePage({
       : undefined,
 
     articleSection: category,
-
     wordCount,
-
     isAccessibleForFree: true,
   };
 
-  async function postComment(
-    formData: FormData
-  ) {
+  async function postComment(formData: FormData) {
     "use server";
 
     const name = String(
@@ -603,46 +551,31 @@ export default async function NewsArticlePage({
     ).trim();
 
     if (!name || name.length > 80) {
-      redirect(
-        `/news/${slug}?comment=error`
-      );
+      redirect(`/news/${slug}?comment=error`);
     }
 
-    if (
-      !comment ||
-      comment.length > 2000
-    ) {
-      redirect(
-        `/news/${slug}?comment=error`
-      );
+    if (!comment || comment.length > 2000) {
+      redirect(`/news/${slug}?comment=error`);
     }
 
-    const commentClient =
-      createClient(
-        process.env
-          .NEXT_PUBLIC_SUPABASE_URL!,
-        process.env
-          .NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      );
+    const commentClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
 
-    const articleResult =
-      await commentClient
-        .from("news")
-        .select("id")
-        .eq("slug", slug)
-        .eq("Published", true)
-        .maybeSingle();
+    const articleResult = await commentClient
+      .from("news")
+      .select("id")
+      .eq("slug", slug)
+      .eq("Published", true)
+      .maybeSingle();
 
-    const articleData =
-      articleResult.data as unknown;
+    const articleData = articleResult.data as unknown;
 
     const article =
       articleData &&
       typeof articleData === "object"
-        ? (articleData as Record<
-            string,
-            unknown
-          >)
+        ? (articleData as Record<string, unknown>)
         : null;
 
     const articleId =
@@ -652,9 +585,7 @@ export default async function NewsArticlePage({
         : null;
 
     if (!articleId) {
-      redirect(
-        `/news/${slug}?comment=error`
-      );
+      redirect(`/news/${slug}?comment=error`);
     }
 
     const { error: insertError } =
@@ -668,764 +599,805 @@ export default async function NewsArticlePage({
         });
 
     if (insertError) {
-      redirect(
-        `/news/${slug}?comment=error`
-      );
+      redirect(`/news/${slug}?comment=error`);
     }
 
-    redirect(
-      `/news/${slug}?comment=success`
-    );
+    redirect(`/news/${slug}?comment=success`);
   }
 
   return (
-    <main className="articlePage">
+    <main className="jn-article-page">
       <style>{`
-        * {
-          box-sizing: border-box;
-        }
-
-        .articlePage {
+        .jn-article-page {
           min-height: 100vh;
-          background: #f5f6f8;
-          color: #111827;
+          background:
+            linear-gradient(
+              180deg,
+              #f8fafc 0%,
+              #f7f9fc 42%,
+              #ffffff 100%
+            );
+          color: #172033;
         }
 
-        .container {
-          width: min(1200px, calc(100% - 32px));
+        .jn-article-container {
+          width: min(1240px, calc(100% - 32px));
           margin: 0 auto;
         }
 
-        .siteHeader {
-          position: sticky;
-          top: 0;
-          z-index: 50;
-          background: #c8102e;
-          color: white;
-          box-shadow: 0 2px 12px rgba(0,0,0,.12);
+        .jn-article-topbar {
+          border-bottom: 1px solid #e4e9f0;
+          background: rgba(255,255,255,.88);
+          backdrop-filter: blur(12px);
         }
 
-        .headerTop {
-          min-height: 68px;
+        .jn-article-topbar-inner {
+          min-height: 44px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 20px;
+          gap: 18px;
+          font-size: 12px;
+          color: #64748b;
         }
 
-        .logo {
-          color: white;
-          text-decoration: none;
-          font-size: 25px;
-          font-weight: 900;
-          letter-spacing: -.8px;
-          white-space: nowrap;
-        }
-
-        .headerSearch {
-          width: min(380px, 100%);
-        }
-
-        .headerSearch input {
-          width: 100%;
-          height: 40px;
-          border: 0;
-          border-radius: 999px;
-          padding: 0 18px;
-          font-size: 14px;
-          outline: none;
-        }
-
-        .categoryNav {
-          background: #a90d27;
-          border-top: 1px solid rgba(255,255,255,.12);
-          overflow-x: auto;
-          scrollbar-width: none;
-        }
-
-        .categoryNav::-webkit-scrollbar {
-          display: none;
-        }
-
-        .categoryNavInner {
+        .jn-article-topbar-left {
           display: flex;
           align-items: center;
-          min-height: 42px;
-          white-space: nowrap;
-        }
-
-        .categoryNav a {
-          color: rgba(255,255,255,.95);
-          text-decoration: none;
-          padding: 11px 14px;
-          font-size: 13px;
-          font-weight: 700;
-        }
-
-        .categoryNav a:hover {
-          background: rgba(255,255,255,.12);
-        }
-
-        .breakingBar {
-          background: #111827;
-          color: white;
-        }
-
-        .breakingInner {
-          min-height: 38px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          font-size: 13px;
-        }
-
-        .breakingLabel {
-          background: #c8102e;
-          padding: 5px 9px;
-          border-radius: 4px;
-          font-size: 10px;
-          font-weight: 900;
-          letter-spacing: .7px;
-        }
-
-        .articleLayout {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 320px;
-          gap: 30px;
-          padding-top: 30px;
-          padding-bottom: 60px;
-        }
-
-        .articleMain {
+          gap: 9px;
           min-width: 0;
         }
 
-        .articleCard {
-          background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 16px;
-          overflow: hidden;
+        .jn-live-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #2563eb;
+          box-shadow: 0 0 0 4px #dbeafe;
+          flex: 0 0 auto;
         }
 
-        .breadcrumb {
-          padding: 20px 24px 0;
-          display: flex;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 7px;
-          color: #6b7280;
-          font-size: 13px;
+        .jn-article-date {
+          white-space: nowrap;
         }
 
-        .breadcrumb a {
-          color: #c8102e;
+        .jn-article-search-link {
+          color: #2563eb;
+          font-weight: 800;
           text-decoration: none;
-          font-weight: 700;
         }
 
-        .articleHeader {
-          padding: 18px 24px 24px;
-        }
-
-        .categoryBadge {
-          display: inline-flex;
-          align-items: center;
-          padding: 6px 10px;
-          border-radius: 5px;
-          background: #fef2f2;
-          color: #c8102e;
-          text-decoration: none;
-          text-transform: uppercase;
-          letter-spacing: .5px;
-          font-size: 11px;
-          font-weight: 900;
-          margin-bottom: 13px;
-        }
-
-        .articleTitle {
-          margin: 0;
-          font-size: clamp(32px, 5vw, 52px);
-          line-height: 1.04;
-          letter-spacing: -1.8px;
-          font-weight: 950;
-          color: #111827;
-        }
-
-        .articleDescription {
-          margin: 18px 0 0;
-          color: #596273;
-          font-size: 18px;
-          line-height: 1.6;
-        }
-
-        .articleMeta {
-          display: flex;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 9px;
-          margin-top: 20px;
-          color: #6b7280;
-          font-size: 13px;
-        }
-
-        .articleMeta strong {
-          color: #374151;
-        }
-
-        .articleHero {
-          position: relative;
-          aspect-ratio: 16 / 9;
-          background: #e5e7eb;
-        }
-
-        .articleHero img {
-          object-fit: cover;
-        }
-
-        .articleBody {
-          padding: 28px 30px 36px;
-          font-family: Georgia, "Times New Roman", serif;
-          font-size: 19px;
-          line-height: 1.8;
-          color: #252b36;
-        }
-
-        .articleBody p {
-          margin: 0 0 1.2em;
-        }
-
-        .articleBody h2 {
-          margin: 1.7em 0 .6em;
-          font-family: Arial, Helvetica, sans-serif;
-          font-size: 28px;
-          line-height: 1.25;
-          color: #111827;
-        }
-
-        .articleBody h3 {
-          margin: 1.5em 0 .6em;
-          font-family: Arial, Helvetica, sans-serif;
-          font-size: 23px;
-          line-height: 1.3;
-          color: #111827;
-        }
-
-        .articleBody ul,
-        .articleBody ol {
-          margin: 0 0 1.3em 1.4em;
-          padding: 0;
-        }
-
-        .articleBody li {
-          margin-bottom: .55em;
-        }
-
-        .articleBody a {
-          color: #c8102e;
+        .jn-article-search-link:hover {
           text-decoration: underline;
         }
 
-        .articleBody img {
+        .jn-article-layout {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 330px;
+          gap: 30px;
+          padding: 28px 0 70px;
+        }
+
+        .jn-article-main {
+          min-width: 0;
+        }
+
+        .jn-article-card {
+          overflow: hidden;
+          background: #ffffff;
+          border: 1px solid #e3e8f0;
+          border-radius: 20px;
+          box-shadow:
+            0 18px 45px rgba(15, 23, 42, .06);
+        }
+
+        .jn-breadcrumb {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 8px;
+          padding: 22px 28px 0;
+          color: #94a3b8;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .jn-breadcrumb a {
+          color: #2563eb;
+          text-decoration: none;
+          font-weight: 800;
+        }
+
+        .jn-breadcrumb a:hover {
+          text-decoration: underline;
+        }
+
+        .jn-article-header {
+          padding: 19px 28px 30px;
+        }
+
+        .jn-article-category {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          margin-bottom: 15px;
+          padding: 7px 11px;
+          border-radius: 7px;
+          background: #eff6ff;
+          color: #1d4ed8;
+          text-decoration: none;
+          text-transform: uppercase;
+          letter-spacing: .65px;
+          font-size: 10px;
+          font-weight: 950;
+        }
+
+        .jn-article-category::before {
+          content: "";
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: #2563eb;
+        }
+
+        .jn-article-title {
+          max-width: 940px;
+          margin: 0;
+          color: #0b1220;
+          font-size: clamp(36px, 5.2vw, 62px);
+          line-height: 1.02;
+          letter-spacing: -2.5px;
+          font-weight: 950;
+        }
+
+        .jn-article-description {
+          max-width: 850px;
+          margin: 20px 0 0;
+          color: #526078;
+          font-size: clamp(16px, 2vw, 20px);
+          line-height: 1.6;
+        }
+
+        .jn-article-meta {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 9px;
+          margin-top: 22px;
+          color: #64748b;
+          font-size: 12px;
+        }
+
+        .jn-article-meta strong {
+          color: #273449;
+          font-weight: 850;
+        }
+
+        .jn-meta-dot {
+          color: #cbd5e1;
+        }
+
+        .jn-article-hero {
+          position: relative;
+          aspect-ratio: 16 / 9;
+          overflow: hidden;
+          background: #e8edf4;
+        }
+
+        .jn-article-hero::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            180deg,
+            transparent 65%,
+            rgba(11,18,32,.10)
+          );
+          pointer-events: none;
+        }
+
+        .jn-article-body {
+          padding: 35px 36px 40px;
+          color: #273449;
+          font-family:
+            Georgia,
+            "Times New Roman",
+            serif;
+          font-size: 19px;
+          line-height: 1.86;
+        }
+
+        .jn-article-body::first-letter {
+          color: #2563eb;
+        }
+
+        .jn-article-body p {
+          margin: 0 0 1.25em;
+        }
+
+        .jn-article-body h2 {
+          margin: 1.7em 0 .65em;
+          color: #0b1220;
+          font-family:
+            Arial,
+            Helvetica,
+            sans-serif;
+          font-size: 30px;
+          line-height: 1.2;
+          letter-spacing: -.8px;
+          font-weight: 900;
+        }
+
+        .jn-article-body h3 {
+          margin: 1.5em 0 .65em;
+          color: #0b1220;
+          font-family:
+            Arial,
+            Helvetica,
+            sans-serif;
+          font-size: 23px;
+          line-height: 1.3;
+          font-weight: 850;
+        }
+
+        .jn-article-body ul,
+        .jn-article-body ol {
+          margin: 0 0 1.3em 1.5em;
+          padding: 0;
+        }
+
+        .jn-article-body li {
+          margin-bottom: .55em;
+        }
+
+        .jn-article-body a {
+          color: #2563eb;
+          text-decoration: underline;
+          text-decoration-thickness: 1px;
+          text-underline-offset: 3px;
+        }
+
+        .jn-article-body a:hover {
+          color: #1d4ed8;
+        }
+
+        .jn-article-body img {
+          display: block;
           max-width: 100%;
           height: auto;
-          display: block;
-          margin: 22px auto;
-          border-radius: 8px;
+          margin: 25px auto;
+          border-radius: 12px;
         }
 
-        .articleBody blockquote {
-          margin: 24px 0;
-          padding: 16px 20px;
-          border-left: 4px solid #c8102e;
-          background: #f9fafb;
-          color: #4b5563;
+        .jn-article-body blockquote {
+          margin: 28px 0;
+          padding: 18px 22px;
+          border-left: 4px solid #2563eb;
+          border-radius: 0 10px 10px 0;
+          background: #eff6ff;
+          color: #334155;
         }
 
-        .shareArea {
-          padding: 20px 30px 28px;
-          border-top: 1px solid #e5e7eb;
+        .jn-share-area {
+          padding: 21px 30px 28px;
+          border-top: 1px solid #e8edf3;
+          background: #fbfcfe;
         }
 
-        .shareTitle {
+        .jn-share-title {
           margin: 0 0 12px;
-          font-size: 14px;
+          color: #334155;
+          font-size: 13px;
           font-weight: 900;
-          color: #374151;
         }
 
-        .sidebarSticky {
+        .jn-sidebar {
+          min-width: 0;
+        }
+
+        .jn-sidebar-sticky {
           position: sticky;
-          top: 105px;
+          top: 90px;
         }
 
-        .sideBox {
-          background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 14px;
-          padding: 18px;
+        .jn-side-box {
           margin-bottom: 18px;
+          padding: 19px;
+          background: #ffffff;
+          border: 1px solid #e3e8f0;
+          border-radius: 16px;
+          box-shadow: 0 10px 30px rgba(15,23,42,.04);
         }
 
-        .sideTitle {
-          margin: 0 0 14px;
-          font-size: 19px;
-          font-weight: 900;
+        .jn-side-heading {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          margin: 0 0 15px;
+          color: #0b1220;
+          font-size: 18px;
+          font-weight: 950;
         }
 
-        .sideStory {
+        .jn-side-heading::before {
+          content: "";
+          width: 4px;
+          height: 20px;
+          border-radius: 99px;
+          background: #2563eb;
+        }
+
+        .jn-side-story {
           display: grid;
-          grid-template-columns: 88px minmax(0,1fr);
-          gap: 11px;
-          padding: 12px 0;
-          border-top: 1px solid #e5e7eb;
-          text-decoration: none;
+          grid-template-columns: 92px minmax(0,1fr);
+          gap: 12px;
+          padding: 13px 0;
+          border-top: 1px solid #edf1f5;
           color: inherit;
+          text-decoration: none;
         }
 
-        .sideStory:first-of-type {
+        .jn-side-story:first-of-type {
           border-top: 0;
           padding-top: 0;
         }
 
-        .sideStoryImage {
-          position: relative;
-          width: 88px;
-          height: 62px;
-          border-radius: 7px;
-          overflow: hidden;
-          background: #e5e7eb;
+        .jn-side-story:hover .jn-side-story-title {
+          color: #2563eb;
         }
 
-        .sideStoryImage img {
+        .jn-side-image {
+          position: relative;
+          width: 92px;
+          height: 66px;
+          overflow: hidden;
+          border-radius: 9px;
+          background: #e8edf4;
+        }
+
+        .jn-side-image img {
           object-fit: cover;
         }
 
-        .sideStoryCategory {
+        .jn-side-category {
           display: block;
           margin-bottom: 4px;
-          color: #c8102e;
-          font-size: 10px;
+          color: #2563eb;
+          font-size: 9px;
+          font-weight: 950;
+          letter-spacing: .55px;
           text-transform: uppercase;
-          font-weight: 900;
         }
 
-        .sideStoryTitle {
+        .jn-side-story-title {
           margin: 0;
+          color: #172033;
           font-size: 13px;
-          line-height: 1.35;
-          font-weight: 800;
+          line-height: 1.38;
+          font-weight: 850;
+          transition: color .18s ease;
         }
 
-        .commentsSection {
+        .jn-comments {
           margin-top: 28px;
-          background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 16px;
-          padding: 25px;
+          padding: 28px;
+          background: #ffffff;
+          border: 1px solid #e3e8f0;
+          border-radius: 18px;
+          box-shadow: 0 12px 35px rgba(15,23,42,.04);
         }
 
-        .sectionTitle {
+        .jn-comments-title {
           margin: 0 0 6px;
-          font-size: 24px;
-          font-weight: 900;
+          color: #0b1220;
+          font-size: 25px;
+          letter-spacing: -.5px;
+          font-weight: 950;
         }
 
-        .sectionSubtitle {
-          margin: 0 0 20px;
-          color: #6b7280;
-          font-size: 14px;
+        .jn-comments-subtitle {
+          margin: 0 0 21px;
+          color: #64748b;
+          font-size: 13px;
+          line-height: 1.6;
+        }
+
+        .jn-comment-status {
+          margin-bottom: 16px;
+          padding: 12px 14px;
+          border-radius: 9px;
+          font-size: 13px;
           line-height: 1.5;
         }
 
-        .commentForm {
+        .jn-comment-success {
+          color: #065f46;
+          background: #ecfdf5;
+          border: 1px solid #a7f3d0;
+        }
+
+        .jn-comment-error {
+          color: #991b1b;
+          background: #fef2f2;
+          border: 1px solid #fecaca;
+        }
+
+        .jn-comment-form {
           display: grid;
           gap: 12px;
           margin-bottom: 28px;
         }
 
-        .commentForm input,
-        .commentForm textarea {
+        .jn-comment-form input,
+        .jn-comment-form textarea {
           width: 100%;
-          border: 1px solid #d1d5db;
-          border-radius: 9px;
+          border: 1px solid #d7dee8;
+          border-radius: 10px;
           padding: 12px 14px;
-          font: inherit;
           outline: none;
-          background: white;
+          background: #ffffff;
+          color: #172033;
+          font: inherit;
+          transition:
+            border-color .18s ease,
+            box-shadow .18s ease;
         }
 
-        .commentForm input:focus,
-        .commentForm textarea:focus {
-          border-color: #c8102e;
-          box-shadow: 0 0 0 3px rgba(200,16,46,.08);
+        .jn-comment-form input:focus,
+        .jn-comment-form textarea:focus {
+          border-color: #2563eb;
+          box-shadow: 0 0 0 4px rgba(37,99,235,.10);
         }
 
-        .commentForm textarea {
-          min-height: 130px;
+        .jn-comment-form textarea {
+          min-height: 135px;
           resize: vertical;
         }
 
-        .commentButton {
+        .jn-comment-button {
           justify-self: start;
           border: 0;
-          border-radius: 8px;
-          background: #c8102e;
-          color: white;
+          border-radius: 9px;
           padding: 11px 18px;
-          font-size: 14px;
+          background: #2563eb;
+          color: #ffffff;
+          font-size: 13px;
           font-weight: 900;
           cursor: pointer;
+          box-shadow: 0 7px 16px rgba(37,99,235,.20);
+          transition:
+            transform .18s ease,
+            background .18s ease,
+            box-shadow .18s ease;
         }
 
-        .commentButton:hover {
-          background: #a90d27;
+        .jn-comment-button:hover {
+          background: #1d4ed8;
+          transform: translateY(-1px);
+          box-shadow: 0 10px 20px rgba(37,99,235,.25);
         }
 
-        .commentStatus {
-          padding: 12px 14px;
-          border-radius: 8px;
-          margin-bottom: 15px;
-          font-size: 14px;
-          line-height: 1.5;
+        .jn-comment-item {
+          padding: 18px 0;
+          border-top: 1px solid #e8edf3;
         }
 
-        .commentSuccess {
-          background: #ecfdf5;
-          color: #065f46;
-          border: 1px solid #a7f3d0;
-        }
-
-        .commentError {
-          background: #fef2f2;
-          color: #991b1b;
-          border: 1px solid #fecaca;
-        }
-
-        .commentItem {
-          padding: 17px 0;
-          border-top: 1px solid #e5e7eb;
-        }
-
-        .commentName {
+        .jn-comment-name {
           margin: 0 0 4px;
-          font-weight: 900;
+          color: #172033;
           font-size: 14px;
+          font-weight: 900;
         }
 
-        .commentDate {
+        .jn-comment-date {
           margin: 0 0 9px;
-          color: #9ca3af;
+          color: #94a3b8;
           font-size: 11px;
         }
 
-        .commentText {
+        .jn-comment-text {
           margin: 0;
-          color: #4b5563;
+          color: #526078;
           font-size: 14px;
-          line-height: 1.6;
+          line-height: 1.65;
           white-space: pre-wrap;
           overflow-wrap: anywhere;
         }
 
-        .noComments {
-          padding: 15px 0 5px;
-          color: #6b7280;
-          font-size: 14px;
-        }
-
-        .relatedSection {
-          margin-top: 30px;
-        }
-
-        .relatedGrid {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 18px;
-          margin-top: 16px;
-        }
-
-        .relatedCard {
-          background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 12px;
-          overflow: hidden;
-          text-decoration: none;
-          color: inherit;
-        }
-
-        .relatedImage {
-          position: relative;
-          aspect-ratio: 16 / 9;
-          background: #e5e7eb;
-        }
-
-        .relatedImage img {
-          object-fit: cover;
-        }
-
-        .relatedBody {
-          padding: 13px;
-        }
-
-        .relatedCategory {
-          display: block;
-          color: #c8102e;
-          font-size: 10px;
-          font-weight: 900;
-          text-transform: uppercase;
-          margin-bottom: 6px;
-        }
-
-        .relatedTitle {
+        .jn-no-comments {
           margin: 0;
-          font-size: 15px;
-          line-height: 1.35;
-          font-weight: 850;
-        }
-
-        .siteFooter {
-          background: #111827;
-          color: white;
-          padding: 40px 0;
-        }
-
-        .footerLinks {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 18px;
-          margin-bottom: 20px;
-        }
-
-        .footerLinks a {
-          color: #d1d5db;
-          text-decoration: none;
-          font-size: 14px;
-        }
-
-        .footerLinks a:hover {
-          color: white;
-        }
-
-        .footerCopyright {
-          margin: 0;
-          color: #9ca3af;
+          padding: 15px 0 4px;
+          color: #64748b;
           font-size: 13px;
         }
 
-        @media (max-width: 950px) {
-          .articleLayout {
-            grid-template-columns: 1fr;
+        .jn-related {
+          margin-top: 30px;
+        }
+
+        .jn-related-heading {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin: 0;
+          color: #0b1220;
+          font-size: 26px;
+          letter-spacing: -.6px;
+          font-weight: 950;
+        }
+
+        .jn-related-heading::before {
+          content: "";
+          width: 5px;
+          height: 25px;
+          border-radius: 99px;
+          background: #2563eb;
+        }
+
+        .jn-related-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0,1fr));
+          gap: 18px;
+          margin-top: 17px;
+        }
+
+        .jn-related-card {
+          overflow: hidden;
+          background: #ffffff;
+          border: 1px solid #e3e8f0;
+          border-radius: 14px;
+          color: inherit;
+          text-decoration: none;
+          box-shadow: 0 8px 25px rgba(15,23,42,.04);
+          transition:
+            transform .18s ease,
+            box-shadow .18s ease,
+            border-color .18s ease;
+        }
+
+        .jn-related-card:hover {
+          transform: translateY(-3px);
+          border-color: #c8d8f5;
+          box-shadow: 0 14px 32px rgba(15,23,42,.08);
+        }
+
+        .jn-related-image {
+          position: relative;
+          aspect-ratio: 16 / 9;
+          background: #e8edf4;
+        }
+
+        .jn-related-image img {
+          object-fit: cover;
+          transition: transform .3s ease;
+        }
+
+        .jn-related-card:hover .jn-related-image img {
+          transform: scale(1.035);
+        }
+
+        .jn-related-body {
+          padding: 14px;
+        }
+
+        .jn-related-category {
+          display: block;
+          margin-bottom: 6px;
+          color: #2563eb;
+          font-size: 9px;
+          font-weight: 950;
+          letter-spacing: .55px;
+          text-transform: uppercase;
+        }
+
+        .jn-related-title {
+          margin: 0;
+          color: #172033;
+          font-size: 15px;
+          line-height: 1.4;
+          font-weight: 850;
+        }
+
+        .jn-related-card:hover .jn-related-title {
+          color: #1d4ed8;
+        }
+
+        @media (max-width: 1000px) {
+          .jn-article-layout {
+            grid-template-columns: minmax(0, 1fr);
           }
 
-          .sidebarSticky {
+          .jn-sidebar-sticky {
             position: static;
           }
 
-          .sidebar {
+          .jn-sidebar {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(2, minmax(0,1fr));
             gap: 18px;
           }
 
-          .sidebar .sideBox {
+          .jn-sidebar .jn-side-box {
             margin-bottom: 0;
           }
         }
 
-        @media (max-width: 700px) {
-          .container {
-            width: min(100% - 22px, 1200px);
+        @media (max-width: 760px) {
+          .jn-article-container {
+            width: min(100% - 20px, 1240px);
           }
 
-          .headerTop {
-            min-height: 58px;
+          .jn-article-topbar-inner {
+            min-height: 38px;
           }
 
-          .logo {
-            font-size: 21px;
+          .jn-article-layout {
+            padding-top: 15px;
+            padding-bottom: 45px;
           }
 
-          .headerSearch {
-            display: none;
+          .jn-article-card {
+            border-radius: 15px;
           }
 
-          .articleLayout {
-            padding-top: 16px;
-          }
-
-          .articleHeader {
-            padding: 15px 17px 20px;
-          }
-
-          .breadcrumb {
+          .jn-breadcrumb {
             padding: 17px 17px 0;
           }
 
-          .articleTitle {
-            font-size: 34px;
-            letter-spacing: -1px;
+          .jn-article-header {
+            padding: 17px 17px 23px;
           }
 
-          .articleDescription {
+          .jn-article-title {
+            font-size: 36px;
+            letter-spacing: -1.45px;
+            line-height: 1.05;
+          }
+
+          .jn-article-description {
+            margin-top: 15px;
             font-size: 16px;
+            line-height: 1.55;
           }
 
-          .articleHero {
+          .jn-article-meta {
+            gap: 7px;
+            margin-top: 17px;
+            line-height: 1.6;
+          }
+
+          .jn-article-hero {
             aspect-ratio: 16 / 10;
           }
 
-          .articleBody {
-            padding: 23px 18px 28px;
+          .jn-article-body {
+            padding: 25px 18px 29px;
             font-size: 18px;
-            line-height: 1.75;
+            line-height: 1.78;
           }
 
-          .shareArea {
+          .jn-article-body h2 {
+            font-size: 26px;
+          }
+
+          .jn-article-body h3 {
+            font-size: 21px;
+          }
+
+          .jn-share-area {
             padding: 18px;
           }
 
-          .sidebar {
+          .jn-sidebar {
             display: block;
           }
 
-          .sidebar .sideBox {
+          .jn-sidebar .jn-side-box {
             margin-bottom: 18px;
           }
 
-          .relatedGrid {
+          .jn-comments {
+            padding: 20px;
+            border-radius: 15px;
+          }
+
+          .jn-related-grid {
             grid-template-columns: 1fr;
           }
 
-          .commentsSection {
-            padding: 19px;
+          .jn-related-heading {
+            font-size: 23px;
+          }
+        }
+
+        @media (max-width: 430px) {
+          .jn-article-title {
+            font-size: 32px;
+          }
+
+          .jn-article-meta {
+            font-size: 11px;
+          }
+
+          .jn-article-body {
+            font-size: 17.5px;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .jn-related-card,
+          .jn-related-image img,
+          .jn-side-story-title,
+          .jn-comment-button {
+            transition: none !important;
           }
         }
       `}</style>
 
-      <header className="siteHeader">
-        <div className="container headerTop">
-          <Link href="/" className="logo">
-            JNMulee News
-          </Link>
-
-          <form
-            action="/search"
-            method="GET"
-            className="headerSearch"
-          >
-            <input
-              type="search"
-              name="q"
-              placeholder="Search JNMulee News..."
-              aria-label="Search JNMulee News"
-            />
-          </form>
-        </div>
-
-        <nav
-          className="categoryNav"
-          aria-label="Main navigation"
-        >
-          <div className="container categoryNavInner">
-            <Link href="/">Home</Link>
-            <Link href="/category/news">
-              News
-            </Link>
-            <Link href="/category/sport">
-              Sports
-            </Link>
-            <Link href="/category/entertainment">
-              Entertainment
-            </Link>
-            <Link href="/category/gossip">
-              Gossip
-            </Link>
-            <Link href="/category/business">
-              Business
-            </Link>
-            <Link href="/category/technology">
-              Technology
-            </Link>
-            <Link href="/category/politics">
-              Politics
-            </Link>
-            <Link href="/category/crypto">
-              Crypto
-            </Link>
+      <div className="jn-article-topbar">
+        <div className="jn-article-container jn-article-topbar-inner">
+          <div className="jn-article-topbar-left">
+            <span className="jn-live-dot" />
+            <span>JNMulee News • Independent news & information</span>
           </div>
-        </nav>
-      </header>
 
-      <div className="breakingBar">
-        <div className="container breakingInner">
-          <span className="breakingLabel">
-            LATEST
-          </span>
-
-          <span>
-            JNMulee News — Latest stories and updates
-          </span>
+          <Link
+            href="/search"
+            className="jn-article-search-link"
+          >
+            Search stories
+          </Link>
         </div>
       </div>
 
-      <div className="container articleLayout">
-        <div className="articleMain">
-          <article className="articleCard">
-            <div className="breadcrumb">
-              <Link href="/">
-                Home
-              </Link>
-
+      <div className="jn-article-container jn-article-layout">
+        <div className="jn-article-main">
+          <article className="jn-article-card">
+            <div className="jn-breadcrumb">
+              <Link href="/">Home</Link>
               <span>›</span>
 
               <Link
-                href={categoryHref(
-                  story.category
-                )}
+                href={categoryHref(story.category)}
               >
                 {category}
               </Link>
 
               <span>›</span>
-
               <span>Article</span>
             </div>
 
-            <header className="articleHeader">
+            <header className="jn-article-header">
               <Link
-                href={categoryHref(
-                  story.category
-                )}
-                className="categoryBadge"
+                href={categoryHref(story.category)}
+                className="jn-article-category"
               >
                 {category}
               </Link>
 
-              <h1 className="articleTitle">
+              <h1 className="jn-article-title">
                 {title}
               </h1>
 
-              <p className="articleDescription">
+              <p className="jn-article-description">
                 {getDescription(content)}
               </p>
 
-              <div className="articleMeta">
+              <div className="jn-article-meta">
                 <span>
                   Published{" "}
                   <strong>
-                    {formatDate(
-                      story.created_at
-                    )}
+                    {formatDate(story.created_at)}
                   </strong>
                 </span>
 
-                <span>•</span>
+                <span className="jn-meta-dot">•</span>
 
                 <span>
                   {readingTime} min read
                 </span>
 
-                <span>•</span>
+                <span className="jn-meta-dot">•</span>
 
                 <span>
                   {wordCount.toLocaleString()} words
@@ -1434,7 +1406,9 @@ export default async function NewsArticlePage({
                 {story.view_count !== null &&
                   story.view_count !== undefined && (
                     <>
-                      <span>•</span>
+                      <span className="jn-meta-dot">
+                        •
+                      </span>
 
                       <span>
                         {story.view_count.toLocaleString()} views
@@ -1445,26 +1419,26 @@ export default async function NewsArticlePage({
             </header>
 
             {story.image_url && (
-              <div className="articleHero">
+              <div className="jn-article-hero">
                 <Image
                   src={story.image_url}
                   alt={title}
                   fill
                   priority
-                  sizes="(max-width: 950px) 100vw, 820px"
+                  sizes="(max-width: 760px) 100vw, (max-width: 1000px) 100vw, 900px"
                 />
               </div>
             )}
 
             <div
-              className="articleBody"
+              className="jn-article-body"
               dangerouslySetInnerHTML={{
                 __html: safeContent,
               }}
             />
 
-            <div className="shareArea">
-              <p className="shareTitle">
+            <div className="jn-share-area">
+              <p className="jn-share-title">
                 Share this story
               </p>
 
@@ -1477,12 +1451,15 @@ export default async function NewsArticlePage({
 
           <DirectAd placement="article" />
 
-          <section className="commentsSection">
-            <h2 className="sectionTitle">
+          <section
+            className="jn-comments"
+            id="comments"
+          >
+            <h2 className="jn-comments-title">
               Comments
             </h2>
 
-            <p className="sectionSubtitle">
+            <p className="jn-comments-subtitle">
               Join the conversation. Comments
               containing prohibited abusive or
               sexual content may be blocked
@@ -1490,13 +1467,13 @@ export default async function NewsArticlePage({
             </p>
 
             {commentStatus === "success" && (
-              <div className="commentStatus commentSuccess">
+              <div className="jn-comment-status jn-comment-success">
                 Your comment was posted successfully.
               </div>
             )}
 
             {commentStatus === "error" && (
-              <div className="commentStatus commentError">
+              <div className="jn-comment-status jn-comment-error">
                 Your comment could not be posted.
                 Please check your name and comment
                 and try again.
@@ -1505,7 +1482,7 @@ export default async function NewsArticlePage({
 
             <form
               action={postComment}
-              className="commentForm"
+              className="jn-comment-form"
             >
               <input
                 type="text"
@@ -1524,7 +1501,7 @@ export default async function NewsArticlePage({
 
               <button
                 type="submit"
-                className="commentButton"
+                className="jn-comment-button"
               >
                 Post Comment
               </button>
@@ -1534,27 +1511,27 @@ export default async function NewsArticlePage({
               <div>
                 {comments.map((comment) => (
                   <div
-                    className="commentItem"
+                    className="jn-comment-item"
                     key={comment.id}
                   >
-                    <p className="commentName">
+                    <p className="jn-comment-name">
                       {comment.name || "Reader"}
                     </p>
 
-                    <p className="commentDate">
+                    <p className="jn-comment-date">
                       {formatDateTime(
                         comment.created_at
                       )}
                     </p>
 
-                    <p className="commentText">
+                    <p className="jn-comment-text">
                       {comment.comment || ""}
                     </p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="noComments">
+              <p className="jn-no-comments">
                 No comments yet. Be the first to
                 join the conversation.
               </p>
@@ -1564,22 +1541,22 @@ export default async function NewsArticlePage({
           <DirectAd placement="article_middle" />
 
           {relatedStories.length > 0 && (
-            <section className="relatedSection">
-              <h2 className="sectionTitle">
+            <section className="jn-related">
+              <h2 className="jn-related-heading">
                 More Stories
               </h2>
 
-              <div className="relatedGrid">
+              <div className="jn-related-grid">
                 {relatedStories
                   .slice(0, 6)
                   .map((related) => (
                     <Link
                       href={`/news/${related.slug}`}
-                      className="relatedCard"
+                      className="jn-related-card"
                       key={related.id}
                     >
                       {related.image_url && (
-                        <div className="relatedImage">
+                        <div className="jn-related-image">
                           <Image
                             src={
                               related.image_url
@@ -1589,19 +1566,19 @@ export default async function NewsArticlePage({
                               "News story"
                             }
                             fill
-                            sizes="(max-width: 700px) 100vw, 33vw"
+                            sizes="(max-width: 760px) 100vw, 33vw"
                           />
                         </div>
                       )}
 
-                      <div className="relatedBody">
-                        <span className="relatedCategory">
+                      <div className="jn-related-body">
+                        <span className="jn-related-category">
                           {formatCategory(
                             related.category
                           )}
                         </span>
 
-                        <h3 className="relatedTitle">
+                        <h3 className="jn-related-title">
                           {related.title ||
                             "Read more"}
                         </h3>
@@ -1613,13 +1590,13 @@ export default async function NewsArticlePage({
           )}
         </div>
 
-        <aside className="sidebar">
-          <div className="sidebarSticky">
+        <aside className="jn-sidebar">
+          <div className="jn-sidebar-sticky">
             <DirectAd placement="article" />
 
             {relatedStories.length > 0 && (
-              <div className="sideBox">
-                <h2 className="sideTitle">
+              <div className="jn-side-box">
+                <h2 className="jn-side-heading">
                   Latest Stories
                 </h2>
 
@@ -1628,11 +1605,11 @@ export default async function NewsArticlePage({
                   .map((related) => (
                     <Link
                       href={`/news/${related.slug}`}
-                      className="sideStory"
+                      className="jn-side-story"
                       key={`side-${related.id}`}
                     >
                       {related.image_url && (
-                        <div className="sideStoryImage">
+                        <div className="jn-side-image">
                           <Image
                             src={
                               related.image_url
@@ -1642,19 +1619,19 @@ export default async function NewsArticlePage({
                               "News story"
                             }
                             fill
-                            sizes="88px"
+                            sizes="92px"
                           />
                         </div>
                       )}
 
                       <div>
-                        <span className="sideStoryCategory">
+                        <span className="jn-side-category">
                           {formatCategory(
                             related.category
                           )}
                         </span>
 
-                        <h3 className="sideStoryTitle">
+                        <h3 className="jn-side-story-title">
                           {related.title ||
                             "Read story"}
                         </h3>
@@ -1681,33 +1658,6 @@ export default async function NewsArticlePage({
       <ArticleViewTracker
         newsId={story.id}
       />
-
-      <footer className="siteFooter">
-        <div className="container">
-          <div className="footerLinks">
-            <Link href="/about">
-              About
-            </Link>
-
-            <Link href="/contact">
-              Contact
-            </Link>
-
-            <Link href="/privacy">
-              Privacy Policy
-            </Link>
-
-            <Link href="/terms">
-              Terms
-            </Link>
-          </div>
-
-          <p className="footerCopyright">
-            © {new Date().getFullYear()} JNMulee
-            News. All rights reserved.
-          </p>
-        </div>
-      </footer>
     </main>
   );
 }
