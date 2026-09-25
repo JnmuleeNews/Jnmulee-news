@@ -4,27 +4,7 @@
   "crons": [
     {
       "path": "/api/fetch-news",
-      "schedule": "0 */6 * * *"
-    },
-    {
-      "path": "/api/fetch-news",
-      "schedule": "10 */6 * * *"
-    },
-    {
-      "path": "/api/fetch-news",
-      "schedule": "20 */6 * * *"
-    },
-    {
-      "path": "/api/fetch-news",
-      "schedule": "30 */6 * * *"
-    },
-    {
-      "path": "/api/fetch-news",
-      "schedule": "40 */6 * * *"
-    },
-    {
-      "path": "/api/fetch-news",
-      "schedule": "50 */6 * * *"
+      "schedule": "*/10 * * * *"
     },
     {
       "path": "/api/generate-image",
