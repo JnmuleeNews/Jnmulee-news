@@ -9,6 +9,70 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+/**
+ * Authorize the importer.
+ *
+ * Allowed:
+ * 1. Vercel Cron using CRON_SECRET.
+ * 2. A logged-in Supabase user whose app_metadata.role is "admin".
+ *
+ * Denied:
+ * - Public/anonymous visitors.
+ * - Users without the admin role.
+ */
+async function authorizeRequest(
+  request: Request
+): Promise<boolean> {
+  const cronSecret = process.env.CRON_SECRET;
+
+  const authorization =
+    request.headers.get("authorization");
+
+  // Allow Vercel Cron.
+  if (
+    cronSecret &&
+    authorization === `Bearer ${cronSecret}`
+  ) {
+    return true;
+  }
+
+  // Manual admin request must contain a Supabase access token.
+  if (!authorization?.startsWith("Bearer ")) {
+    return false;
+  }
+
+  const accessToken =
+    authorization.slice(7).trim();
+
+  if (!accessToken) {
+    return false;
+  }
+
+  const authClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  );
+
+  const {
+    data: { user },
+    error,
+  } = await authClient.auth.getUser(
+    accessToken
+  );
+
+  if (error || !user) {
+    return false;
+  }
+
+  return user.app_metadata?.role === "admin";
+}
+
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
@@ -870,7 +934,6 @@ function containsForbiddenContent(
     "related articles",
     "recommended stories",
     "most read",
-    "latest news",
     "advertisement",
     "sponsored content",
     "written by:",
@@ -1154,6 +1217,37 @@ async function insertArticle(
 export async function GET(
   request: Request
 ) {
+  /*
+   * SECURITY CHECK
+   *
+   * This must happen before:
+   * - loading sources
+   * - calling RSS feeds
+   * - calling OpenAI
+   * - writing to Supabase
+   *
+   * Therefore an unauthorized visitor
+   * cannot trigger the importer.
+   */
+  const authorized =
+    await authorizeRequest(request);
+
+  if (!authorized) {
+    return Response.json(
+      {
+        success: false,
+        error: "Unauthorized",
+      },
+      {
+        status: 401,
+        headers: {
+          "Cache-Control":
+            "no-store, max-age=0",
+        },
+      }
+    );
+  }
+
   const startedAt = Date.now();
 
   const { searchParams } =
@@ -1233,10 +1327,6 @@ export async function GET(
      * The Supabase RPC performs the
      * timing check AND batch assignment
      * atomically.
-     *
-     * This prevents two simultaneous
-     * Vercel cron requests from claiming
-     * different batches at the same time.
      */
     if (!isManualBatch) {
       const {
