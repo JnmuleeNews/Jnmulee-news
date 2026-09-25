@@ -109,10 +109,7 @@ function cleanText(content: string | null) {
     .trim();
 }
 
-function excerpt(
-  content: string | null,
-  length = 170
-) {
+function excerpt(content: string | null, length = 170) {
   const text = cleanText(content);
 
   if (!text) return "";
@@ -127,41 +124,27 @@ function timeAgo(date: string | null) {
 
   const timestamp = new Date(date).getTime();
 
-  if (Number.isNaN(timestamp)) {
-    return "";
-  }
+  if (Number.isNaN(timestamp)) return "";
 
-  const seconds = Math.floor(
-    (Date.now() - timestamp) / 1000
-  );
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
 
-  if (seconds < 60) {
-    return "Just now";
-  }
+  if (seconds < 60) return "Just now";
 
   const minutes = Math.floor(seconds / 60);
 
-  if (minutes < 60) {
-    return `${minutes}m ago`;
-  }
+  if (minutes < 60) return `${minutes}m ago`;
 
   const hours = Math.floor(minutes / 60);
 
-  if (hours < 24) {
-    return `${hours}h ago`;
-  }
+  if (hours < 24) return `${hours}h ago`;
 
   const days = Math.floor(hours / 24);
 
-  if (days < 7) {
-    return `${days}d ago`;
-  }
+  if (days < 7) return `${days}d ago`;
 
   const parsed = new Date(date);
 
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
+  if (Number.isNaN(parsed.getTime())) return "";
 
   return parsed.toLocaleDateString("en-US", {
     month: "short",
@@ -220,10 +203,19 @@ function StoryCard({
               }
               className="jnmulee-story-image"
             />
+
+            {large && (
+              <div className="jnmulee-featured-overlay">
+                <span>FEATURED</span>
+              </div>
+            )}
           </div>
         ) : (
           <div className="jnmulee-image-placeholder">
-            JNMulee News
+            <div className="jnmulee-placeholder-mark">
+              JN
+            </div>
+            <span>JNMulee News</span>
           </div>
         )}
 
@@ -265,7 +257,10 @@ function StoryCard({
             {story.view_count !== undefined &&
               story.view_count !== null && (
                 <>
-                  <span>•</span>
+                  <span className="jnmulee-meta-dot">
+                    •
+                  </span>
+
                   <span>
                     {Number(
                       story.view_count
@@ -306,7 +301,7 @@ function CompactStory({
         </div>
       ) : (
         <div className="jnmulee-compact-placeholder">
-          News
+          JN
         </div>
       )}
 
@@ -357,7 +352,9 @@ function MostReadItem({
           />
         </div>
       ) : (
-        <div className="jnmulee-most-read-placeholder" />
+        <div className="jnmulee-most-read-placeholder">
+          JN
+        </div>
       )}
 
       <div>
@@ -390,6 +387,7 @@ function SectionHeader({
       <div>
         {eyebrow && (
           <div className="jnmulee-section-eyebrow">
+            <span className="jnmulee-eyebrow-line" />
             {eyebrow}
           </div>
         )}
@@ -404,7 +402,8 @@ function SectionHeader({
           href={`/category/${slug}`}
           className="jnmulee-view-all"
         >
-          View All →
+          View All
+          <span>→</span>
         </Link>
       )}
     </div>
@@ -415,18 +414,6 @@ export default async function HomePage() {
   const storySelect =
     "id,title,slug,content,image_url,category,created_at,view_count";
 
-  /*
-   * PERFORMANCE:
-   *
-   * Only two database requests are made:
-   *
-   * 1. Latest stories
-   * 2. Most-read stories
-   *
-   * Category sections are created from the latest-story
-   * result instead of making a separate database request
-   * for every category.
-   */
   const [latestResult, mostReadResult] =
     await Promise.all([
       supabase
@@ -463,19 +450,13 @@ export default async function HomePage() {
 
   const featured = latest[0] || null;
 
-  /*
-   * Build category sections from the already-loaded
-   * latest stories. This avoids nine extra Supabase queries.
-   */
   const categoryStories: Record<
     string,
     Story[]
   > = {};
 
   for (const category of categories) {
-    if (category.slug === "news") {
-      continue;
-    }
+    if (category.slug === "news") continue;
 
     categoryStories[category.slug] =
       latest
@@ -501,27 +482,49 @@ export default async function HomePage() {
 
   return (
     <>
+      {/* =========================
+          PREMIUM HEADER
+      ========================== */}
+
       <header className="jnmulee-main-header">
         <div className="jnmulee-header-inner">
+
           <Link
             href="/"
             className="jnmulee-logo"
+            aria-label="JNMulee News home"
           >
-            JNMulee
-            <span>News</span>
+            <span className="jnmulee-logo-mark">
+              JN
+            </span>
+
+            <span className="jnmulee-logo-text">
+              <strong>JNMulee</strong>
+              <em>News</em>
+            </span>
           </Link>
 
           <div className="jnmulee-header-actions">
             <Link
               href="/search"
               className="jnmulee-search-button"
+              aria-label="Search JNMulee News"
             >
-              <span>🔎</span>
-              <span>Search</span>
+              <span className="jnmulee-search-icon">
+                ⌕
+              </span>
+
+              <span className="jnmulee-search-text">
+                Search
+              </span>
             </Link>
           </div>
         </div>
       </header>
+
+      {/* =========================
+          CATEGORY NAVIGATION
+      ========================== */}
 
       <nav
         className="jnmulee-category-nav"
@@ -540,14 +543,20 @@ export default async function HomePage() {
         </div>
       </nav>
 
+      {/* =========================
+          BREAKING NEWS
+      ========================== */}
+
       <div className="jnmulee-breaking-bar">
         <div className="jnmulee-breaking-inner">
+
           <span className="jnmulee-breaking-label">
             BREAKING
           </span>
 
           <span className="jnmulee-breaking-live">
-            ● LIVE
+            <i />
+            LIVE
           </span>
 
           <Link
@@ -561,21 +570,40 @@ export default async function HomePage() {
             {featured?.title ||
               "Latest news and updates from JNMulee News."}
           </Link>
+
+          <span className="jnmulee-breaking-arrow">
+            →
+          </span>
         </div>
       </div>
 
       <main className="jnmulee-home">
+
+        {/* =========================
+            HERO
+        ========================== */}
+
         {featured && (
           <section className="jnmulee-hero-section">
             <div className="jnmulee-hero-grid">
+
               <StoryCard
                 story={featured}
                 large
               />
 
               <div className="jnmulee-hero-side">
+
                 <div className="jnmulee-side-heading">
-                  <span>Latest</span>
+                  <div>
+                    <span className="jnmulee-side-heading-label">
+                      LIVE DESK
+                    </span>
+
+                    <strong>
+                      Latest
+                    </strong>
+                  </div>
 
                   <Link href="/category/news">
                     More →
@@ -595,12 +623,21 @@ export default async function HomePage() {
           </section>
         )}
 
+        {/* =========================
+            AD
+        ========================== */}
+
         <div className="jnmulee-ad-wrap">
           <DirectAd placement="homepage" />
         </div>
 
+        {/* =========================
+            TRENDING
+        ========================== */}
+
         {trending.length > 0 && (
           <section className="jnmulee-section">
+
             <SectionHeader
               title="Trending Now"
               eyebrow="WHAT PEOPLE ARE READING"
@@ -615,7 +652,10 @@ export default async function HomePage() {
                     className="jnmulee-trending-card"
                   >
                     <div className="jnmulee-trending-number">
-                      {index + 1}
+                      {String(index + 1).padStart(
+                        2,
+                        "0"
+                      )}
                     </div>
 
                     <div>
@@ -635,8 +675,14 @@ export default async function HomePage() {
           </section>
         )}
 
+        {/* =========================
+            MOST READ
+        ========================== */}
+
         <section className="jnmulee-section">
+
           <div className="jnmulee-most-read-box">
+
             <SectionHeader
               title="Most Read"
               eyebrow="POPULAR STORIES"
@@ -654,17 +700,21 @@ export default async function HomePage() {
                   )
                 )
               ) : (
-                <p>
-                  Popular stories will
-                  appear here as readers
-                  visit the site.
+                <p className="jnmulee-empty-message">
+                  Popular stories will appear
+                  here as readers visit the site.
                 </p>
               )}
             </div>
           </div>
         </section>
 
+        {/* =========================
+            LATEST NEWS
+        ========================== */}
+
         <section className="jnmulee-section">
+
           <SectionHeader
             title="Latest News"
             slug="news"
@@ -683,17 +733,22 @@ export default async function HomePage() {
             </div>
           ) : (
             <div className="jnmulee-empty">
-              No latest stories available
-              yet.
+              No latest stories available yet.
             </div>
           )}
         </section>
 
+        {/* =========================
+            AD
+        ========================== */}
+
         <div className="jnmulee-ad-wrap">
-          <DirectAd
-            placement="home_between"
-          />
+          <DirectAd placement="home_between" />
         </div>
+
+        {/* =========================
+            CATEGORY SECTIONS
+        ========================== */}
 
         {categories
           .filter(
@@ -732,8 +787,16 @@ export default async function HomePage() {
             );
           })}
 
+        {/* =========================
+            NEWSLETTER / CTA
+        ========================== */}
+
         <section className="jnmulee-newsletter">
-          <div>
+
+          <div className="jnmulee-newsletter-glow" />
+
+          <div className="jnmulee-newsletter-content">
+
             <div className="jnmulee-newsletter-label">
               JNMULEE NEWS
             </div>
@@ -741,14 +804,13 @@ export default async function HomePage() {
             <h2>
               Stay informed.
               <br />
-              Stay ahead.
+              <span>Stay ahead.</span>
             </h2>
 
             <p>
               Follow JNMulee News for
-              breaking stories, Nigeria
-              news and important
-              updates.
+              breaking stories, Nigeria news
+              and important updates.
             </p>
           </div>
 
@@ -756,50 +818,157 @@ export default async function HomePage() {
             href="/search"
             className="jnmulee-newsletter-button"
           >
-            Explore More News →
+            Explore More News
+            <span>→</span>
           </Link>
         </section>
 
+        {/* =========================
+            BOTTOM AD
+        ========================== */}
+
         <div className="jnmulee-ad-wrap jnmulee-bottom-ad">
-          <DirectAd
-            placement="home_bottom"
-          />
+          <DirectAd placement="home_bottom" />
         </div>
       </main>
 
+      {/* =========================
+          PREMIUM DESIGN SYSTEM
+      ========================== */}
+
       <style>{`
+
+        :root {
+          --jn-navy: #0b1220;
+          --jn-navy-2: #111a2e;
+          --jn-blue: #2563eb;
+          --jn-blue-light: #60a5fa;
+          --jn-blue-soft: #eff6ff;
+
+          --jn-white: #ffffff;
+          --jn-bg: #f7f9fc;
+          --jn-card: #ffffff;
+
+          --jn-text: #111827;
+          --jn-text-soft: #526071;
+          --jn-muted: #7b8796;
+
+          --jn-border: #e4e9f0;
+          --jn-border-dark: #d6dde8;
+
+          --jn-shadow:
+            0 8px 30px rgba(15, 23, 42, .06);
+
+          --jn-shadow-hover:
+            0 16px 45px rgba(15, 23, 42, .12);
+        }
+
         .jnmulee-main-header {
-          background: #d7193f;
+          background:
+            linear-gradient(
+              135deg,
+              #09111f 0%,
+              #0b1220 50%,
+              #101b31 100%
+            );
+
           color: #fff;
+
           position: sticky;
           top: 0;
-          z-index: 50;
-          box-shadow: 0 3px 15px rgba(0,0,0,.14);
+          z-index: 100;
+
+          box-shadow:
+            0 5px 25px rgba(3, 8, 20, .22);
+
+          border-bottom:
+            1px solid rgba(255,255,255,.08);
         }
 
         .jnmulee-header-inner {
           max-width: 1240px;
           margin: 0 auto;
-          padding: 13px 18px;
-          min-height: 62px;
+
+          padding: 12px 18px;
+
+          min-height: 70px;
+
           display: flex;
           align-items: center;
           justify-content: space-between;
+
           gap: 20px;
         }
 
         .jnmulee-logo {
           color: #fff;
           text-decoration: none;
-          font-size: clamp(1.55rem,4vw,2.15rem);
-          font-weight: 950;
-          letter-spacing: -1.3px;
-          line-height: 1;
+
+          display: inline-flex;
+          align-items: center;
+
+          gap: 11px;
+
+          min-width: 0;
         }
 
-        .jnmulee-logo span {
-          font-weight: 500;
-          margin-left: 5px;
+        .jnmulee-logo-mark {
+          width: 42px;
+          height: 42px;
+
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          border-radius: 11px;
+
+          background:
+            linear-gradient(
+              135deg,
+              #2563eb,
+              #60a5fa
+            );
+
+          color: #fff;
+
+          font-size: 13px;
+          font-weight: 1000;
+
+          letter-spacing: -.5px;
+
+          box-shadow:
+            0 5px 18px rgba(37,99,235,.35);
+        }
+
+        .jnmulee-logo-text {
+          display: flex;
+          align-items: baseline;
+          gap: 5px;
+
+          line-height: 1;
+          white-space: nowrap;
+        }
+
+        .jnmulee-logo-text strong {
+          font-size:
+            clamp(1.45rem, 4vw, 2rem);
+
+          font-weight: 950;
+
+          letter-spacing: -1.3px;
+        }
+
+        .jnmulee-logo-text em {
+          font-style: normal;
+
+          color: #60a5fa;
+
+          font-size:
+            clamp(.95rem, 2.5vw, 1.15rem);
+
+          font-weight: 700;
+
+          letter-spacing: -.3px;
         }
 
         .jnmulee-header-actions {
@@ -809,24 +978,61 @@ export default async function HomePage() {
         }
 
         .jnmulee-search-button {
-          display: flex;
+          display: inline-flex;
           align-items: center;
+          justify-content: center;
+
           gap: 7px;
+
           color: #fff;
           text-decoration: none;
-          border: 1px solid rgba(255,255,255,.45);
+
+          border:
+            1px solid rgba(255,255,255,.17);
+
+          background:
+            rgba(255,255,255,.06);
+
           border-radius: 999px;
-          padding: 8px 14px;
-          font-size: 13px;
-          font-weight: 800;
+
+          padding: 9px 15px;
+
+          font-size: 12px;
+          font-weight: 850;
+
+          transition:
+            background .2s ease,
+            border-color .2s ease,
+            transform .2s ease;
+        }
+
+        .jnmulee-search-button:hover {
+          background:
+            rgba(255,255,255,.12);
+
+          border-color:
+            rgba(255,255,255,.3);
+
+          transform:
+            translateY(-1px);
+        }
+
+        .jnmulee-search-icon {
+          font-size: 20px;
+          line-height: .7;
         }
 
         .jnmulee-category-nav {
           background: #fff;
-          border-bottom: 1px solid #e5e7eb;
+
+          border-bottom:
+            1px solid var(--jn-border);
+
           position: relative;
-          z-index: 40;
+          z-index: 90;
+
           overflow-x: auto;
+
           scrollbar-width: none;
         }
 
@@ -837,104 +1043,238 @@ export default async function HomePage() {
         .jnmulee-category-nav-inner {
           max-width: 1240px;
           margin: 0 auto;
+
           padding: 0 18px;
-          min-height: 45px;
+
+          min-height: 47px;
+
           display: flex;
           align-items: center;
-          gap: 23px;
+
+          gap: 25px;
+
           white-space: nowrap;
         }
 
         .jnmulee-nav-link {
-          color: #252525;
+          position: relative;
+
+          color: #3f4a5a;
+
           text-decoration: none;
-          font-size: 13px;
+
+          font-size: 12px;
           font-weight: 800;
-          padding: 14px 0;
+
+          padding: 16px 0;
+
+          transition:
+            color .2s ease;
+        }
+
+        .jnmulee-nav-link::after {
+          content: "";
+
+          position: absolute;
+
+          left: 0;
+          right: 0;
+          bottom: 0;
+
+          height: 3px;
+
+          background:
+            var(--jn-blue);
+
+          transform:
+            scaleX(0);
+
+          transform-origin:
+            center;
+
+          transition:
+            transform .2s ease;
         }
 
         .jnmulee-nav-link:first-child,
         .jnmulee-nav-link:hover {
-          color: #d7193f;
+          color: var(--jn-blue);
+        }
+
+        .jnmulee-nav-link:hover::after,
+        .jnmulee-nav-link:first-child::after {
+          transform: scaleX(1);
         }
 
         .jnmulee-breaking-bar {
-          background: #111827;
+          background:
+            var(--jn-navy);
+
           color: #fff;
+
+          border-bottom:
+            1px solid rgba(255,255,255,.05);
         }
 
         .jnmulee-breaking-inner {
           max-width: 1240px;
           margin: 0 auto;
-          min-height: 42px;
+
+          min-height: 43px;
+
           padding: 6px 18px;
+
           display: flex;
           align-items: center;
+
           gap: 10px;
         }
 
         .jnmulee-breaking-label {
-          background: #d7193f;
-          padding: 6px 9px;
-          border-radius: 4px;
-          font-size: 10px;
+          background:
+            var(--jn-blue);
+
+          padding: 6px 10px;
+
+          border-radius: 5px;
+
+          font-size: 9px;
           font-weight: 950;
+
+          letter-spacing: .3px;
+
           white-space: nowrap;
+
+          box-shadow:
+            0 3px 12px rgba(37,99,235,.3);
         }
 
         .jnmulee-breaking-live {
-          color: #ff5575;
-          font-size: 10px;
-          font-weight: 900;
+          display: inline-flex;
+          align-items: center;
+
+          gap: 5px;
+
+          color: #60a5fa;
+
+          font-size: 9px;
+          font-weight: 950;
+
           white-space: nowrap;
         }
 
+        .jnmulee-breaking-live i {
+          width: 6px;
+          height: 6px;
+
+          display: inline-block;
+
+          border-radius: 50%;
+
+          background: #60a5fa;
+
+          box-shadow:
+            0 0 0 4px rgba(96,165,250,.1);
+        }
+
         .jnmulee-breaking-title {
+          flex: 1;
+
+          min-width: 0;
+
           color: #fff;
+
           text-decoration: none;
+
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          font-size: 13px;
+
+          font-size: 12px;
           font-weight: 650;
+        }
+
+        .jnmulee-breaking-title:hover {
+          color: #93c5fd;
+        }
+
+        .jnmulee-breaking-arrow {
+          color: #60a5fa;
+          font-size: 16px;
+          font-weight: 800;
         }
 
         .jnmulee-home {
           width: 100%;
           max-width: 1240px;
+
           margin: 0 auto;
-          padding: 28px 18px 70px;
+
+          padding:
+            30px 18px 75px;
         }
 
         .jnmulee-hero-section {
-          margin-bottom: 30px;
+          margin-bottom: 34px;
         }
 
         .jnmulee-hero-grid {
           display: grid;
-          grid-template-columns: minmax(0,1.7fr) minmax(300px,.9fr);
-          gap: 22px;
+
+          grid-template-columns:
+            minmax(0, 1.72fr)
+            minmax(300px, .9fr);
+
+          gap: 24px;
         }
 
         .jnmulee-story-card {
-          background: #fff;
-          border: 1px solid #e5e7eb;
+          background: var(--jn-card);
+
+          border:
+            1px solid var(--jn-border);
+
           border-radius: 14px;
+
           overflow: hidden;
-          box-shadow: 0 3px 14px rgba(0,0,0,.055);
+
+          box-shadow:
+            var(--jn-shadow);
+
+          transition:
+            transform .22s ease,
+            box-shadow .22s ease,
+            border-color .22s ease;
+        }
+
+        .jnmulee-story-card:hover {
+          transform:
+            translateY(-3px);
+
+          box-shadow:
+            var(--jn-shadow-hover);
+
+          border-color:
+            #d2dae7;
         }
 
         .jnmulee-story-link {
           display: block;
+
           color: inherit;
           text-decoration: none;
         }
 
         .jnmulee-image-wrap {
           position: relative;
+
           width: 100%;
+
           aspect-ratio: 16 / 10;
-          background: #f3f4f6;
+
+          background:
+            #edf1f6;
+
           overflow: hidden;
         }
 
@@ -944,53 +1284,147 @@ export default async function HomePage() {
 
         .jnmulee-story-image {
           object-fit: cover;
+
+          transition:
+            transform .5s ease;
+        }
+
+        .jnmulee-story-card:hover
+        .jnmulee-story-image {
+          transform:
+            scale(1.025);
+        }
+
+        .jnmulee-featured-overlay {
+          position: absolute;
+
+          left: 16px;
+          top: 16px;
+
+          z-index: 2;
+        }
+
+        .jnmulee-featured-overlay span {
+          display: inline-block;
+
+          padding: 6px 9px;
+
+          border-radius: 5px;
+
+          background:
+            rgba(11,18,32,.88);
+
+          color: #fff;
+
+          font-size: 8px;
+          font-weight: 950;
+
+          letter-spacing: .7px;
         }
 
         .jnmulee-image-placeholder {
           display: flex;
           align-items: center;
           justify-content: center;
+
+          flex-direction: column;
+
+          gap: 7px;
+
           width: 100%;
+
           aspect-ratio: 16 / 10;
-          background: #f3f4f6;
-          color: #9ca3af;
-          font-size: 14px;
+
+          background:
+            linear-gradient(
+              135deg,
+              #eaf0f8,
+              #f5f7fb
+            );
+
+          color: #8793a4;
+
+          font-size: 12px;
           font-weight: 800;
         }
 
+        .jnmulee-placeholder-mark {
+          width: 36px;
+          height: 36px;
+
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          border-radius: 9px;
+
+          background:
+            var(--jn-navy);
+
+          color: #60a5fa;
+
+          font-size: 10px;
+          font-weight: 950;
+        }
+
         .jnmulee-story-content {
-          padding: 16px;
+          padding: 17px 18px 18px;
         }
 
         .jnmulee-story-content-large {
-          padding: 22px 24px 24px;
+          padding: 22px 24px 25px;
         }
 
         .jnmulee-story-category {
-          color: #d7193f;
-          text-transform: uppercase;
-          font-size: 10px;
-          letter-spacing: .55px;
+          color:
+            var(--jn-blue);
+
+          text-transform:
+            uppercase;
+
+          font-size: 9px;
+
+          letter-spacing: .65px;
+
           font-weight: 950;
+
           margin-bottom: 8px;
         }
 
         .jnmulee-story-title {
           margin: 0;
-          font-size: 1.08rem;
+
+          color:
+            var(--jn-text);
+
+          font-size: 1.06rem;
+
           line-height: 1.3;
+
           font-weight: 900;
+
+          letter-spacing:
+            -.25px;
         }
 
         .jnmulee-story-title-large {
-          font-size: clamp(1.55rem,3vw,2.45rem);
-          line-height: 1.13;
+          font-size:
+            clamp(1.55rem, 3vw, 2.5rem);
+
+          line-height: 1.11;
+
+          letter-spacing:
+            -.7px;
         }
 
         .jnmulee-story-excerpt {
           margin: 12px 0 0;
-          color: #596170;
-          font-size: 14px;
+
+          color:
+            var(--jn-text-soft);
+
+          font-size: 13.5px;
+
           line-height: 1.65;
         }
 
@@ -998,418 +1432,1066 @@ export default async function HomePage() {
           display: flex;
           gap: 7px;
           align-items: center;
+
           margin-top: 13px;
-          color: #737b88;
-          font-size: 11px;
+
+          color:
+            var(--jn-muted);
+
+          font-size: 10px;
+
           font-weight: 650;
         }
 
+        .jnmulee-meta-dot {
+          color:
+            #a9b3c0;
+        }
+
         .jnmulee-hero-side {
-          background: #fff;
-          border: 1px solid #e5e7eb;
+          background:
+            var(--jn-card);
+
+          border:
+            1px solid var(--jn-border);
+
           border-radius: 14px;
+
           padding: 18px;
-          box-shadow: 0 3px 14px rgba(0,0,0,.045);
+
+          box-shadow:
+            var(--jn-shadow);
         }
 
         .jnmulee-side-heading {
           display: flex;
-          justify-content: space-between;
-          align-items: center;
-          border-bottom: 3px solid #d7193f;
-          padding-bottom: 9px;
-          margin-bottom: 4px;
+
+          justify-content:
+            space-between;
+
+          align-items:
+            center;
+
+          border-bottom:
+            2px solid var(--jn-blue);
+
+          padding-bottom: 11px;
+
+          margin-bottom: 3px;
         }
 
-        .jnmulee-side-heading span {
+        .jnmulee-side-heading > div {
+          display: flex;
+
+          flex-direction: column;
+
+          gap: 2px;
+        }
+
+        .jnmulee-side-heading-label {
+          color:
+            var(--jn-blue);
+
+          font-size: 8px;
+
+          letter-spacing: .9px;
+
+          font-weight: 950;
+        }
+
+        .jnmulee-side-heading strong {
+          color:
+            var(--jn-text);
+
           font-size: 21px;
+
+          line-height: 1;
+
           font-weight: 950;
         }
 
         .jnmulee-side-heading a {
-          color: #d7193f;
+          color:
+            var(--jn-blue);
+
           text-decoration: none;
-          font-size: 12px;
-          font-weight: 850;
+
+          font-size: 11px;
+
+          font-weight: 900;
         }
 
         .jnmulee-compact-story {
           display: grid;
-          grid-template-columns: 86px minmax(0,1fr);
-          gap: 11px;
+
+          grid-template-columns:
+            86px minmax(0,1fr);
+
+          gap: 12px;
+
           padding: 13px 0;
-          border-bottom: 1px solid #edf0f2;
+
+          border-bottom:
+            1px solid #edf1f5;
+
           color: inherit;
+
           text-decoration: none;
+        }
+
+        .jnmulee-compact-story:last-child {
+          border-bottom: 0;
         }
 
         .jnmulee-compact-image-wrap {
           position: relative;
+
           width: 86px;
           height: 65px;
-          border-radius: 7px;
+
+          border-radius: 8px;
+
           overflow: hidden;
-          background: #f1f3f5;
+
+          background: #edf1f6;
         }
 
         .jnmulee-compact-image {
           object-fit: cover;
+
+          transition:
+            transform .35s ease;
+        }
+
+        .jnmulee-compact-story:hover
+        .jnmulee-compact-image {
+          transform:
+            scale(1.05);
         }
 
         .jnmulee-compact-placeholder {
           display: flex;
+
           align-items: center;
           justify-content: center;
+
           width: 86px;
           height: 65px;
-          border-radius: 7px;
-          background: #f1f3f5;
-          color: #9ca3af;
+
+          border-radius: 8px;
+
+          background:
+            var(--jn-navy);
+
+          color:
+            #60a5fa;
+
           font-size: 10px;
-          font-weight: 800;
+          font-weight: 950;
         }
 
         .jnmulee-compact-category {
-          color: #d7193f;
-          font-size: 9px;
-          text-transform: uppercase;
+          color:
+            var(--jn-blue);
+
+          font-size: 8px;
+
+          text-transform:
+            uppercase;
+
+          letter-spacing: .5px;
+
           font-weight: 950;
+
           margin-bottom: 4px;
         }
 
         .jnmulee-compact-title {
-          font-size: 13px;
-          line-height: 1.32;
+          color:
+            var(--jn-text);
+
+          font-size: 12.5px;
+
+          line-height: 1.34;
+
           font-weight: 850;
         }
 
+        .jnmulee-compact-story:hover
+        .jnmulee-compact-title {
+          color:
+            var(--jn-blue);
+        }
+
         .jnmulee-compact-date {
-          color: #858c97;
-          font-size: 10px;
+          color:
+            #8a95a4;
+
+          font-size: 9px;
+
           margin-top: 5px;
         }
 
         .jnmulee-ad-wrap {
-          margin: 5px 0 34px;
+          margin:
+            7px 0 38px;
+
           width: 100%;
         }
 
         .jnmulee-section {
-          margin-bottom: 42px;
+          margin-bottom: 45px;
         }
 
         .jnmulee-section-header {
           display: flex;
+
           align-items: flex-end;
-          justify-content: space-between;
+
+          justify-content:
+            space-between;
+
           gap: 20px;
-          border-bottom: 3px solid #d7193f;
-          padding-bottom: 9px;
-          margin-bottom: 18px;
+
+          border-bottom:
+            1px solid var(--jn-border);
+
+          padding-bottom: 10px;
+
+          margin-bottom: 19px;
+
+          position: relative;
+        }
+
+        .jnmulee-section-header::after {
+          content: "";
+
+          position: absolute;
+
+          left: 0;
+          bottom: -1px;
+
+          width: 58px;
+          height: 3px;
+
+          background:
+            var(--jn-blue);
+
+          border-radius:
+            3px 3px 0 0;
         }
 
         .jnmulee-section-eyebrow {
-          color: #d7193f;
-          font-size: 9px;
-          letter-spacing: .8px;
+          display: flex;
+
+          align-items: center;
+
+          gap: 7px;
+
+          color:
+            var(--jn-blue);
+
+          font-size: 8px;
+
+          letter-spacing: .85px;
+
           font-weight: 950;
-          margin-bottom: 2px;
-          text-transform: uppercase;
+
+          margin-bottom: 3px;
+
+          text-transform:
+            uppercase;
+        }
+
+        .jnmulee-eyebrow-line {
+          width: 16px;
+          height: 2px;
+
+          background:
+            var(--jn-blue);
+
+          border-radius: 2px;
         }
 
         .jnmulee-section-title {
           margin: 0;
-          font-size: clamp(1.45rem,3vw,1.8rem);
-          line-height: 1.1;
+
+          color:
+            var(--jn-text);
+
+          font-size:
+            clamp(1.45rem, 3vw, 1.85rem);
+
+          line-height: 1.08;
+
           font-weight: 950;
+
+          letter-spacing:
+            -.5px;
         }
 
         .jnmulee-view-all {
-          color: #d7193f;
+          display: inline-flex;
+
+          align-items: center;
+
+          gap: 5px;
+
+          color:
+            var(--jn-blue);
+
           text-decoration: none;
-          font-size: 12px;
+
+          font-size: 11px;
+
           font-weight: 900;
+
           white-space: nowrap;
+        }
+
+        .jnmulee-view-all span {
+          font-size: 15px;
+
+          transition:
+            transform .2s ease;
+        }
+
+        .jnmulee-view-all:hover span {
+          transform:
+            translateX(3px);
         }
 
         .jnmulee-trending-grid {
           display: grid;
-          grid-template-columns: repeat(5,minmax(0,1fr));
+
+          grid-template-columns:
+            repeat(5,minmax(0,1fr));
+
           gap: 12px;
         }
 
         .jnmulee-trending-card {
           display: grid;
-          grid-template-columns: 31px 1fr;
+
+          grid-template-columns:
+            31px 1fr;
+
           gap: 9px;
-          min-height: 108px;
-          padding: 14px;
-          border: 1px solid #e5e7eb;
+
+          min-height: 112px;
+
+          padding: 15px;
+
+          border:
+            1px solid var(--jn-border);
+
           border-radius: 10px;
-          background: #fff;
+
+          background:
+            var(--jn-card);
+
           color: inherit;
+
           text-decoration: none;
+
+          box-shadow:
+            0 2px 9px rgba(15,23,42,.025);
+
+          transition:
+            transform .2s ease,
+            border-color .2s ease,
+            box-shadow .2s ease;
+        }
+
+        .jnmulee-trending-card:hover {
+          transform:
+            translateY(-2px);
+
+          border-color:
+            #bfd1ed;
+
+          box-shadow:
+            0 10px 25px rgba(15,23,42,.07);
         }
 
         .jnmulee-trending-number {
-          color: #d7193f;
-          font-size: 22px;
+          color:
+            #c5cedb;
+
+          font-size: 21px;
+
           font-weight: 950;
+
+          line-height: 1;
+        }
+
+        .jnmulee-trending-card:hover
+        .jnmulee-trending-number {
+          color:
+            var(--jn-blue);
         }
 
         .jnmulee-trending-category {
-          color: #d7193f;
-          font-size: 9px;
-          text-transform: uppercase;
+          color:
+            var(--jn-blue);
+
+          font-size: 8px;
+
+          letter-spacing: .55px;
+
+          text-transform:
+            uppercase;
+
           font-weight: 950;
+
           margin-bottom: 5px;
         }
 
         .jnmulee-trending-title {
-          font-size: 13px;
-          line-height: 1.35;
+          color:
+            var(--jn-text);
+
+          font-size: 12px;
+
+          line-height: 1.4;
+
           font-weight: 850;
         }
 
         .jnmulee-most-read-box {
-          background: #fff;
-          border: 1px solid #e5e7eb;
+          background:
+            var(--jn-card);
+
+          border:
+            1px solid var(--jn-border);
+
           border-radius: 14px;
-          padding: 19px;
-          box-shadow: 0 3px 14px rgba(0,0,0,.04);
+
+          padding: 20px;
+
+          box-shadow:
+            var(--jn-shadow);
         }
 
         .jnmulee-most-read-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          column-gap: 28px;
+
+          grid-template-columns:
+            1fr 1fr;
+
+          column-gap: 30px;
         }
 
         .jnmulee-most-read-item {
           display: grid;
-          grid-template-columns: 32px 82px minmax(0,1fr);
+
+          grid-template-columns:
+            32px 82px minmax(0,1fr);
+
           align-items: center;
+
           gap: 10px;
+
           min-width: 0;
+
           padding: 12px 0;
-          border-bottom: 1px solid #edf0f2;
+
+          border-bottom:
+            1px solid #edf1f5;
+
           color: inherit;
+
           text-decoration: none;
         }
 
         .jnmulee-most-read-number {
-          color: #d7193f;
+          color:
+            #c4ccd8;
+
           font-size: 17px;
+
           text-align: center;
+        }
+
+        .jnmulee-most-read-item:hover
+        .jnmulee-most-read-number {
+          color:
+            var(--jn-blue);
         }
 
         .jnmulee-most-read-image-wrap {
           position: relative;
+
           width: 82px;
           height: 61px;
+
           border-radius: 7px;
+
           overflow: hidden;
-          background: #f1f3f5;
+
+          background:
+            #edf1f6;
         }
 
         .jnmulee-most-read-image {
           object-fit: cover;
+
+          transition:
+            transform .35s ease;
+        }
+
+        .jnmulee-most-read-item:hover
+        .jnmulee-most-read-image {
+          transform:
+            scale(1.05);
         }
 
         .jnmulee-most-read-placeholder {
           width: 82px;
           height: 61px;
+
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
           border-radius: 7px;
-          background: #f1f3f5;
+
+          background:
+            var(--jn-navy);
+
+          color:
+            #60a5fa;
+
+          font-size: 10px;
+          font-weight: 950;
         }
 
         .jnmulee-most-read-title {
-          font-size: 13px;
-          line-height: 1.34;
+          color:
+            var(--jn-text);
+
+          font-size: 12.5px;
+
+          line-height: 1.35;
+
           font-weight: 850;
         }
 
+        .jnmulee-most-read-item:hover
+        .jnmulee-most-read-title {
+          color:
+            var(--jn-blue);
+        }
+
         .jnmulee-most-read-views {
-          color: #d7193f;
-          font-size: 10px;
+          color:
+            var(--jn-blue);
+
+          font-size: 9px;
+
           font-weight: 800;
+
           margin-top: 5px;
+        }
+
+        .jnmulee-empty-message {
+          color:
+            var(--jn-muted);
+
+          font-size: 13px;
+
+          padding:
+            5px 0 15px;
         }
 
         .jnmulee-news-grid {
           display: grid;
-          grid-template-columns: repeat(3,minmax(0,1fr));
+
+          grid-template-columns:
+            repeat(3,minmax(0,1fr));
+
           gap: 20px;
         }
 
         .jnmulee-category-grid {
           display: grid;
-          grid-template-columns: repeat(4,minmax(0,1fr));
+
+          grid-template-columns:
+            repeat(4,minmax(0,1fr));
+
           gap: 18px;
         }
 
         .jnmulee-empty {
-          border: 1px dashed #d1d5db;
+          border:
+            1px dashed #cbd4df;
+
           border-radius: 12px;
-          padding: 35px;
+
+          padding: 38px;
+
           text-align: center;
-          color: #737b88;
+
+          color:
+            var(--jn-muted);
+
+          background:
+            rgba(255,255,255,.6);
         }
 
         .jnmulee-newsletter {
-          margin: 45px 0 35px;
-          padding: 30px 32px;
-          border-radius: 16px;
-          background: #111827;
+          position: relative;
+
+          overflow: hidden;
+
+          margin:
+            48px 0 36px;
+
+          padding:
+            34px 36px;
+
+          border-radius: 17px;
+
+          background:
+            linear-gradient(
+              135deg,
+              #09111f,
+              #0d1830 60%,
+              #13244a
+            );
+
           color: #fff;
+
           display: flex;
+
           align-items: center;
-          justify-content: space-between;
+
+          justify-content:
+            space-between;
+
           gap: 30px;
+
+          box-shadow:
+            0 15px 45px rgba(11,18,32,.16);
+        }
+
+        .jnmulee-newsletter::before {
+          content: "";
+
+          position: absolute;
+
+          left: 0;
+          top: 0;
+
+          width: 4px;
+          height: 100%;
+
+          background:
+            linear-gradient(
+              #2563eb,
+              #60a5fa
+            );
+        }
+
+        .jnmulee-newsletter-glow {
+          position: absolute;
+
+          width: 300px;
+          height: 300px;
+
+          right: -100px;
+          top: -140px;
+
+          border-radius: 50%;
+
+          background:
+            rgba(37,99,235,.18);
+
+          filter:
+            blur(8px);
+
+          pointer-events: none;
+        }
+
+        .jnmulee-newsletter-content {
+          position: relative;
+          z-index: 2;
         }
 
         .jnmulee-newsletter-label {
-          color: #ff5575;
-          font-size: 10px;
+          color:
+            #60a5fa;
+
+          font-size: 9px;
+
           font-weight: 950;
-          letter-spacing: 1px;
-          margin-bottom: 7px;
+
+          letter-spacing: 1.1px;
+
+          margin-bottom: 8px;
         }
 
         .jnmulee-newsletter h2 {
           margin: 0;
-          font-size: clamp(1.7rem,4vw,2.4rem);
-          line-height: 1.05;
+
+          font-size:
+            clamp(1.75rem,4vw,2.5rem);
+
+          line-height: 1.04;
+
           font-weight: 950;
+
+          letter-spacing:
+            -.8px;
+        }
+
+        .jnmulee-newsletter h2 span {
+          color:
+            #60a5fa;
         }
 
         .jnmulee-newsletter p {
           max-width: 560px;
-          margin: 10px 0 0;
-          color: #cbd5e1;
+
+          margin:
+            11px 0 0;
+
+          color:
+            #b9c6d9;
+
           line-height: 1.6;
-          font-size: 14px;
+
+          font-size: 13px;
         }
 
         .jnmulee-newsletter-button {
+          position: relative;
+          z-index: 2;
+
           flex-shrink: 0;
-          background: #d7193f;
+
+          display: inline-flex;
+
+          align-items: center;
+
+          gap: 8px;
+
+          background:
+            #2563eb;
+
           color: #fff;
+
           text-decoration: none;
+
+          border:
+            1px solid rgba(255,255,255,.08);
+
           border-radius: 999px;
-          padding: 12px 18px;
-          font-size: 12px;
+
+          padding:
+            12px 18px;
+
+          font-size: 11px;
+
           font-weight: 900;
+
+          box-shadow:
+            0 8px 20px rgba(37,99,235,.25);
+
+          transition:
+            transform .2s ease,
+            background .2s ease;
+        }
+
+        .jnmulee-newsletter-button:hover {
+          background:
+            #1d4ed8;
+
+          transform:
+            translateY(-2px);
+        }
+
+        .jnmulee-newsletter-button span {
+          font-size: 15px;
         }
 
         .jnmulee-bottom-ad {
           margin-top: 15px;
         }
 
+        /* =========================
+           RESPONSIVE TABLET
+        ========================== */
+
         @media (max-width:1050px) {
+
           .jnmulee-trending-grid {
-            grid-template-columns: repeat(3,minmax(0,1fr));
+            grid-template-columns:
+              repeat(3,minmax(0,1fr));
           }
 
           .jnmulee-category-grid {
-            grid-template-columns: repeat(3,minmax(0,1fr));
+            grid-template-columns:
+              repeat(3,minmax(0,1fr));
           }
         }
 
         @media (max-width:900px) {
+
           .jnmulee-hero-grid {
             grid-template-columns: 1fr;
           }
 
           .jnmulee-news-grid {
-            grid-template-columns: repeat(2,minmax(0,1fr));
+            grid-template-columns:
+              repeat(2,minmax(0,1fr));
           }
 
           .jnmulee-category-grid {
-            grid-template-columns: repeat(2,minmax(0,1fr));
+            grid-template-columns:
+              repeat(2,minmax(0,1fr));
           }
 
           .jnmulee-trending-grid {
-            grid-template-columns: repeat(2,minmax(0,1fr));
+            grid-template-columns:
+              repeat(2,minmax(0,1fr));
           }
 
           .jnmulee-newsletter {
-            align-items: flex-start;
-            flex-direction: column;
+            align-items:
+              flex-start;
+
+            flex-direction:
+              column;
+          }
+
+          .jnmulee-newsletter-button {
+            margin-top: 5px;
           }
         }
 
+        /* =========================
+           MOBILE
+        ========================== */
+
         @media (max-width:650px) {
+
           .jnmulee-header-inner {
-            padding: 12px 14px;
+            padding:
+              11px 14px;
+
+            min-height: 62px;
+          }
+
+          .jnmulee-logo {
+            gap: 8px;
+          }
+
+          .jnmulee-logo-mark {
+            width: 36px;
+            height: 36px;
+
+            border-radius: 9px;
+
+            font-size: 11px;
+          }
+
+          .jnmulee-logo-text {
+            gap: 4px;
+          }
+
+          .jnmulee-logo-text strong {
+            font-size:
+              1.35rem;
+
+            letter-spacing:
+              -1px;
+          }
+
+          .jnmulee-logo-text em {
+            font-size:
+              .9rem;
+          }
+
+          .jnmulee-search-button {
+            width: 36px;
+            height: 36px;
+
+            padding: 0;
+
+            border-radius: 50%;
+          }
+
+          .jnmulee-search-text {
+            display: none;
+          }
+
+          .jnmulee-search-icon {
+            font-size: 21px;
           }
 
           .jnmulee-category-nav-inner {
-            padding: 0 14px;
-            gap: 18px;
+            padding:
+              0 14px;
+
+            gap: 19px;
+          }
+
+          .jnmulee-nav-link {
+            font-size: 11px;
+
+            padding:
+              14px 0;
           }
 
           .jnmulee-breaking-inner {
-            padding: 6px 14px;
+            padding:
+              6px 14px;
+
+            min-height: 40px;
           }
 
           .jnmulee-breaking-live {
             display: none;
           }
 
+          .jnmulee-breaking-arrow {
+            display: none;
+          }
+
           .jnmulee-home {
-            padding: 20px 14px 50px;
+            padding:
+              20px 14px 52px;
+          }
+
+          .jnmulee-hero-section {
+            margin-bottom: 27px;
           }
 
           .jnmulee-story-content-large {
-            padding: 18px;
+            padding:
+              18px;
           }
 
           .jnmulee-story-title-large {
-            font-size: 1.55rem;
+            font-size:
+              1.55rem;
+
+            line-height:
+              1.15;
+          }
+
+          .jnmulee-story-excerpt {
+            font-size:
+              13px;
+          }
+
+          .jnmulee-hero-side {
+            padding:
+              15px;
           }
 
           .jnmulee-most-read-grid {
-            grid-template-columns: 1fr;
+            grid-template-columns:
+              1fr;
           }
 
           .jnmulee-news-grid,
           .jnmulee-category-grid {
-            grid-template-columns: 1fr;
+            grid-template-columns:
+              1fr;
+
             gap: 15px;
           }
 
           .jnmulee-trending-grid {
-            grid-template-columns: 1fr;
+            grid-template-columns:
+              1fr;
           }
 
           .jnmulee-section {
-            margin-bottom: 34px;
+            margin-bottom:
+              35px;
           }
 
           .jnmulee-section-header {
-            margin-bottom: 14px;
+            margin-bottom:
+              15px;
           }
 
           .jnmulee-section-title {
-            font-size: 1.4rem;
+            font-size:
+              1.38rem;
+          }
+
+          .jnmulee-most-read-box {
+            padding:
+              17px;
+          }
+
+          .jnmulee-most-read-item {
+            grid-template-columns:
+              30px 76px minmax(0,1fr);
+
+            gap: 8px;
+          }
+
+          .jnmulee-most-read-image-wrap,
+          .jnmulee-most-read-placeholder {
+            width: 76px;
+            height: 57px;
+          }
+
+          .jnmulee-most-read-title {
+            font-size:
+              12px;
           }
 
           .jnmulee-newsletter {
-            padding: 24px;
+            padding:
+              26px 24px;
+
+            margin:
+              38px 0 28px;
           }
 
           .jnmulee-newsletter-button {
             width: 100%;
+
+            justify-content:
+              center;
+
             text-align: center;
+          }
+
+          .jnmulee-ad-wrap {
+            margin-bottom:
+              30px;
           }
         }
 
+        /* =========================
+           ACCESSIBILITY
+        ========================== */
+
         @media (prefers-reduced-motion: reduce) {
-          * {
+
+          *,
+          *::before,
+          *::after {
             scroll-behavior: auto !important;
+
+            transition-duration:
+              .01ms !important;
+
+            animation-duration:
+              .01ms !important;
+
+            animation-iteration-count:
+              1 !important;
           }
         }
+
       `}</style>
     </>
   );
