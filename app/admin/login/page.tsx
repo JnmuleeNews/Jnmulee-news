@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
-const supabase = createClient(
+const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
@@ -23,18 +23,30 @@ export default function AdminLogin() {
     let mounted = true;
 
     async function checkSession() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      if (user) {
-        router.replace("/admin");
-        return;
+        if (user) {
+          const role = user.app_metadata?.role;
+
+          if (role === "admin") {
+            router.replace("/admin");
+            return;
+          }
+
+          await supabase.auth.signOut();
+        }
+      } catch {
+        // Stay on login page if session checking fails.
       }
 
-      setCheckingSession(false);
+      if (mounted) {
+        setCheckingSession(false);
+      }
     }
 
     checkSession();
@@ -44,44 +56,90 @@ export default function AdminLogin() {
     };
   }, [router]);
 
-  async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
+  async function handleLogin(
+    e: React.FormEvent<HTMLFormElement>
+  ) {
     e.preventDefault();
 
     if (loading) return;
 
-    setLoading(true);
     setError("");
+    setLoading(true);
 
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanEmail || !password) {
-      setError("Please enter your email and password.");
+      setError(
+        "Please enter your email and password."
+      );
       setLoading(false);
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password,
-    });
+    try {
+      const {
+        data,
+        error: signInError,
+      } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
 
-    if (error) {
-      setError("Invalid email or password.");
+      if (signInError) {
+        setError(
+          signInError.message ||
+            "Invalid email or password."
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (!data.user) {
+        setError(
+          "Sign-in was not completed. Please try again."
+        );
+        setLoading(false);
+        return;
+      }
+
+      const role = data.user.app_metadata?.role;
+
+      if (role !== "admin") {
+        await supabase.auth.signOut();
+
+        setError(
+          "This account does not have administrator access."
+        );
+        setLoading(false);
+        return;
+      }
+
+      /*
+       * Give Supabase time to persist the authenticated
+       * session cookies before navigating to the protected
+       * admin route.
+       */
+      await new Promise((resolve) =>
+        setTimeout(resolve, 150)
+      );
+
+      router.replace("/admin");
+      router.refresh();
+    } catch {
+      setError(
+        "Unable to sign in right now. Please try again."
+      );
       setLoading(false);
-      return;
     }
-
-    router.replace("/admin");
-    router.refresh();
   }
 
   if (checkingSession) {
     return (
       <main className="auth">
         <div className="authBox">
-          <div className="brand">
+          <Link href="/" className="brand">
             JNMulee <span>News</span>
-          </div>
+          </Link>
 
           <div
             style={{
@@ -99,7 +157,10 @@ export default function AdminLogin() {
 
   return (
     <main className="auth">
-      <form className="authBox" onSubmit={handleLogin}>
+      <form
+        className="authBox"
+        onSubmit={handleLogin}
+      >
         <Link href="/" className="brand">
           JNMulee <span>News</span>
         </Link>
@@ -107,10 +168,13 @@ export default function AdminLogin() {
         <h1>Admin Login</h1>
 
         <p>
-          Sign in to access the JNMulee News administration area.
+          Sign in to access the JNMulee News
+          administration area.
         </p>
 
-        <label htmlFor="admin-email">Email</label>
+        <label htmlFor="admin-email">
+          Email
+        </label>
 
         <input
           id="admin-email"
@@ -118,15 +182,20 @@ export default function AdminLogin() {
           type="email"
           placeholder="admin@example.com"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) =>
+            setEmail(e.target.value)
+          }
           autoComplete="username"
           autoCapitalize="none"
+          autoCorrect="off"
           spellCheck={false}
           required
           disabled={loading}
         />
 
-        <label htmlFor="admin-password">Password</label>
+        <label htmlFor="admin-password">
+          Password
+        </label>
 
         <input
           id="admin-password"
@@ -134,7 +203,9 @@ export default function AdminLogin() {
           type="password"
           placeholder="Enter your password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) =>
+            setPassword(e.target.value)
+          }
           autoComplete="current-password"
           required
           disabled={loading}
@@ -158,11 +229,18 @@ export default function AdminLogin() {
           </div>
         )}
 
-        <button type="submit" disabled={loading}>
-          {loading ? "Signing in..." : "Sign in"}
+        <button
+          type="submit"
+          disabled={loading}
+        >
+          {loading
+            ? "Signing in..."
+            : "Sign in"}
         </button>
 
-        <Link href="/">Back to website</Link>
+        <Link href="/">
+          Back to website
+        </Link>
       </form>
     </main>
   );
