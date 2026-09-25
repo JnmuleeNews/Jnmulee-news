@@ -21,7 +21,10 @@ const NEWS_CATEGORIES = [
 const AD_PLACEMENTS = [
   { value: "homepage", label: "Homepage" },
   { value: "ads_page", label: "Ads Page" },
-  { value: "homepage_ads", label: "Homepage + Ads Page" },
+  {
+    value: "homepage_ads",
+    label: "Homepage + Ads Page",
+  },
 ];
 
 type Source = {
@@ -40,34 +43,74 @@ export default function AdminDashboard() {
 
   const [name, setName] = useState("");
   const [feedUrl, setFeedUrl] = useState("");
-  const [category, setCategory] = useState("Top Stories");
+  const [category, setCategory] =
+    useState("Top Stories");
 
   const [adTitle, setAdTitle] = useState("");
-  const [adImageUrl, setAdImageUrl] = useState("");
-  const [adLinkUrl, setAdLinkUrl] = useState("");
-  const [adPlacement, setAdPlacement] = useState("homepage");
+  const [adImageUrl, setAdImageUrl] =
+    useState("");
+  const [adLinkUrl, setAdLinkUrl] =
+    useState("");
+  const [adPlacement, setAdPlacement] =
+    useState("homepage");
 
-  const [loading, setLoading] = useState(true);
-  const [addingSource, setAddingSource] = useState(false);
-  const [addingAd, setAddingAd] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const [loading, setLoading] =
+    useState(true);
+  const [addingSource, setAddingSource] =
+    useState(false);
+  const [addingAd, setAddingAd] =
+    useState(false);
+  const [importing, setImporting] =
+    useState(false);
+  const [loggingOut, setLoggingOut] =
+    useState(false);
 
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [message, setMessage] =
+    useState("");
+  const [error, setError] =
+    useState("");
+
+  async function checkAuthentication() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.replace("/admin/login");
+      return false;
+    }
+
+    return true;
+  }
 
   async function loadData() {
     setLoading(true);
     setError("");
 
-    const { data, error } = await supabase
-      .from("sources")
-      .select("id,name,feed_url,category,active,created_at")
-      .order("created_at", { ascending: false });
+    const authenticated =
+      await checkAuthentication();
+
+    if (!authenticated) {
+      setLoading(false);
+      return;
+    }
+
+    const { data, error } =
+      await supabase
+        .from("sources")
+        .select(
+          "id,name,feed_url,category,active,created_at"
+        )
+        .order("created_at", {
+          ascending: false,
+        });
 
     if (error) {
       setError(error.message);
     } else {
-      setSources((data || []) as Source[]);
+      setSources(
+        (data || []) as Source[]
+      );
     }
 
     setLoading(false);
@@ -77,30 +120,53 @@ export default function AdminDashboard() {
     loadData();
   }, []);
 
-  async function addSource(e: React.FormEvent) {
+  async function addSource(
+    e: React.FormEvent<HTMLFormElement>
+  ) {
     e.preventDefault();
 
     setAddingSource(true);
     setMessage("");
     setError("");
 
-    if (!name.trim() || !feedUrl.trim()) {
-      setError("Please enter the source name and RSS feed URL.");
+    const cleanName = name.trim();
+    const cleanFeedUrl =
+      feedUrl.trim();
+
+    if (!cleanName || !cleanFeedUrl) {
+      setError(
+        "Please enter the source name and RSS feed URL."
+      );
       setAddingSource(false);
       return;
     }
 
-    const { error } = await supabase.from("sources").insert({
-      name: name.trim(),
-      feed_url: feedUrl.trim(),
-      category,
-      active: true,
-    });
+    try {
+      new URL(cleanFeedUrl);
+    } catch {
+      setError(
+        "Please enter a valid RSS feed URL."
+      );
+      setAddingSource(false);
+      return;
+    }
+
+    const { error } =
+      await supabase
+        .from("sources")
+        .insert({
+          name: cleanName,
+          feed_url: cleanFeedUrl,
+          category,
+          active: true,
+        });
 
     if (error) {
       setError(error.message);
     } else {
-      setMessage("News source added successfully.");
+      setMessage(
+        "News source added successfully."
+      );
 
       setName("");
       setFeedUrl("");
@@ -113,55 +179,80 @@ export default function AdminDashboard() {
   }
 
   async function deleteSource(id: string) {
-    if (!confirm("Delete this news source?")) {
+    if (
+      !window.confirm(
+        "Delete this news source? This action cannot be undone."
+      )
+    ) {
       return;
     }
 
     setMessage("");
     setError("");
 
-    const { error } = await supabase
-      .from("sources")
-      .delete()
-      .eq("id", id);
+    const { error } =
+      await supabase
+        .from("sources")
+        .delete()
+        .eq("id", id);
 
     if (error) {
       setError(error.message);
     } else {
-      setMessage("News source deleted.");
+      setMessage(
+        "News source deleted."
+      );
       await loadData();
     }
   }
 
-  async function toggleSource(source: Source) {
+  async function toggleSource(
+    source: Source
+  ) {
     setMessage("");
     setError("");
 
-    const { error } = await supabase
-      .from("sources")
-      .update({
-        active: !source.active,
-      })
-      .eq("id", source.id);
+    const { error } =
+      await supabase
+        .from("sources")
+        .update({
+          active: !source.active,
+        })
+        .eq("id", source.id);
 
     if (error) {
       setError(error.message);
     } else {
+      setMessage(
+        source.active
+          ? `${source.name} has been disabled.`
+          : `${source.name} has been enabled.`
+      );
+
       await loadData();
     }
   }
 
-  async function addAd(e: React.FormEvent) {
+  async function addAd(
+    e: React.FormEvent<HTMLFormElement>
+  ) {
     e.preventDefault();
 
     setAddingAd(true);
     setMessage("");
     setError("");
 
+    const cleanTitle =
+      adTitle.trim();
+    const cleanImageUrl =
+      adImageUrl.trim();
+    const cleanLinkUrl =
+      adLinkUrl.trim();
+
     if (
-      !adTitle.trim() ||
-      !adImageUrl.trim() ||
-      !adLinkUrl.trim()
+      !cleanTitle ||
+      !cleanImageUrl ||
+      !cleanLinkUrl
     ) {
       setError(
         "Please fill in the advertisement title, image URL and link."
@@ -171,13 +262,27 @@ export default function AdminDashboard() {
       return;
     }
 
-    const { error } = await supabase.from("direct_ads").insert({
-      title: adTitle.trim(),
-      image_url: adImageUrl.trim(),
-      link_url: adLinkUrl.trim(),
-      placement: adPlacement,
-      active: true,
-    });
+    try {
+      new URL(cleanImageUrl);
+      new URL(cleanLinkUrl);
+    } catch {
+      setError(
+        "Please enter valid advertisement image and link URLs."
+      );
+      setAddingAd(false);
+      return;
+    }
+
+    const { error } =
+      await supabase
+        .from("direct_ads")
+        .insert({
+          title: cleanTitle,
+          image_url: cleanImageUrl,
+          link_url: cleanLinkUrl,
+          placement: adPlacement,
+          active: true,
+        });
 
     if (error) {
       setError(error.message);
@@ -201,15 +306,30 @@ export default function AdminDashboard() {
     setImporting(true);
 
     try {
-      const response = await fetch("/api/fetch-news", {
-        method: "GET",
-      });
+      const response =
+        await fetch(
+          "/api/fetch-news",
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
 
-      const data = await response.json();
+      let data: {
+        message?: string;
+        error?: string;
+      } = {};
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
 
       if (!response.ok) {
         setError(
-          data?.error || "News import failed."
+          data?.error ||
+            "News import failed."
         );
         return;
       }
@@ -221,110 +341,622 @@ export default function AdminDashboard() {
 
       await loadData();
     } catch {
-      setError("Unable to start the news import.");
+      setError(
+        "Unable to start the news import."
+      );
     } finally {
       setImporting(false);
     }
   }
 
   async function logout() {
-    await supabase.auth.signOut();
-    router.push("/admin/login");
+    if (loggingOut) return;
+
+    setLoggingOut(true);
+    setMessage("");
+    setError("");
+
+    const { error } =
+      await supabase.auth.signOut();
+
+    if (error) {
+      setError(error.message);
+      setLoggingOut(false);
+      return;
+    }
+
+    router.replace("/admin/login");
+    router.refresh();
   }
 
   return (
-    <main className="dashboardPage">
-      <header className="dashboardHeader">
-        <div className="container dashboardHeaderInner">
+    <main className="adminPage">
+      <style>{`
+        .adminPage {
+          min-height: 100vh;
+          background: #f7f9fc;
+          color: #172033;
+          padding-bottom: 70px;
+        }
+
+        .adminContainer {
+          width: min(1200px, calc(100% - 32px));
+          margin: 0 auto;
+        }
+
+        .adminHeader {
+          background:
+            linear-gradient(
+              135deg,
+              #0b1220 0%,
+              #111c31 60%,
+              #17284a 100%
+            );
+          color: #ffffff;
+          border-bottom: 1px solid rgba(255,255,255,.08);
+          box-shadow: 0 10px 30px rgba(11,18,32,.13);
+        }
+
+        .adminHeaderInner {
+          min-height: 86px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+        }
+
+        .adminBrand {
+          color: #ffffff;
+          text-decoration: none;
+          font-size: 24px;
+          line-height: 1.1;
+          font-weight: 900;
+          letter-spacing: -.7px;
+        }
+
+        .adminBrand:hover {
+          color: #dbeafe;
+        }
+
+        .adminSubtitle {
+          margin: 7px 0 0;
+          color: #aebbd0;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        .logoutButton {
+          height: 40px;
+          padding: 0 17px;
+          border: 1px solid rgba(255,255,255,.2);
+          border-radius: 9px;
+          background: rgba(255,255,255,.07);
+          color: #ffffff;
+          font-size: 13px;
+          font-weight: 800;
+          cursor: pointer;
+          transition:
+            background .18s ease,
+            border-color .18s ease;
+        }
+
+        .logoutButton:hover {
+          background: rgba(255,255,255,.13);
+          border-color: rgba(255,255,255,.32);
+        }
+
+        .adminMain {
+          padding-top: 28px;
+        }
+
+        .message {
+          margin-bottom: 18px;
+          padding: 13px 16px;
+          border: 1px solid #bbf7d0;
+          border-radius: 11px;
+          background: #f0fdf4;
+          color: #166534;
+          font-size: 14px;
+          font-weight: 650;
+        }
+
+        .error {
+          margin-bottom: 18px;
+          padding: 13px 16px;
+          border: 1px solid #fecaca;
+          border-radius: 11px;
+          background: #fef2f2;
+          color: #b91c1c;
+          font-size: 14px;
+          font-weight: 650;
+        }
+
+        .section {
+          margin-bottom: 22px;
+          padding: 25px;
+          border: 1px solid #e1e7ef;
+          border-radius: 17px;
+          background: #ffffff;
+          box-shadow: 0 7px 24px rgba(17,24,39,.045);
+        }
+
+        .sectionHeader {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 20px;
+          margin-bottom: 22px;
+        }
+
+        .sectionHeader h1,
+        .sectionHeader h2 {
+          margin: 0;
+          color: #172033;
+          font-size: 22px;
+          line-height: 1.2;
+          letter-spacing: -.45px;
+          font-weight: 900;
+        }
+
+        .sectionHeader p {
+          max-width: 680px;
+          margin: 7px 0 0;
+          color: #707a8b;
+          font-size: 14px;
+          line-height: 1.6;
+        }
+
+        .adminLink {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 42px;
+          flex-shrink: 0;
+          padding: 0 17px;
+          border-radius: 10px;
+          background: #2563eb;
+          color: #ffffff;
+          text-decoration: none;
+          font-size: 13px;
+          font-weight: 850;
+          transition:
+            background .18s ease,
+            transform .18s ease;
+        }
+
+        .adminLink:hover {
+          background: #1d4ed8;
+          transform: translateY(-1px);
+        }
+
+        .form {
+          display: grid;
+          grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+          gap: 16px;
+          padding: 20px;
+          border: 1px solid #e6eaf0;
+          border-radius: 14px;
+          background: #f9fafc;
+        }
+
+        .form label {
+          display: flex;
+          flex-direction: column;
+          gap: 7px;
+          color: #344054;
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        .form input,
+        .form select {
+          width: 100%;
+          height: 46px;
+          border: 1px solid #d4dae4;
+          border-radius: 9px;
+          padding: 0 13px;
+          background: #ffffff;
+          color: #172033;
+          font-family: inherit;
+          font-size: 14px;
+          outline: none;
+        }
+
+        .form input:focus,
+        .form select:focus {
+          border-color: #60a5fa;
+          box-shadow:
+            0 0 0 3px rgba(96,165,250,.18);
+        }
+
+        .form button {
+          min-height: 46px;
+          align-self: end;
+          border: 0;
+          border-radius: 9px;
+          padding: 0 18px;
+          background: #2563eb;
+          color: #ffffff;
+          font-size: 13px;
+          font-weight: 850;
+          cursor: pointer;
+        }
+
+        .form button:hover {
+          background: #1d4ed8;
+        }
+
+        .form button:disabled,
+        .sectionHeader button:disabled {
+          opacity: .6;
+          cursor: not-allowed;
+        }
+
+        .sectionHeader > button {
+          min-height: 42px;
+          flex-shrink: 0;
+          border: 0;
+          border-radius: 10px;
+          padding: 0 17px;
+          background: #0b1220;
+          color: #ffffff;
+          font-size: 13px;
+          font-weight: 850;
+          cursor: pointer;
+          transition: background .18s ease;
+        }
+
+        .sectionHeader > button:hover:not(:disabled) {
+          background: #17284a;
+        }
+
+        .adminList {
+          margin-top: 22px;
+        }
+
+        .adminList h3 {
+          margin: 0 0 12px;
+          color: #172033;
+          font-size: 15px;
+          font-weight: 900;
+        }
+
+        .adminList > p {
+          margin: 0;
+          padding: 22px;
+          border: 1px dashed #d6dce6;
+          border-radius: 11px;
+          color: #7b8494;
+          background: #fafbfc;
+          text-align: center;
+          font-size: 14px;
+        }
+
+        .adminListItem {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 18px;
+          padding: 17px;
+          border: 1px solid #e3e8ef;
+          border-radius: 12px;
+          background: #ffffff;
+        }
+
+        .adminListItem + .adminListItem {
+          margin-top: 10px;
+        }
+
+        .sourceInfo {
+          min-width: 0;
+        }
+
+        .sourceName {
+          display: block;
+          margin-bottom: 5px;
+          color: #172033;
+          font-size: 14px;
+          font-weight: 850;
+        }
+
+        .sourceUrl {
+          max-width: 700px;
+          margin: 0 0 6px;
+          overflow: hidden;
+          color: #667085;
+          font-size: 12px;
+          line-height: 1.5;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .sourceMeta {
+          color: #8992a2;
+          font-size: 11px;
+          font-weight: 650;
+        }
+
+        .activeBadge {
+          color: #15803d;
+        }
+
+        .disabledBadge {
+          color: #b45309;
+        }
+
+        .adminActions {
+          display: flex;
+          align-items: center;
+          flex-shrink: 0;
+          gap: 8px;
+        }
+
+        .actionButton {
+          min-height: 36px;
+          border: 1px solid #d9dee7;
+          border-radius: 8px;
+          padding: 0 12px;
+          background: #ffffff;
+          color: #344054;
+          font-size: 12px;
+          font-weight: 800;
+          cursor: pointer;
+        }
+
+        .actionButton:hover {
+          border-color: #b9c4d4;
+          background: #f8fafc;
+        }
+
+        .deleteButton {
+          border-color: #fecaca;
+          color: #b91c1c;
+        }
+
+        .deleteButton:hover {
+          border-color: #fca5a5;
+          background: #fef2f2;
+        }
+
+        .loadingState {
+          padding: 25px;
+          color: #727c8d;
+          text-align: center;
+          font-size: 14px;
+        }
+
+        .adminGrid {
+          display: grid;
+          grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+          gap: 16px;
+          margin-bottom: 22px;
+        }
+
+        .quickCard {
+          padding: 20px;
+          border: 1px solid #e1e7ef;
+          border-radius: 14px;
+          background: #ffffff;
+        }
+
+        .quickLabel {
+          margin: 0 0 7px;
+          color: #2563eb;
+          font-size: 11px;
+          font-weight: 900;
+          letter-spacing: .7px;
+          text-transform: uppercase;
+        }
+
+        .quickTitle {
+          margin: 0 0 8px;
+          color: #172033;
+          font-size: 18px;
+          font-weight: 900;
+        }
+
+        .quickText {
+          margin: 0 0 15px;
+          color: #737d8d;
+          font-size: 13px;
+          line-height: 1.55;
+        }
+
+        .quickLink {
+          color: #2563eb;
+          text-decoration: none;
+          font-size: 13px;
+          font-weight: 850;
+        }
+
+        .quickLink:hover {
+          text-decoration: underline;
+        }
+
+        @media (max-width: 760px) {
+          .adminContainer {
+            width: min(100% - 22px, 1200px);
+          }
+
+          .adminHeaderInner {
+            min-height: 74px;
+          }
+
+          .adminBrand {
+            font-size: 20px;
+          }
+
+          .adminSubtitle {
+            display: none;
+          }
+
+          .section {
+            padding: 19px;
+          }
+
+          .sectionHeader {
+            flex-direction: column;
+            gap: 14px;
+          }
+
+          .sectionHeader > button,
+          .adminLink {
+            width: 100%;
+          }
+
+          .form {
+            grid-template-columns: 1fr;
+            padding: 16px;
+          }
+
+          .adminListItem {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
+          .adminActions {
+            width: 100%;
+          }
+
+          .actionButton {
+            flex: 1;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .adminHeaderInner {
+            align-items: flex-start;
+            padding: 16px 0;
+          }
+
+          .logoutButton {
+            height: 36px;
+          }
+
+          .adminMain {
+            padding-top: 18px;
+          }
+
+          .sectionHeader h1,
+          .sectionHeader h2 {
+            font-size: 20px;
+          }
+
+          .sourceUrl {
+            white-space: normal;
+            overflow-wrap: anywhere;
+          }
+        }
+      `}</style>
+
+      <header className="adminHeader">
+        <div className="adminContainer adminHeaderInner">
           <div>
             <Link
               href="/admin"
-              className="dashboardBrand"
+              className="adminBrand"
             >
               JNMulee News Admin
             </Link>
 
-            <p className="dashboardSubtitle">
-              Manage news, RSS feeds and personal
-              advertisements
+            <p className="adminSubtitle">
+              Manage publishing, RSS feeds,
+              comments and advertisements
             </p>
           </div>
 
           <button
             type="button"
+            className="logoutButton"
             onClick={logout}
+            disabled={loggingOut}
           >
-            Logout
+            {loggingOut
+              ? "Signing out..."
+              : "Logout"}
           </button>
         </div>
       </header>
 
-      <div className="container">
+      <div className="adminContainer adminMain">
         {message && (
-          <div className="success">
+          <div
+            className="message"
+            role="status"
+          >
             {message}
           </div>
         )}
 
         {error && (
-          <div className="error">
+          <div
+            className="error"
+            role="alert"
+          >
             {error}
           </div>
         )}
 
-        {/* POST NEWS */}
-        <section className="section">
-          <div className="sectionHeader">
-            <div>
-              <h1>Post News</h1>
+        <div className="adminGrid">
+          <div className="quickCard">
+            <p className="quickLabel">
+              Publishing
+            </p>
 
-              <p>
-                Create your own news article, add an
-                image and publish it directly to
-                JNMulee News.
-              </p>
-            </div>
+            <h2 className="quickTitle">
+              Post News
+            </h2>
+
+            <p className="quickText">
+              Create your own article, add an
+              image and publish it directly to
+              JNMulee News.
+            </p>
 
             <Link
               href="/admin/news/new"
-              className="adminLink"
+              className="quickLink"
             >
-              + Post News
+              + Create Article →
             </Link>
           </div>
-        </section>
 
-        {/* COMMENT MANAGEMENT */}
-        <section className="section">
-          <div className="sectionHeader">
-            <div>
-              <h2>Comments</h2>
+          <div className="quickCard">
+            <p className="quickLabel">
+              Community
+            </p>
 
-              <p>
-                Review, approve or delete comments
-                submitted by visitors.
-              </p>
-            </div>
+            <h2 className="quickTitle">
+              Comments
+            </h2>
+
+            <p className="quickText">
+              Review, approve or delete comments
+              submitted by visitors.
+            </p>
 
             <Link
               href="/admin/comments"
-              className="adminLink"
+              className="quickLink"
             >
-              Manage Comments
+              Manage Comments →
             </Link>
           </div>
-        </section>
+        </div>
 
-        {/* NEWS SOURCES */}
         <section className="section">
           <div className="sectionHeader">
             <div>
-              <h2>News Sources / RSS Feeds</h2>
+              <h2>
+                News Sources / RSS Feeds
+              </h2>
 
               <p>
-                Connect RSS feeds and choose the
-                category where imported stories
-                should appear.
+                Connect RSS feeds and choose
+                the category where imported
+                stories should appear.
               </p>
             </div>
 
@@ -353,6 +985,7 @@ export default function AdminDashboard() {
                   setName(e.target.value)
                 }
                 placeholder="Example: Crypto News"
+                maxLength={120}
               />
             </label>
 
@@ -366,6 +999,7 @@ export default function AdminDashboard() {
                   setFeedUrl(e.target.value)
                 }
                 placeholder="https://example.com/feed/"
+                maxLength={500}
               />
             </label>
 
@@ -402,10 +1036,14 @@ export default function AdminDashboard() {
           </form>
 
           <div className="adminList">
-            <h3>Connected Sources</h3>
+            <h3>
+              Connected Sources
+            </h3>
 
             {loading ? (
-              <p>Loading sources...</p>
+              <div className="loadingState">
+                Loading sources...
+              </div>
             ) : sources.length === 0 ? (
               <p>
                 No RSS sources added yet.
@@ -416,16 +1054,22 @@ export default function AdminDashboard() {
                   className="adminListItem"
                   key={source.id}
                 >
-                  <div>
-                    <strong>
+                  <div className="sourceInfo">
+                    <strong className="sourceName">
                       {source.name}
                     </strong>
 
-                    <p>
+                    <p className="sourceUrl">
                       {source.feed_url}
                     </p>
 
-                    <small>
+                    <small
+                      className={`sourceMeta ${
+                        source.active
+                          ? "activeBadge"
+                          : "disabledBadge"
+                      }`}
+                    >
                       {source.category} ·{" "}
                       {source.active
                         ? "Active"
@@ -436,6 +1080,7 @@ export default function AdminDashboard() {
                   <div className="adminActions">
                     <button
                       type="button"
+                      className="actionButton"
                       onClick={() =>
                         toggleSource(
                           source
@@ -449,6 +1094,7 @@ export default function AdminDashboard() {
 
                     <button
                       type="button"
+                      className="actionButton deleteButton"
                       onClick={() =>
                         deleteSource(
                           source.id
@@ -464,7 +1110,6 @@ export default function AdminDashboard() {
           </div>
         </section>
 
-        {/* PERSONAL ADVERTISEMENTS */}
         <section className="section">
           <div className="sectionHeader">
             <div>
@@ -473,9 +1118,8 @@ export default function AdminDashboard() {
               </h2>
 
               <p>
-                Add an image advertisement
-                that can appear on the
-                selected placement.
+                Add image advertisements and
+                choose where they should appear.
               </p>
             </div>
 
@@ -501,6 +1145,7 @@ export default function AdminDashboard() {
                   setAdTitle(e.target.value)
                 }
                 placeholder="Example: JNMulee Business"
+                maxLength={150}
               />
             </label>
 
@@ -516,6 +1161,7 @@ export default function AdminDashboard() {
                   )
                 }
                 placeholder="https://example.com/ad-image.jpg"
+                maxLength={1000}
               />
             </label>
 
@@ -531,6 +1177,7 @@ export default function AdminDashboard() {
                   )
                 }
                 placeholder="https://example.com"
+                maxLength={1000}
               />
             </label>
 
