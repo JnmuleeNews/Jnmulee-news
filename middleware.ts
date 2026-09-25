@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 export async function middleware(request: Request) {
+  const url = new URL(request.url);
+  const pathname = url.pathname;
+
+  // Always allow the login page itself.
+  if (pathname === "/admin/login") {
+    return NextResponse.next();
+  }
+
   const response = NextResponse.next({
     request,
   });
@@ -12,7 +20,8 @@ export async function middleware(request: Request) {
     {
       cookies: {
         getAll() {
-          const cookieHeader = request.headers.get("cookie") || "";
+          const cookieHeader =
+            request.headers.get("cookie") || "";
 
           return cookieHeader
             .split(";")
@@ -22,19 +31,30 @@ export async function middleware(request: Request) {
               const index = cookie.indexOf("=");
 
               return {
-                name: index >= 0 ? cookie.slice(0, index) : cookie,
+                name:
+                  index >= 0
+                    ? cookie.slice(0, index)
+                    : cookie,
                 value:
                   index >= 0
-                    ? decodeURIComponent(cookie.slice(index + 1))
+                    ? decodeURIComponent(
+                        cookie.slice(index + 1)
+                      )
                     : "",
               };
             });
         },
 
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
+          cookiesToSet.forEach(
+            ({ name, value, options }) => {
+              response.cookies.set(
+                name,
+                value,
+                options
+              );
+            }
+          );
         },
       },
     }
@@ -44,22 +64,18 @@ export async function middleware(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = new URL(request.url).pathname;
+  if (!user) {
+    return NextResponse.redirect(
+      new URL("/admin/login", request.url)
+    );
+  }
 
-  if (pathname.startsWith("/admin")) {
-    if (!user) {
-      return NextResponse.redirect(
-        new URL("/admin/login", request.url)
-      );
-    }
+  const role = user.app_metadata?.role;
 
-    const role = user.app_metadata?.role;
-
-    if (role !== "admin") {
-      return NextResponse.redirect(
-        new URL("/", request.url)
-      );
-    }
+  if (role !== "admin") {
+    return NextResponse.redirect(
+      new URL("/", request.url)
+    );
   }
 
   return response;
