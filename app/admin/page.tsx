@@ -43,32 +43,21 @@ export default function AdminDashboard() {
 
   const [name, setName] = useState("");
   const [feedUrl, setFeedUrl] = useState("");
-  const [category, setCategory] =
-    useState("Top Stories");
+  const [category, setCategory] = useState("Top Stories");
 
   const [adTitle, setAdTitle] = useState("");
-  const [adImageUrl, setAdImageUrl] =
-    useState("");
-  const [adLinkUrl, setAdLinkUrl] =
-    useState("");
-  const [adPlacement, setAdPlacement] =
-    useState("homepage");
+  const [adImageUrl, setAdImageUrl] = useState("");
+  const [adLinkUrl, setAdLinkUrl] = useState("");
+  const [adPlacement, setAdPlacement] = useState("homepage");
 
-  const [loading, setLoading] =
-    useState(true);
-  const [addingSource, setAddingSource] =
-    useState(false);
-  const [addingAd, setAddingAd] =
-    useState(false);
-  const [importing, setImporting] =
-    useState(false);
-  const [loggingOut, setLoggingOut] =
-    useState(false);
+  const [loading, setLoading] = useState(true);
+  const [addingSource, setAddingSource] = useState(false);
+  const [addingAd, setAddingAd] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
-  const [message, setMessage] =
-    useState("");
-  const [error, setError] =
-    useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   async function checkAuthentication() {
     const {
@@ -80,6 +69,12 @@ export default function AdminDashboard() {
       return false;
     }
 
+    if (user.app_metadata?.role !== "admin") {
+      await supabase.auth.signOut();
+      router.replace("/");
+      return false;
+    }
+
     return true;
   }
 
@@ -87,30 +82,26 @@ export default function AdminDashboard() {
     setLoading(true);
     setError("");
 
-    const authenticated =
-      await checkAuthentication();
+    const authenticated = await checkAuthentication();
 
     if (!authenticated) {
       setLoading(false);
       return;
     }
 
-    const { data, error } =
-      await supabase
-        .from("sources")
-        .select(
-          "id,name,feed_url,category,active,created_at"
-        )
-        .order("created_at", {
-          ascending: false,
-        });
+    const { data, error } = await supabase
+      .from("sources")
+      .select(
+        "id,name,feed_url,category,active,created_at"
+      )
+      .order("created_at", {
+        ascending: false,
+      });
 
     if (error) {
       setError(error.message);
     } else {
-      setSources(
-        (data || []) as Source[]
-      );
+      setSources((data || []) as Source[]);
     }
 
     setLoading(false);
@@ -129,9 +120,15 @@ export default function AdminDashboard() {
     setMessage("");
     setError("");
 
+    const authenticated = await checkAuthentication();
+
+    if (!authenticated) {
+      setAddingSource(false);
+      return;
+    }
+
     const cleanName = name.trim();
-    const cleanFeedUrl =
-      feedUrl.trim();
+    const cleanFeedUrl = feedUrl.trim();
 
     if (!cleanName || !cleanFeedUrl) {
       setError(
@@ -142,7 +139,14 @@ export default function AdminDashboard() {
     }
 
     try {
-      new URL(cleanFeedUrl);
+      const parsedUrl = new URL(cleanFeedUrl);
+
+      if (
+        parsedUrl.protocol !== "http:" &&
+        parsedUrl.protocol !== "https:"
+      ) {
+        throw new Error("Invalid protocol");
+      }
     } catch {
       setError(
         "Please enter a valid RSS feed URL."
@@ -151,15 +155,14 @@ export default function AdminDashboard() {
       return;
     }
 
-    const { error } =
-      await supabase
-        .from("sources")
-        .insert({
-          name: cleanName,
-          feed_url: cleanFeedUrl,
-          category,
-          active: true,
-        });
+    const { error } = await supabase
+      .from("sources")
+      .insert({
+        name: cleanName,
+        feed_url: cleanFeedUrl,
+        category,
+        active: true,
+      });
 
     if (error) {
       setError(error.message);
@@ -190,35 +193,37 @@ export default function AdminDashboard() {
     setMessage("");
     setError("");
 
-    const { error } =
-      await supabase
-        .from("sources")
-        .delete()
-        .eq("id", id);
+    const authenticated = await checkAuthentication();
+
+    if (!authenticated) return;
+
+    const { error } = await supabase
+      .from("sources")
+      .delete()
+      .eq("id", id);
 
     if (error) {
       setError(error.message);
     } else {
-      setMessage(
-        "News source deleted."
-      );
+      setMessage("News source deleted.");
       await loadData();
     }
   }
 
-  async function toggleSource(
-    source: Source
-  ) {
+  async function toggleSource(source: Source) {
     setMessage("");
     setError("");
 
-    const { error } =
-      await supabase
-        .from("sources")
-        .update({
-          active: !source.active,
-        })
-        .eq("id", source.id);
+    const authenticated = await checkAuthentication();
+
+    if (!authenticated) return;
+
+    const { error } = await supabase
+      .from("sources")
+      .update({
+        active: !source.active,
+      })
+      .eq("id", source.id);
 
     if (error) {
       setError(error.message);
@@ -242,12 +247,16 @@ export default function AdminDashboard() {
     setMessage("");
     setError("");
 
-    const cleanTitle =
-      adTitle.trim();
-    const cleanImageUrl =
-      adImageUrl.trim();
-    const cleanLinkUrl =
-      adLinkUrl.trim();
+    const authenticated = await checkAuthentication();
+
+    if (!authenticated) {
+      setAddingAd(false);
+      return;
+    }
+
+    const cleanTitle = adTitle.trim();
+    const cleanImageUrl = adImageUrl.trim();
+    const cleanLinkUrl = adLinkUrl.trim();
 
     if (
       !cleanTitle ||
@@ -263,8 +272,19 @@ export default function AdminDashboard() {
     }
 
     try {
-      new URL(cleanImageUrl);
-      new URL(cleanLinkUrl);
+      const imageUrl = new URL(cleanImageUrl);
+      const linkUrl = new URL(cleanLinkUrl);
+
+      if (
+        !["http:", "https:"].includes(
+          imageUrl.protocol
+        ) ||
+        !["http:", "https:"].includes(
+          linkUrl.protocol
+        )
+      ) {
+        throw new Error("Invalid protocol");
+      }
     } catch {
       setError(
         "Please enter valid advertisement image and link URLs."
@@ -273,16 +293,15 @@ export default function AdminDashboard() {
       return;
     }
 
-    const { error } =
-      await supabase
-        .from("direct_ads")
-        .insert({
-          title: cleanTitle,
-          image_url: cleanImageUrl,
-          link_url: cleanLinkUrl,
-          placement: adPlacement,
-          active: true,
-        });
+    const { error } = await supabase
+      .from("direct_ads")
+      .insert({
+        title: cleanTitle,
+        image_url: cleanImageUrl,
+        link_url: cleanLinkUrl,
+        placement: adPlacement,
+        active: true,
+      });
 
     if (error) {
       setError(error.message);
@@ -301,19 +320,52 @@ export default function AdminDashboard() {
   }
 
   async function runNewsImport() {
+    if (importing) return;
+
     setMessage("");
     setError("");
     setImporting(true);
 
     try {
-      const response =
-        await fetch(
-          "/api/fetch-news",
-          {
-            method: "GET",
-            cache: "no-store",
-          }
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        router.replace("/admin/login");
+        return;
+      }
+
+      if (user.app_metadata?.role !== "admin") {
+        await supabase.auth.signOut();
+        router.replace("/");
+        return;
+      }
+
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token) {
+        setError(
+          "Your admin session has expired. Please sign in again."
         );
+        router.replace("/admin/login");
+        return;
+      }
+
+      const response = await fetch(
+        "/api/fetch-news",
+        {
+          method: "GET",
+          cache: "no-store",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      );
 
       let data: {
         message?: string;
@@ -324,6 +376,16 @@ export default function AdminDashboard() {
         data = await response.json();
       } catch {
         data = {};
+      }
+
+      if (response.status === 401) {
+        setError(
+          "Your admin session is no longer authorized. Please sign in again."
+        );
+
+        await supabase.auth.signOut();
+        router.replace("/admin/login");
+        return;
       }
 
       if (!response.ok) {
@@ -1082,9 +1144,7 @@ export default function AdminDashboard() {
                       type="button"
                       className="actionButton"
                       onClick={() =>
-                        toggleSource(
-                          source
-                        )
+                        toggleSource(source)
                       }
                     >
                       {source.active
@@ -1096,9 +1156,7 @@ export default function AdminDashboard() {
                       type="button"
                       className="actionButton deleteButton"
                       onClick={() =>
-                        deleteSource(
-                          source.id
-                        )
+                        deleteSource(source.id)
                       }
                     >
                       Delete
@@ -1156,9 +1214,7 @@ export default function AdminDashboard() {
                 type="url"
                 value={adImageUrl}
                 onChange={(e) =>
-                  setAdImageUrl(
-                    e.target.value
-                  )
+                  setAdImageUrl(e.target.value)
                 }
                 placeholder="https://example.com/ad-image.jpg"
                 maxLength={1000}
@@ -1172,9 +1228,7 @@ export default function AdminDashboard() {
                 type="url"
                 value={adLinkUrl}
                 onChange={(e) =>
-                  setAdLinkUrl(
-                    e.target.value
-                  )
+                  setAdLinkUrl(e.target.value)
                 }
                 placeholder="https://example.com"
                 maxLength={1000}
@@ -1187,9 +1241,7 @@ export default function AdminDashboard() {
               <select
                 value={adPlacement}
                 onChange={(e) =>
-                  setAdPlacement(
-                    e.target.value
-                  )
+                  setAdPlacement(e.target.value)
                 }
               >
                 {AD_PLACEMENTS.map(
