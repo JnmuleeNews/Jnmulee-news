@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { createClient } from "@supabase/supabase-js";
 import type { Metadata } from "next";
+import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -26,14 +26,15 @@ type Story = {
 };
 
 const CATEGORY_LINKS = [
-  { label: "Home", href: "/" },
   { label: "News", href: "/category/news" },
+  { label: "Nigeria", href: "/category/nigeria" },
+  { label: "World", href: "/category/world" },
+  { label: "Politics", href: "/category/politics" },
+  { label: "Business", href: "/category/business" },
+  { label: "Technology", href: "/category/technology" },
   { label: "Sports", href: "/category/sport" },
   { label: "Entertainment", href: "/category/entertainment" },
   { label: "Gossip", href: "/category/gossip" },
-  { label: "Business", href: "/category/business" },
-  { label: "Technology", href: "/category/technology" },
-  { label: "Politics", href: "/category/politics" },
   { label: "Crypto", href: "/category/crypto" },
 ];
 
@@ -54,7 +55,10 @@ function cleanText(value: string | null): string {
     .trim();
 }
 
-function getExcerpt(content: string | null, length = 180): string {
+function getExcerpt(
+  content: string | null,
+  length = 180
+): string {
   const text = cleanText(content);
 
   if (!text) {
@@ -65,7 +69,9 @@ function getExcerpt(content: string | null, length = 180): string {
     return text;
   }
 
-  return `${text.slice(0, length).replace(/\s+\S*$/, "")}...`;
+  return `${text
+    .slice(0, length)
+    .replace(/\s+\S*$/, "")}...`;
 }
 
 function formatDate(value: string): string {
@@ -89,11 +95,13 @@ function formatCategory(category: string | null): string {
 }
 
 function getCategoryHref(category: string | null): string {
-  if (!category) return "/category/news";
+  if (!category) {
+    return "/category/news";
+  }
 
-  const normalized = category.toLowerCase();
+  const normalized = category.toLowerCase().trim();
 
-  if (normalized === "sports") {
+  if (normalized === "sports" || normalized === "sport") {
     return "/category/sport";
   }
 
@@ -120,15 +128,18 @@ export async function generateMetadata({
     metadataBase: new URL(SITE_URL),
     title,
     description,
+
     robots: {
       index: false,
       follow: true,
     },
+
     alternates: {
       canonical: q
         ? `/search?q=${encodeURIComponent(q)}`
         : "/search",
     },
+
     openGraph: {
       title,
       description,
@@ -138,6 +149,7 @@ export async function generateMetadata({
       siteName: "JNMulee News",
       type: "website",
     },
+
     twitter: {
       card: "summary",
       title,
@@ -152,6 +164,7 @@ export default async function SearchPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const params = await searchParams;
+
   const q = params.q?.trim() || "";
 
   let stories: Story[] = [];
@@ -159,30 +172,76 @@ export default async function SearchPage({
 
   if (q) {
     /*
-     * Remove wildcard characters used by PostgREST ilike.
-     * Keep the user's actual search phrase otherwise.
+     * Remove PostgREST wildcard characters.
+     * The search phrase itself remains intact.
      */
-    const searchTerm = q.replace(/[%_]/g, "").trim();
+    const searchTerm = q
+      .replace(/[%_]/g, "")
+      .trim()
+      .slice(0, 100);
 
     if (searchTerm) {
-      const { data, error } = await supabase
-        .from("news")
-        .select(
-          "id,title,slug,content,image_url,category,created_at"
-        )
-        .eq("Published", true)
-        .not("image_url", "is", null)
-        .neq("image_url", "")
-        .or(
-          `title.ilike.%${searchTerm}%,content.ilike.%${searchTerm}%`
-        )
-        .order("created_at", { ascending: false })
-        .limit(50);
+      /*
+       * Search title and content separately.
+       *
+       * This avoids constructing a raw PostgREST OR expression
+       * from user input and makes the search more robust when
+       * users enter commas, parentheses or other characters.
+       */
+      const pattern = `%${searchTerm}%`;
 
-      if (error) {
+      const [titleResult, contentResult] =
+        await Promise.all([
+          supabase
+            .from("news")
+            .select(
+              "id,title,slug,content,image_url,category,created_at"
+            )
+            .eq("Published", true)
+            .not("image_url", "is", null)
+            .neq("image_url", "")
+            .ilike("title", pattern)
+            .order("created_at", { ascending: false })
+            .limit(50),
+
+          supabase
+            .from("news")
+            .select(
+              "id,title,slug,content,image_url,category,created_at"
+            )
+            .eq("Published", true)
+            .not("image_url", "is", null)
+            .neq("image_url", "")
+            .ilike("content", pattern)
+            .order("created_at", { ascending: false })
+            .limit(50),
+        ]);
+
+      if (titleResult.error || contentResult.error) {
         searchError = true;
       } else {
-        stories = (data || []) as Story[];
+        const combined = [
+          ...((titleResult.data || []) as Story[]),
+          ...((contentResult.data || []) as Story[]),
+        ];
+
+        /*
+         * Remove duplicate stories that matched both title
+         * and content, then sort newest first.
+         */
+        const uniqueStories = Array.from(
+          new Map(
+            combined.map((story) => [story.id, story])
+          ).values()
+        );
+
+        uniqueStories.sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() -
+            new Date(a.created_at).getTime()
+        );
+
+        stories = uniqueStories.slice(0, 50);
       }
     }
   }
@@ -190,174 +249,154 @@ export default async function SearchPage({
   return (
     <main className="searchPage">
       <style>{`
-        * {
-          box-sizing: border-box;
-        }
-
         .searchPage {
           min-height: 100vh;
-          background: #f5f6f8;
-          color: #111827;
+          background: #f7f9fc;
+          color: #172033;
         }
 
-        .container {
+        .searchContainer {
           width: min(1200px, calc(100% - 32px));
           margin: 0 auto;
         }
 
-        .siteHeader {
-          position: sticky;
-          top: 0;
-          z-index: 50;
-          background: #c8102e;
-          color: white;
-          box-shadow: 0 2px 12px rgba(0,0,0,.12);
+        .searchPageInner {
+          padding: 34px 0 80px;
         }
 
-        .headerTop {
-          min-height: 68px;
+        .searchBreadcrumb {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 20px;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-bottom: 20px;
+          color: #7b8495;
+          font-size: 13px;
         }
 
-        .logo {
-          color: white;
+        .searchBreadcrumb a {
+          color: #2563eb;
           text-decoration: none;
-          font-size: 25px;
-          font-weight: 900;
-          letter-spacing: -.8px;
-          white-space: nowrap;
+          font-weight: 750;
         }
 
-        .headerSearch {
-          flex: 1;
-          max-width: 420px;
+        .searchBreadcrumb a:hover {
+          text-decoration: underline;
+        }
+
+        .searchHero {
           position: relative;
+          overflow: hidden;
+          margin-bottom: 28px;
+          padding: 34px;
+          border-radius: 22px;
+          background:
+            linear-gradient(
+              135deg,
+              #0b1220 0%,
+              #111c31 60%,
+              #17284a 100%
+            );
+          color: #ffffff;
+          box-shadow: 0 18px 45px rgba(11, 18, 32, 0.14);
         }
 
-        .headerSearch input {
-          width: 100%;
-          height: 40px;
-          border: 0;
-          border-radius: 999px;
-          padding: 0 18px;
-          font-size: 14px;
-          outline: none;
+        .searchHero::after {
+          content: "";
+          position: absolute;
+          width: 260px;
+          height: 260px;
+          right: -100px;
+          top: -120px;
+          border-radius: 50%;
+          background: rgba(96, 165, 250, 0.13);
+          pointer-events: none;
         }
 
-        .categoryNav {
-          background: #a90d27;
-          border-top: 1px solid rgba(255,255,255,.12);
-          overflow-x: auto;
-          scrollbar-width: none;
+        .searchEyebrow {
+          position: relative;
+          z-index: 1;
+          margin: 0 0 8px;
+          color: #60a5fa;
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 1.2px;
+          text-transform: uppercase;
         }
 
-        .categoryNav::-webkit-scrollbar {
-          display: none;
-        }
-
-        .categoryNavInner {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          min-height: 42px;
-          white-space: nowrap;
-        }
-
-        .categoryNav a {
-          color: rgba(255,255,255,.94);
-          text-decoration: none;
-          padding: 11px 13px;
-          font-size: 13px;
-          font-weight: 700;
-        }
-
-        .categoryNav a:hover {
-          background: rgba(255,255,255,.12);
-        }
-
-        .pageContainer {
-          padding-top: 34px;
-          padding-bottom: 70px;
-        }
-
-        .breadcrumb {
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          margin-bottom: 18px;
-          color: #6b7280;
-          font-size: 13px;
-        }
-
-        .breadcrumb a {
-          color: #c8102e;
-          text-decoration: none;
-          font-weight: 700;
-        }
-
-        .pageTitle {
+        .searchTitle {
+          position: relative;
+          z-index: 1;
           margin: 0;
-          font-size: clamp(30px, 5vw, 48px);
-          line-height: 1.05;
-          letter-spacing: -1.5px;
+          max-width: 760px;
+          font-size: clamp(32px, 5vw, 52px);
+          line-height: 1.03;
+          letter-spacing: -1.8px;
           font-weight: 900;
         }
 
-        .pageSubtitle {
-          margin: 10px 0 28px;
-          color: #6b7280;
+        .searchSubtitle {
+          position: relative;
+          z-index: 1;
+          max-width: 720px;
+          margin: 13px 0 0;
+          color: #cbd5e1;
           font-size: 16px;
+          line-height: 1.65;
         }
 
         .searchBox {
-          background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 16px;
-          padding: 14px;
-          box-shadow: 0 8px 25px rgba(17,24,39,.05);
-          margin-bottom: 30px;
-        }
-
-        .searchForm {
+          position: relative;
+          z-index: 2;
           display: flex;
           gap: 10px;
+          margin-top: 25px;
+          max-width: 850px;
         }
 
         .searchInput {
           flex: 1;
           min-width: 0;
-          height: 52px;
-          border: 1px solid #d1d5db;
-          border-radius: 10px;
-          padding: 0 16px;
+          height: 54px;
+          border: 1px solid #d5dbe5;
+          border-radius: 12px;
+          padding: 0 17px;
+          background: #ffffff;
+          color: #172033;
           font-size: 16px;
-          color: #111827;
-          background: white;
           outline: none;
+          box-shadow: 0 5px 18px rgba(0, 0, 0, 0.08);
+        }
+
+        .searchInput::placeholder {
+          color: #8a93a3;
         }
 
         .searchInput:focus {
-          border-color: #c8102e;
-          box-shadow: 0 0 0 3px rgba(200,16,46,.1);
+          border-color: #60a5fa;
+          box-shadow:
+            0 0 0 3px rgba(96, 165, 250, 0.22),
+            0 5px 18px rgba(0, 0, 0, 0.08);
         }
 
         .searchButton {
-          height: 52px;
-          padding: 0 25px;
+          height: 54px;
+          padding: 0 26px;
           border: 0;
-          border-radius: 10px;
-          background: #c8102e;
-          color: white;
+          border-radius: 12px;
+          background: #2563eb;
+          color: #ffffff;
           font-size: 15px;
-          font-weight: 800;
+          font-weight: 850;
           cursor: pointer;
+          transition:
+            background 0.18s ease,
+            transform 0.18s ease;
         }
 
         .searchButton:hover {
-          background: #a90d27;
+          background: #1d4ed8;
+          transform: translateY(-1px);
         }
 
         .resultsHeader {
@@ -365,17 +404,19 @@ export default async function SearchPage({
           align-items: flex-end;
           justify-content: space-between;
           gap: 20px;
-          margin-bottom: 18px;
+          margin: 34px 0 18px;
         }
 
-        .resultsTitle {
+        .resultsHeading {
           margin: 0;
-          font-size: 22px;
+          font-size: 25px;
+          line-height: 1.2;
+          letter-spacing: -0.5px;
           font-weight: 900;
         }
 
         .resultCount {
-          color: #6b7280;
+          color: #70798a;
           font-size: 14px;
           white-space: nowrap;
         }
@@ -386,203 +427,208 @@ export default async function SearchPage({
           gap: 22px;
         }
 
-        .newsCard {
-          background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 14px;
+        .storyCard {
+          min-width: 0;
           overflow: hidden;
+          border: 1px solid #e2e7ef;
+          border-radius: 17px;
+          background: #ffffff;
+          box-shadow: 0 7px 24px rgba(17, 24, 39, 0.045);
           transition:
-            transform .18s ease,
-            box-shadow .18s ease,
-            border-color .18s ease;
+            transform 0.2s ease,
+            box-shadow 0.2s ease,
+            border-color 0.2s ease;
         }
 
-        .newsCard:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 12px 28px rgba(17,24,39,.1);
-          border-color: #d1d5db;
+        .storyCard:hover {
+          transform: translateY(-4px);
+          border-color: #cdd6e3;
+          box-shadow: 0 16px 34px rgba(17, 24, 39, 0.10);
         }
 
-        .newsCardLink {
+        .storyImageLink {
           display: block;
-          color: inherit;
           text-decoration: none;
         }
 
-        .newsImage {
+        .storyImage {
           position: relative;
           aspect-ratio: 16 / 9;
           overflow: hidden;
-          background: #e5e7eb;
+          background: #e7ebf1;
         }
 
-        .newsImage img {
+        .storyImage img {
           object-fit: cover;
-          transition: transform .3s ease;
+          transition: transform 0.35s ease;
         }
 
-        .newsCard:hover .newsImage img {
-          transform: scale(1.035);
+        .storyCard:hover .storyImage img {
+          transform: scale(1.045);
         }
 
-        .newsCardBody {
-          padding: 17px;
+        .storyBody {
+          padding: 18px;
         }
 
         .categoryLabel {
-          display: inline-block;
+          display: inline-flex;
+          align-items: center;
           margin-bottom: 9px;
-          color: #c8102e;
+          color: #2563eb;
           font-size: 11px;
           line-height: 1;
           font-weight: 900;
-          letter-spacing: .6px;
+          letter-spacing: 0.7px;
           text-transform: uppercase;
         }
 
-        .newsTitle {
-          margin: 0 0 9px;
+        .storyTitleLink {
+          display: block;
+          color: #172033;
+          text-decoration: none;
+        }
+
+        .storyTitleLink:hover {
+          color: #1d4ed8;
+        }
+
+        .storyTitle {
+          margin: 0 0 10px;
           font-size: 20px;
-          line-height: 1.25;
-          letter-spacing: -.3px;
+          line-height: 1.27;
+          letter-spacing: -0.35px;
           font-weight: 850;
         }
 
-        .newsExcerpt {
-          margin: 0 0 14px;
-          color: #596273;
+        .storyExcerpt {
+          margin: 0 0 15px;
+          color: #606b7c;
           font-size: 14px;
-          line-height: 1.55;
+          line-height: 1.6;
         }
 
         .storyMeta {
           display: flex;
           align-items: center;
+          flex-wrap: wrap;
           gap: 7px;
-          color: #8a93a3;
+          color: #8992a2;
           font-size: 12px;
         }
 
+        .storyCategoryLink {
+          color: #6d7788;
+          text-decoration: none;
+          font-weight: 650;
+        }
+
+        .storyCategoryLink:hover {
+          color: #2563eb;
+        }
+
         .emptyState {
-          background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 16px;
-          padding: 60px 25px;
+          padding: 60px 24px;
+          border: 1px solid #e1e6ee;
+          border-radius: 20px;
+          background: #ffffff;
           text-align: center;
-          box-shadow: 0 8px 25px rgba(17,24,39,.04);
+          box-shadow: 0 9px 28px rgba(17, 24, 39, 0.045);
         }
 
         .emptyIcon {
-          width: 58px;
-          height: 58px;
-          margin: 0 auto 16px;
-          border-radius: 50%;
-          background: #fef2f2;
-          color: #c8102e;
           display: flex;
           align-items: center;
           justify-content: center;
+          width: 62px;
+          height: 62px;
+          margin: 0 auto 17px;
+          border: 1px solid #dbe5f5;
+          border-radius: 50%;
+          background: #eff6ff;
+          color: #2563eb;
+          font-size: 27px;
+          font-weight: 900;
+        }
+
+        .emptyTitle {
+          margin: 0 0 9px;
+          color: #172033;
           font-size: 25px;
           font-weight: 900;
         }
 
-        .emptyState h2 {
-          margin: 0 0 8px;
-          font-size: 24px;
-        }
-
-        .emptyState p {
-          max-width: 520px;
+        .emptyText {
+          max-width: 590px;
           margin: 0 auto;
-          color: #6b7280;
-          line-height: 1.6;
+          color: #697486;
+          font-size: 15px;
+          line-height: 1.65;
         }
 
         .errorState {
-          border-color: #fecaca;
+          border-color: #dbe3ef;
         }
 
-        .searchTips {
-          margin-top: 32px;
-          background: #111827;
-          color: white;
-          border-radius: 16px;
-          padding: 24px;
+        .errorState .emptyIcon {
+          background: #fff7ed;
+          border-color: #fed7aa;
+          color: #c2410c;
         }
 
-        .searchTips h2 {
-          margin: 0 0 8px;
-          font-size: 18px;
+        .tipsBox {
+          max-width: 680px;
+          margin: 28px auto 0;
+          padding: 22px;
+          border-radius: 15px;
+          background: #0b1220;
+          color: #ffffff;
+          text-align: left;
         }
 
-        .searchTips p {
+        .tipsTitle {
+          margin: 0 0 7px;
+          font-size: 17px;
+          font-weight: 850;
+        }
+
+        .tipsText {
           margin: 0;
-          color: #d1d5db;
-          line-height: 1.6;
+          color: #cbd5e1;
           font-size: 14px;
+          line-height: 1.65;
         }
 
-        .siteFooter {
-          background: #111827;
-          color: white;
-          padding: 35px 0;
-        }
-
-        .footerLinks {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 18px;
-          margin-bottom: 20px;
-        }
-
-        .footerLinks a {
-          color: #d1d5db;
-          text-decoration: none;
-          font-size: 14px;
-        }
-
-        .footerLinks a:hover {
-          color: white;
-        }
-
-        .footerCopyright {
-          margin: 0;
-          color: #9ca3af;
-          font-size: 13px;
-        }
-
-        @media (max-width: 900px) {
+        @media (max-width: 950px) {
           .resultsGrid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
-
-          .headerSearch {
-            max-width: 300px;
-          }
         }
 
-        @media (max-width: 650px) {
-          .container {
+        @media (max-width: 680px) {
+          .searchContainer {
             width: min(100% - 22px, 1200px);
           }
 
-          .headerTop {
-            min-height: 58px;
+          .searchPageInner {
+            padding-top: 24px;
+            padding-bottom: 55px;
           }
 
-          .logo {
-            font-size: 21px;
+          .searchHero {
+            padding: 25px 20px;
+            border-radius: 18px;
           }
 
-          .headerSearch {
-            display: none;
+          .searchTitle {
+            letter-spacing: -1px;
           }
 
-          .pageContainer {
-            padding-top: 25px;
+          .searchSubtitle {
+            font-size: 14px;
           }
 
-          .searchForm {
+          .searchBox {
             flex-direction: column;
           }
 
@@ -590,69 +636,52 @@ export default async function SearchPage({
             width: 100%;
           }
 
-          .resultsGrid {
-            grid-template-columns: 1fr;
-          }
-
           .resultsHeader {
             align-items: flex-start;
             flex-direction: column;
-            gap: 6px;
+            gap: 7px;
+            margin-top: 28px;
           }
 
-          .newsTitle {
+          .resultsGrid {
+            grid-template-columns: 1fr;
+            gap: 17px;
+          }
+
+          .storyTitle {
             font-size: 19px;
+          }
+
+          .emptyState {
+            padding: 45px 18px;
           }
         }
       `}</style>
 
-      <header className="siteHeader">
-        <div className="container headerTop">
-          <Link href="/" className="logo">
-            JNMulee News
-          </Link>
-
-          <form action="/search" method="GET" className="headerSearch">
-            <input
-              type="search"
-              name="q"
-              defaultValue={q}
-              placeholder="Search JNMulee News..."
-              aria-label="Search JNMulee News"
-            />
-          </form>
-        </div>
-
-        <nav className="categoryNav" aria-label="Main navigation">
-          <div className="container categoryNavInner">
-            {CATEGORY_LINKS.map((item) => (
-              <Link key={item.href} href={item.href}>
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        </nav>
-      </header>
-
-      <div className="container pageContainer">
-        <div className="breadcrumb">
+      <div className="searchContainer searchPageInner">
+        <div className="searchBreadcrumb">
           <Link href="/">Home</Link>
           <span>›</span>
           <span>Search</span>
         </div>
 
-        <h1 className="pageTitle">Search JNMulee News</h1>
+        <section className="searchHero">
+          <p className="searchEyebrow">JNMulee News</p>
 
-        <p className="pageSubtitle">
-          Find published stories across news, sports, entertainment,
-          business, technology, politics and more.
-        </p>
+          <h1 className="searchTitle">
+            Search the latest news
+          </h1>
 
-        <section className="searchBox">
+          <p className="searchSubtitle">
+            Find published stories across Nigeria, world news,
+            politics, business, technology, sports,
+            entertainment, gossip, crypto and more.
+          </p>
+
           <form
             action="/search"
             method="GET"
-            className="searchForm"
+            className="searchBox"
           >
             <input
               className="searchInput"
@@ -660,11 +689,15 @@ export default async function SearchPage({
               name="q"
               defaultValue={q}
               placeholder="Search for a topic, person, place or story..."
-              aria-label="Search for news"
+              aria-label="Search JNMulee News"
               autoComplete="off"
+              maxLength={100}
             />
 
-            <button className="searchButton" type="submit">
+            <button
+              className="searchButton"
+              type="submit"
+            >
               Search
             </button>
           </form>
@@ -672,7 +705,7 @@ export default async function SearchPage({
 
         {q && !searchError && (
           <div className="resultsHeader">
-            <h2 className="resultsTitle">
+            <h2 className="resultsHeading">
               Results for “{q}”
             </h2>
 
@@ -684,138 +717,140 @@ export default async function SearchPage({
         )}
 
         {searchError ? (
-          <div className="emptyState errorState">
+          <section className="emptyState errorState">
             <div className="emptyIcon">!</div>
 
-            <h2>Search temporarily unavailable</h2>
+            <h2 className="emptyTitle">
+              Search temporarily unavailable
+            </h2>
 
-            <p>
+            <p className="emptyText">
               We could not complete your search right now.
               Please try again in a moment.
             </p>
-          </div>
+          </section>
         ) : stories.length > 0 ? (
-          <section className="resultsGrid" aria-label="Search results">
+          <section
+            className="resultsGrid"
+            aria-label="Search results"
+          >
             {stories.map((story) => (
-              <article className="newsCard" key={story.id}>
-                <Link
-                  href={`/news/${story.slug}`}
-                  className="newsCardLink"
-                >
-                  {story.image_url && (
-                    <div className="newsImage">
+              <article
+                className="storyCard"
+                key={story.id}
+              >
+                {story.image_url && (
+                  <Link
+                    href={`/news/${story.slug}`}
+                    className="storyImageLink"
+                  >
+                    <div className="storyImage">
                       <Image
                         src={story.image_url}
                         alt={story.title}
                         fill
                         sizes="
-                          (max-width: 650px) 100vw,
-                          (max-width: 900px) 50vw,
+                          (max-width: 680px) 100vw,
+                          (max-width: 950px) 50vw,
                           33vw
                         "
                       />
                     </div>
-                  )}
+                  </Link>
+                )}
 
-                  <div className="newsCardBody">
-                    <span className="categoryLabel">
-                      {formatCategory(story.category)}
-                    </span>
+                <div className="storyBody">
+                  <Link
+                    href={getCategoryHref(story.category)}
+                    className="categoryLabel"
+                  >
+                    {formatCategory(story.category)}
+                  </Link>
 
-                    <h2 className="newsTitle">
+                  <Link
+                    href={`/news/${story.slug}`}
+                    className="storyTitleLink"
+                  >
+                    <h2 className="storyTitle">
                       {story.title}
                     </h2>
+                  </Link>
 
-                    <p className="newsExcerpt">
-                      {getExcerpt(story.content)}
-                    </p>
+                  <p className="storyExcerpt">
+                    {getExcerpt(story.content)}
+                  </p>
 
-                    <div className="storyMeta">
-                      <span>
-                        {formatDate(story.created_at)}
-                      </span>
+                  <div className="storyMeta">
+                    <span>
+                      {formatDate(story.created_at)}
+                    </span>
 
-                      <span>•</span>
+                    <span>•</span>
 
-                      <Link
-                        href={getCategoryHref(story.category)}
-                        onClick={(event) =>
-                          event.stopPropagation()
-                        }
-                        style={{
-                          color: "#6b7280",
-                          textDecoration: "none",
-                        }}
-                      >
-                        {formatCategory(story.category)}
-                      </Link>
-                    </div>
+                    <Link
+                      href={getCategoryHref(story.category)}
+                      className="storyCategoryLink"
+                    >
+                      {formatCategory(story.category)}
+                    </Link>
                   </div>
-                </Link>
+                </div>
               </article>
             ))}
           </section>
         ) : q ? (
-          <div className="emptyState">
+          <section className="emptyState">
             <div className="emptyIcon">?</div>
 
-            <h2>No results found</h2>
+            <h2 className="emptyTitle">
+              No results found
+            </h2>
 
-            <p>
+            <p className="emptyText">
               We could not find published stories matching
               “{q}”. Try a different keyword, name, location or
               topic.
             </p>
 
-            <div className="searchTips">
-              <h2>Search tips</h2>
+            <div className="tipsBox">
+              <h3 className="tipsTitle">
+                Search tips
+              </h3>
 
-              <p>
+              <p className="tipsText">
                 Try shorter keywords, different spellings, a
                 person's name, a team name, a company, or a
                 broader topic.
               </p>
             </div>
-          </div>
+          </section>
         ) : (
-          <div className="emptyState">
+          <section className="emptyState">
             <div className="emptyIcon">⌕</div>
 
-            <h2>What are you looking for?</h2>
+            <h2 className="emptyTitle">
+              What are you looking for?
+            </h2>
 
-            <p>
+            <p className="emptyText">
               Enter a keyword above to search JNMulee News for
               published stories.
             </p>
 
-            <div className="searchTips">
-              <h2>Search JNMulee News</h2>
+            <div className="tipsBox">
+              <h3 className="tipsTitle">
+                Search JNMulee News
+              </h3>
 
-              <p>
+              <p className="tipsText">
                 Search for breaking news, sports, entertainment,
                 politics, business, technology, crypto and other
                 topics covered by JNMulee News.
               </p>
             </div>
-          </div>
+          </section>
         )}
       </div>
-
-      <footer className="siteFooter">
-        <div className="container">
-          <div className="footerLinks">
-            <Link href="/about">About</Link>
-            <Link href="/contact">Contact</Link>
-            <Link href="/privacy">Privacy Policy</Link>
-            <Link href="/terms">Terms</Link>
-          </div>
-
-          <p className="footerCopyright">
-            © {new Date().getFullYear()} JNMulee News. All rights
-            reserved.
-          </p>
-        </div>
-      </footer>
     </main>
   );
 }
