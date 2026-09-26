@@ -1,24 +1,31 @@
 @import "tailwindcss";
 
+/* =========================================================
+   JNMULEE NEWS — GLOBAL DESIGN SYSTEM
+========================================================= */
+
 :root {
-  --jn-navy: #0b1220;
-  --jn-navy-2: #111a2e;
+  --jn-navy: #07111f;
+  --jn-navy-2: #0d1b2f;
   --jn-blue: #2563eb;
   --jn-blue-dark: #1d4ed8;
   --jn-blue-light: #60a5fa;
   --jn-blue-soft: #eff6ff;
 
-  --black: #111827;
+  --black: #0f172a;
   --dark: #172033;
   --gray: #64748b;
-  --light-gray: #f7f9fc;
-  --border: #e4e9f0;
+  --light-gray: #f1f5f9;
+  --border: #dce3ec;
   --white: #ffffff;
 
-  /* Compatibility variables */
   --red: #2563eb;
   --red-dark: #1d4ed8;
   --red-light: #eff6ff;
+
+  --shadow-sm: 0 4px 15px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.09);
+  --shadow-lg: 0 18px 50px rgba(15, 23, 42, 0.13);
 }
 
 * {
@@ -31,7 +38,13 @@ html {
 
 body {
   margin: 0;
-  background: var(--light-gray);
+  background:
+    linear-gradient(
+      180deg,
+      #eef2f7 0%,
+      #f8fafc 280px,
+      #f8fafc 100%
+    );
   color: var(--black);
   font-family:
     Arial,
@@ -39,6 +52,11 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+body::selection {
+  background: var(--jn-blue);
+  color: #fff;
 }
 
 a {
@@ -61,23 +79,23 @@ button {
 }
 
 .container {
-  width: min(1180px, calc(100% - 36px));
+  width: min(1200px, calc(100% - 36px));
   margin: 0 auto;
 }
 
-/* =========================
+/* =========================================================
    HEADER
-========================= */
+========================================================= */
 
 .header {
   position: sticky;
   top: 0;
   z-index: 1000;
-  background: rgba(11, 18, 32, 0.97);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
-  box-shadow: 0 8px 30px rgba(11, 18, 32, 0.18);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgba(7, 17, 31, 0.97);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 30px rgba(7, 17, 31, 0.2);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .nav {
@@ -91,9 +109,9 @@ button {
 .brand {
   color: #ffffff;
   text-decoration: none;
-  font-size: 29px;
-  font-weight: 900;
-  letter-spacing: -1.4px;
+  font-size: 30px;
+  font-weight: 950;
+  letter-spacing: -1.7px;
   white-space: nowrap;
 }
 
@@ -116,14 +134,12 @@ button {
   text-decoration: none;
   font-size: 13px;
   font-weight: 800;
-  transition:
-    background 0.2s ease,
-    color 0.2s ease;
+  transition: 0.2s ease;
 }
 
 .mainNav a:hover,
 .mainNav a.active {
-  background: rgba(96, 165, 250, 0.13);
+  background: rgba(96, 165, 250, 0.14);
   color: #ffffff;
 }
 
@@ -131,41 +147,55 @@ button {
   box-shadow: inset 0 -2px 0 var(--jn-blue-light);
 }
 
-/* =========================
+/* =========================================================
    HERO
-========================= */
+========================================================= */
 
 .hero {
   position: relative;
   overflow: hidden;
+  color: #ffffff;
   background:
     radial-gradient(
-      circle at 82% 15%,
-      rgba(96, 165, 250, 0.20),
-      transparent 28%
+      circle at 85% 10%,
+      rgba(96, 165, 250, 0.22),
+      transparent 27%
     ),
     radial-gradient(
-      circle at 10% 90%,
-      rgba(37, 99, 235, 0.18),
+      circle at 5% 90%,
+      rgba(37, 99, 235, 0.25),
       transparent 30%
     ),
     linear-gradient(
       135deg,
-      #0b1220 0%,
-      #111a2e 55%,
-      #16264a 100%
+      #07111f 0%,
+      #0d1b2f 52%,
+      #152d55 100%
     );
-  color: #ffffff;
+}
+
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0,
+      rgba(255,255,255,0.025) 50%,
+      transparent 100%
+    );
 }
 
 .hero::after {
   content: "";
   position: absolute;
-  right: -120px;
-  bottom: -180px;
-  width: 420px;
-  height: 420px;
-  border: 1px solid rgba(96, 165, 250, 0.12);
+  right: -140px;
+  bottom: -210px;
+  width: 480px;
+  height: 480px;
+  border: 1px solid rgba(96, 165, 250, 0.15);
   border-radius: 50%;
   pointer-events: none;
 }
@@ -173,22 +203,22 @@ button {
 .heroInner {
   position: relative;
   z-index: 1;
-  min-height: 430px;
+  min-height: 440px;
   display: grid;
   grid-template-columns: 1.25fr 0.75fr;
   align-items: center;
   gap: 55px;
-  padding-top: 55px;
-  padding-bottom: 55px;
+  padding-top: 60px;
+  padding-bottom: 60px;
 }
 
 .eyebrow {
   display: inline-flex;
   margin: 0 0 17px;
-  padding: 7px 12px;
-  border: 1px solid rgba(147, 197, 253, 0.25);
+  padding: 8px 13px;
+  border: 1px solid rgba(147, 197, 253, 0.3);
   border-radius: 999px;
-  background: rgba(37, 99, 235, 0.15);
+  background: rgba(37, 99, 235, 0.18);
   color: #93c5fd;
   font-size: 11px;
   font-weight: 900;
@@ -222,12 +252,12 @@ button {
 
 .heroPanel {
   padding: 30px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(148, 163, 184, 0.23);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.065);
   box-shadow: 0 25px 70px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .heroPanel span {
@@ -253,12 +283,12 @@ button {
   line-height: 1.6;
 }
 
-/* =========================
+/* =========================================================
    SECTIONS
-========================= */
+========================================================= */
 
 .section {
-  padding-top: 45px;
+  padding-top: 50px;
   padding-bottom: 70px;
 }
 
@@ -282,10 +312,10 @@ button {
 .sectionTitle h1,
 .sectionTitle h2 {
   margin: 0;
-  color: #111827;
-  font-size: 34px;
+  color: #0f172a;
+  font-size: 35px;
   line-height: 1.1;
-  letter-spacing: -1.5px;
+  letter-spacing: -1.6px;
 }
 
 .updated {
@@ -293,6 +323,10 @@ button {
   font-size: 12px;
   font-weight: 700;
 }
+
+/* =========================================================
+   CATEGORY NAVIGATION
+========================================================= */
 
 .categoryBar,
 .categoryNav {
@@ -317,16 +351,13 @@ button {
   padding: 10px 16px;
   border-radius: 999px;
   background: #ffffff;
-  border: 1px solid #dbe2eb;
+  border: 1px solid var(--border);
   color: #475569;
   text-decoration: none;
   font-size: 13px;
   font-weight: 800;
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease,
-    transform 0.2s ease;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+  transition: 0.2s ease;
 }
 
 .categoryPill:hover,
@@ -336,43 +367,44 @@ button {
   border-color: var(--jn-blue);
   color: #ffffff;
   transform: translateY(-1px);
+  box-shadow: 0 7px 18px rgba(37, 99, 235, 0.2);
 }
 
-/* =========================
+/* =========================================================
    FEATURED STORY
-========================= */
+========================================================= */
 
 .featuredStory {
   display: grid;
   grid-template-columns: 1.25fr 1fr;
-  min-height: 390px;
+  min-height: 400px;
   background: #ffffff;
   border: 1px solid var(--border);
   border-top: 4px solid var(--jn-blue);
   border-radius: 20px;
   overflow: hidden;
-  box-shadow: 0 15px 50px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-md);
 }
 
 .featuredImage {
   position: relative;
   display: block;
-  min-height: 390px;
+  min-height: 400px;
   overflow: hidden;
-  background: #e8edf4;
+  background: #dce4ee;
 }
 
 .featuredImage img {
   width: 100%;
   height: 100%;
-  min-height: 390px;
+  min-height: 400px;
   display: block;
   object-fit: cover;
-  transition: transform 0.35s ease;
+  transition: transform 0.4s ease;
 }
 
 .featuredImage:hover img {
-  transform: scale(1.03);
+  transform: scale(1.04);
 }
 
 .imageBadge {
@@ -387,11 +419,11 @@ button {
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  box-shadow: 0 7px 20px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 7px 20px rgba(37, 99, 235, 0.3);
 }
 
 .featuredContent {
-  padding: 42px;
+  padding: 45px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -408,7 +440,7 @@ button {
 
 .featuredContent h3 {
   margin: 0;
-  color: #111827;
+  color: #0f172a;
   font-size: clamp(27px, 3vw, 42px);
   line-height: 1.08;
   letter-spacing: -1.7px;
@@ -426,7 +458,7 @@ button {
 .excerpt {
   margin: 17px 0 0;
   color: #64748b;
-  line-height: 1.65;
+  line-height: 1.7;
 }
 
 .readMore {
@@ -445,21 +477,21 @@ button {
   color: var(--jn-blue-dark);
 }
 
-/* =========================
+/* =========================================================
    LATEST
-========================= */
+========================================================= */
 
 .latestHeader {
   display: flex;
   align-items: center;
   gap: 20px;
-  margin: 55px 0 22px;
+  margin: 58px 0 22px;
 }
 
 .latestHeader h2 {
   flex: 0 0 auto;
   margin: 0;
-  color: #111827;
+  color: #0f172a;
   font-size: 30px;
   letter-spacing: -1px;
 }
@@ -475,14 +507,14 @@ button {
   opacity: 0.65;
 }
 
-/* =========================
+/* =========================================================
    NEWS CARDS
-========================= */
+========================================================= */
 
 .grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  gap: 22px;
 }
 
 .card {
@@ -490,25 +522,25 @@ button {
   border: 1px solid var(--border);
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 7px 25px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--shadow-sm);
   transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease,
-    border-color 0.2s ease;
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
 }
 
 .card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-5px);
   border-color: #cbd5e1;
-  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.11);
+  box-shadow: var(--shadow-lg);
 }
 
 .cardImage {
   display: block;
   width: 100%;
-  height: 210px;
+  height: 215px;
   overflow: hidden;
-  background: #e8edf4;
+  background: #dce4ee;
 }
 
 .cardImage img {
@@ -516,11 +548,11 @@ button {
   height: 100%;
   display: block;
   object-fit: cover;
-  transition: transform 0.3s ease;
+  transition: transform 0.35s ease;
 }
 
 .card:hover .cardImage img {
-  transform: scale(1.04);
+  transform: scale(1.05);
 }
 
 .cardBody {
@@ -530,9 +562,9 @@ button {
 
 .cardBody h3 {
   margin: 0;
-  color: #111827;
+  color: #0f172a;
   font-size: 20px;
-  line-height: 1.25;
+  line-height: 1.28;
   letter-spacing: -0.4px;
 }
 
@@ -549,12 +581,12 @@ button {
   font-size: 14px;
 }
 
-/* =========================
+/* =========================================================
    CATEGORY SECTIONS
-========================= */
+========================================================= */
 
 .categorySection {
-  margin-top: 60px;
+  margin-top: 65px;
 }
 
 .categorySectionHeader {
@@ -567,7 +599,7 @@ button {
 
 .categorySectionHeader h2 {
   margin: 0;
-  color: #111827;
+  color: #0f172a;
   font-size: 30px;
   letter-spacing: -1px;
 }
@@ -594,23 +626,21 @@ button {
   border: 1px solid var(--border);
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 7px 25px rgba(15, 23, 42, 0.05);
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
+  box-shadow: var(--shadow-sm);
+  transition: 0.22s ease;
 }
 
 .categoryCard:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.09);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
 }
 
 .categoryCardImage {
   display: block;
   width: 100%;
-  height: 160px;
+  height: 165px;
   overflow: hidden;
-  background: #e8edf4;
+  background: #dce4ee;
   object-fit: cover;
 }
 
@@ -621,7 +651,7 @@ button {
 
 .categoryCardBody h3 {
   margin: 0;
-  color: #111827;
+  color: #0f172a;
   font-size: 17px;
   line-height: 1.3;
 }
@@ -669,6 +699,7 @@ button {
   color: var(--gray);
   text-align: center;
   font-size: 16px;
+  box-shadow: var(--shadow-sm);
 }
 
 .emptyState h2 {
@@ -676,9 +707,9 @@ button {
   color: #111827;
 }
 
-/* =========================
+/* =========================================================
    ADS
-========================= */
+========================================================= */
 
 .advertisement {
   margin: 28px 0;
@@ -686,7 +717,7 @@ button {
 
 .directAd {
   width: 100%;
-  margin: 25px 0;
+  margin: 28px 0;
   text-align: center;
   overflow: hidden;
 }
@@ -705,9 +736,9 @@ button {
   border-radius: 12px;
 }
 
-/* =========================
+/* =========================================================
    ARTICLES
-========================= */
+========================================================= */
 
 article {
   max-width: 900px;
@@ -716,7 +747,8 @@ article {
 }
 
 article > h1 {
-  color: #111827;
+  color: #0f172a;
+  letter-spacing: -1.5px;
 }
 
 article > .mb-6 {
@@ -734,12 +766,13 @@ article > .mb-6 a:hover {
 
 .prose {
   color: #334155;
-  line-height: 1.85;
+  line-height: 1.9;
+  font-size: 17px;
 }
 
 .prose p {
-  margin-top: 1.2em;
-  margin-bottom: 1.2em;
+  margin-top: 1.25em;
+  margin-bottom: 1.25em;
 }
 
 .prose h2 {
@@ -786,13 +819,13 @@ article > .mb-6 a:hover {
   margin: 7px 0;
 }
 
-/* =========================
-   SHARING
-========================= */
+/* =========================================================
+   SHARE
+========================================================= */
 
 .shareBox {
   margin: 32px 0;
-  padding: 16px 0;
+  padding: 18px 0;
   border-top: 2px solid var(--jn-blue);
   border-bottom: 1px solid var(--border);
 }
@@ -816,8 +849,8 @@ article > .mb-6 a:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 32px;
-  padding: 6px 11px;
+  min-height: 34px;
+  padding: 7px 12px;
   border: 1px solid #dfe5ec;
   border-radius: 7px;
   background: #ffffff;
@@ -873,9 +906,9 @@ article > .mb-6 a:hover {
   line-height: 1.4;
 }
 
-/* =========================
+/* =========================================================
    COMMENTS
-========================= */
+========================================================= */
 
 #comments {
   margin-top: 55px;
@@ -892,6 +925,7 @@ article > .mb-6 a:hover {
   border: 1px solid var(--border);
   border-radius: 16px;
   background: #ffffff;
+  box-shadow: var(--shadow-sm);
 }
 
 #comments label {
@@ -926,9 +960,9 @@ article > .mb-6 a:hover {
   background: var(--jn-blue-dark);
 }
 
-/* =========================
+/* =========================================================
    ADMIN
-========================= */
+========================================================= */
 
 .dashboardPage {
   min-height: 100vh;
@@ -1085,7 +1119,7 @@ article > .mb-6 a:hover {
   border-top: 4px solid var(--jn-blue);
   border-radius: 16px;
   background: #ffffff;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--shadow-md);
 }
 
 .form label {
@@ -1203,7 +1237,7 @@ article > .mb-6 a:hover {
   border-left: 4px solid var(--jn-blue);
   border-radius: 14px;
   background: #ffffff;
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 .adminCommentHeader {
@@ -1239,9 +1273,9 @@ article > .mb-6 a:hover {
   color: var(--jn-blue);
 }
 
-/* =========================
+/* =========================================================
    MESSAGES
-========================= */
+========================================================= */
 
 .success {
   margin: 20px 0;
@@ -1265,9 +1299,9 @@ article > .mb-6 a:hover {
   font-weight: 700;
 }
 
-/* =========================
+/* =========================================================
    AUTH
-========================= */
+========================================================= */
 
 .auth {
   min-height: 100vh;
@@ -1278,7 +1312,7 @@ article > .mb-6 a:hover {
   background:
     radial-gradient(
       circle at 15% 15%,
-      rgba(37, 99, 235, 0.30),
+      rgba(37, 99, 235, 0.3),
       transparent 30%
     ),
     radial-gradient(
@@ -1378,9 +1412,9 @@ article > .mb-6 a:hover {
   text-decoration: underline;
 }
 
-/* =========================
-   FOCUS / ACCESSIBILITY
-========================= */
+/* =========================================================
+   FOCUS
+========================================================= */
 
 a:focus-visible,
 button:focus-visible,
@@ -1391,9 +1425,9 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
-/* =========================
+/* =========================================================
    RESPONSIVE
-========================= */
+========================================================= */
 
 @media (max-width: 1000px) {
   .heroInner {
@@ -1466,7 +1500,7 @@ select:focus-visible {
 
 @media (max-width: 700px) {
   .container {
-    width: min(100% - 22px, 1180px);
+    width: calc(100% - 22px);
   }
 
   .brand {
@@ -1547,15 +1581,6 @@ select:focus-visible {
     margin-top: 40px;
   }
 
-  .shareButtons {
-    display: flex;
-    flex-wrap: wrap;
-  }
-
-  .shareButton {
-    width: auto;
-  }
-
   .dashboardPage h1 {
     font-size: 30px;
   }
@@ -1594,20 +1619,11 @@ select:focus-visible {
   .featuredContent h3 {
     font-size: 26px;
   }
-
-  .shareButtons {
-    display: flex;
-    flex-wrap: wrap;
-  }
-
-  .shareButton {
-    width: auto;
-  }
 }
 
-/* =========================
+/* =========================================================
    REDUCED MOTION
-========================= */
+========================================================= */
 
 @media (prefers-reduced-motion: reduce) {
   html {
