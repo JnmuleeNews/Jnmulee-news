@@ -147,7 +147,7 @@ export default function AdminPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        window.location.href = "/login";
+        window.location.href = "/admin/login";
         return;
       }
 
@@ -791,7 +791,7 @@ export default function AdminPage() {
 
   async function signOut() {
     await supabase.auth.signOut();
-    window.location.href = "/login";
+    window.location.href = "/admin/login";
   }
 
   if (loading) {
@@ -799,6 +799,7 @@ export default function AdminPage() {
       <main className="min-h-screen bg-slate-950 px-4 py-16 text-white">
         <div className="mx-auto max-w-5xl text-center">
           <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-cyan-400/20 border-t-cyan-400" />
+
           <p className="text-lg text-slate-300">
             Loading admin dashboard...
           </p>
@@ -826,11 +827,11 @@ export default function AdminPage() {
           <button
             onClick={() =>
               (window.location.href =
-                "/login")
+                "/admin/login")
             }
             className={`${cyanButton} mt-5`}
           >
-            Go to Login
+            Go to Admin Login
           </button>
         </div>
       </main>
@@ -841,7 +842,6 @@ export default function AdminPage() {
     <main className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
 
-        {/* HEADER */}
         <header className="mb-8 overflow-hidden rounded-2xl border border-cyan-400/20 bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/30 p-5 shadow-2xl shadow-black/20">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -871,7 +871,6 @@ export default function AdminPage() {
           </div>
         </header>
 
-        {/* MESSAGES */}
         {message && (
           <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm font-semibold text-cyan-200">
             {message}
@@ -889,21 +888,19 @@ export default function AdminPage() {
 
         {/* IMPORT */}
         <section className="mb-8 rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-cyan-400/[0.07] to-white/[0.02] p-5 shadow-xl shadow-black/10">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
-                NEWS ENGINE
-              </div>
+              <p className="text-xs font-bold tracking-widest text-cyan-400">
+                NEWS IMPORT
+              </p>
 
-              <h2 className="text-xl font-black">
-                News Importer
+              <h2 className="mt-1 text-xl font-black">
+                Import Latest News
               </h2>
 
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">
-                Fetch RSS/Atom feeds, extract article
-                content, require an image, generate the
-                rewritten article, and save it as
-                unpublished for approval.
+              <p className="mt-1 text-sm text-slate-400">
+                Fetch active feeds and process
+                available articles.
               </p>
             </div>
 
@@ -914,34 +911,36 @@ export default function AdminPage() {
             >
               {working
                 ? "Importing..."
-                : "Import All News Now"}
+                : "Import News"}
             </button>
           </div>
 
           {importProgress && (
-            <div className="mt-4 rounded-lg border border-cyan-400/10 bg-slate-950/70 p-3 text-sm text-cyan-300">
+            <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm text-cyan-200">
               {importProgress}
             </div>
           )}
 
           {importStats && (
-            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Stat
+                label="Sources"
+                value={
+                  importStats.sourcesProcessed ||
+                  0
+                }
+              />
+
               <Stat
                 label="Feed Items"
                 value={
-                  importStats.feedItemsSeen || 0
+                  importStats.feedItemsSeen ||
+                  0
                 }
               />
 
               <Stat
-                label="AI Generated"
-                value={
-                  importStats.aiGenerated || 0
-                }
-              />
-
-              <Stat
-                label="Added"
+                label="Articles Added"
                 value={
                   importStats.articlesAddedForApproval ||
                   0
@@ -949,80 +948,44 @@ export default function AdminPage() {
               />
 
               <Stat
-                label="Duplicates"
+                label="Skipped"
                 value={
-                  importStats.skippedDuplicate ||
+                  importStats.articlesSkipped ||
                   0
-                }
-              />
-
-              <Stat
-                label="No Image"
-                value={
-                  importStats.skippedNoImage ||
-                  0
-                }
-              />
-
-              <Stat
-                label="AI Failed"
-                value={
-                  importStats.aiFailed || 0
                 }
               />
             </div>
           )}
-
-          {importStats?.aiCreditsUnavailable && (
-            <div className="mt-5 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-4 text-sm text-cyan-200">
-              OpenAI credits/quota are unavailable.
-              News cannot be AI-generated until the
-              OpenAI API account has available credits.
-            </div>
-          )}
-
-          {importStats?.diagnostics &&
-            importStats.diagnostics.length >
-              0 && (
-              <details className="mt-5 rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                <summary className="cursor-pointer font-semibold text-cyan-200">
-                  Import diagnostics
-                </summary>
-
-                <div className="mt-4 max-h-96 overflow-auto rounded-lg bg-black/30 p-3">
-                  {importStats.diagnostics.map(
-                    (line, index) => (
-                      <div
-                        key={`${index}-${line}`}
-                        className="border-b border-white/5 py-1 text-xs text-slate-300 last:border-0"
-                      >
-                        {line}
-                      </div>
-                    )
-                  )}
-                </div>
-              </details>
-            )}
         </section>
 
-        {/* DASHBOARD COUNTS */}
-        <section className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
+        {/* STATS */}
+        <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <DashboardCard
-            title="Articles Loaded"
-            value={news.length}
+            title="Published Stories"
+            value={
+              news.filter(
+                (item) =>
+                  item.Published === true
+              ).length
+            }
           />
 
           <DashboardCard
-            title="Sources"
-            value={sources.length}
+            title="Pending Stories"
+            value={
+              news.filter(
+                (item) =>
+                  item.Published !== true
+              ).length
+            }
           />
 
           <DashboardCard
             title="Active Sources"
             value={
               sources.filter(
-                (source) =>
-                  source.active
+                (item) =>
+                  item.active === true
               ).length
             }
           />
@@ -1031,19 +994,26 @@ export default function AdminPage() {
             title="Active Ads"
             value={
               ads.filter(
-                (ad) => ad.active
+                (item) =>
+                  item.active === true
               ).length
             }
           />
         </section>
 
-        {/* ADD SOURCE */}
+        {/* SOURCES */}
         <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
-          <h2 className="mb-4 text-xl font-black">
-            Add News Source
-          </h2>
+          <div className="mb-5">
+            <p className="text-xs font-bold tracking-widest text-cyan-400">
+              SOURCES
+            </p>
 
-          <div className="grid gap-3 md:grid-cols-4">
+            <h2 className="mt-1 text-xl font-black">
+              News Sources
+            </h2>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
             <input
               value={sourceName}
               onChange={(event) =>
@@ -1062,8 +1032,8 @@ export default function AdminPage() {
                   event.target.value
                 )
               }
-              placeholder="RSS / Atom feed URL"
-              className={`${inputClass} md:col-span-2`}
+              placeholder="RSS/Atom feed URL"
+              className={inputClass}
             />
 
             <select
@@ -1096,27 +1066,8 @@ export default function AdminPage() {
           >
             Add Source
           </button>
-        </section>
 
-        {/* SOURCES */}
-        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-bold tracking-widest text-cyan-400">
-                RSS / ATOM
-              </p>
-
-              <h2 className="mt-1 text-xl font-black">
-                News Sources
-              </h2>
-            </div>
-
-            <span className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-3 py-1 text-sm text-cyan-200">
-              {sources.length} total
-            </span>
-          </div>
-
-          <div className="space-y-3">
+          <div className="mt-6 space-y-3">
             {sources.map(
               (source) => (
                 <div
