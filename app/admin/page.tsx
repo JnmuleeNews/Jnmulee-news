@@ -19,11 +19,29 @@ const NEWS_CATEGORIES = [
 ];
 
 const AD_PLACEMENTS = [
-  { value: "homepage", label: "Homepage" },
-  { value: "ads_page", label: "Ads Page" },
   {
-    value: "homepage_ads",
-    label: "Homepage + Ads Page",
+    value: "home_top",
+    label: "Homepage — Top",
+  },
+  {
+    value: "home_between",
+    label: "Homepage — Between Stories",
+  },
+  {
+    value: "home_bottom",
+    label: "Homepage — Bottom",
+  },
+  {
+    value: "article_top",
+    label: "Article — Top",
+  },
+  {
+    value: "article_middle",
+    label: "Article — Middle",
+  },
+  {
+    value: "article_bottom",
+    label: "Article — Bottom",
   },
 ];
 
@@ -36,41 +54,98 @@ type Source = {
   created_at?: string;
 };
 
+type ImportResponse = {
+  success?: boolean;
+  message?: string;
+  error?: string;
+
+  batch?: number;
+  totalSources?: number;
+  totalBatches?: number;
+
+  articlesAddedForApproval?: number;
+  articlesPublished?: number;
+  articlesSkipped?: number;
+
+  skippedNoImage?: number;
+  skippedShortSource?: number;
+  skippedDuplicate?: number;
+  skippedPoorQuality?: number;
+
+  aiGenerated?: number;
+  aiCreditsUnavailable?: boolean;
+
+  sourcesProcessed?: number;
+  feedItemsSeen?: number;
+  articlePagesFetched?: number;
+
+  durationMs?: number;
+
+  errors?: string[];
+};
+
 export default function AdminDashboard() {
   const router = useRouter();
 
-  const [sources, setSources] = useState<Source[]>([]);
+  const [sources, setSources] =
+    useState<Source[]>([]);
 
   const [name, setName] = useState("");
   const [feedUrl, setFeedUrl] = useState("");
-  const [category, setCategory] = useState("Top Stories");
+  const [category, setCategory] =
+    useState("Top Stories");
 
   const [adTitle, setAdTitle] = useState("");
-  const [adImageUrl, setAdImageUrl] = useState("");
-  const [adLinkUrl, setAdLinkUrl] = useState("");
-  const [adPlacement, setAdPlacement] = useState("homepage");
+  const [adImageUrl, setAdImageUrl] =
+    useState("");
+  const [adLinkUrl, setAdLinkUrl] =
+    useState("");
+  const [adPlacement, setAdPlacement] =
+    useState("home_top");
 
-  const [loading, setLoading] = useState(true);
-  const [addingSource, setAddingSource] = useState(false);
-  const [addingAd, setAddingAd] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [addingSource, setAddingSource] =
+    useState(false);
+
+  const [addingAd, setAddingAd] =
+    useState(false);
+
+  const [importing, setImporting] =
+    useState(false);
+
+  const [loggingOut, setLoggingOut] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
+
+  const [importProgress, setImportProgress] =
+    useState("");
 
   async function checkAuthentication() {
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser();
+    } =
+      await supabase.auth.getUser();
 
-    if (userError || !user) {
+    if (
+      userError ||
+      !user
+    ) {
       router.replace("/admin/login");
       return false;
     }
 
-    if (user.app_metadata?.role !== "admin") {
+    if (
+      user.app_metadata?.role !==
+      "admin"
+    ) {
       await supabase.auth.signOut();
       router.replace("/");
       return false;
@@ -83,26 +158,30 @@ export default function AdminDashboard() {
     setLoading(true);
     setError("");
 
-    const authenticated = await checkAuthentication();
+    const authenticated =
+      await checkAuthentication();
 
     if (!authenticated) {
       setLoading(false);
       return;
     }
 
-    const { data, error } = await supabase
-      .from("sources")
-      .select(
-        "id,name,feed_url,category,active,created_at"
-      )
-      .order("created_at", {
-        ascending: false,
-      });
+    const { data, error } =
+      await supabase
+        .from("sources")
+        .select(
+          "id,name,feed_url,category,active,created_at"
+        )
+        .order("created_at", {
+          ascending: false,
+        });
 
     if (error) {
       setError(error.message);
     } else {
-      setSources((data || []) as Source[]);
+      setSources(
+        (data || []) as Source[]
+      );
     }
 
     setLoading(false);
@@ -121,52 +200,72 @@ export default function AdminDashboard() {
     setMessage("");
     setError("");
 
-    const authenticated = await checkAuthentication();
+    const authenticated =
+      await checkAuthentication();
 
     if (!authenticated) {
       setAddingSource(false);
       return;
     }
 
-    const cleanName = name.trim();
-    const cleanFeedUrl = feedUrl.trim();
+    const cleanName =
+      name.trim();
 
-    if (!cleanName || !cleanFeedUrl) {
+    const cleanFeedUrl =
+      feedUrl.trim();
+
+    if (
+      !cleanName ||
+      !cleanFeedUrl
+    ) {
       setError(
         "Please enter the source name and RSS feed URL."
       );
+
       setAddingSource(false);
       return;
     }
 
     try {
-      const parsedUrl = new URL(cleanFeedUrl);
+      const parsedUrl =
+        new URL(
+          cleanFeedUrl
+        );
 
       if (
-        parsedUrl.protocol !== "http:" &&
-        parsedUrl.protocol !== "https:"
+        parsedUrl.protocol !==
+          "http:" &&
+        parsedUrl.protocol !==
+          "https:"
       ) {
-        throw new Error("Invalid protocol");
+        throw new Error(
+          "Invalid protocol"
+        );
       }
     } catch {
       setError(
         "Please enter a valid RSS feed URL."
       );
+
       setAddingSource(false);
       return;
     }
 
-    const { error } = await supabase
-      .from("sources")
-      .insert({
-        name: cleanName,
-        feed_url: cleanFeedUrl,
-        category,
-        active: true,
-      });
+    const { error } =
+      await supabase
+        .from("sources")
+        .insert({
+          name: cleanName,
+          feed_url:
+            cleanFeedUrl,
+          category,
+          active: true,
+        });
 
     if (error) {
-      setError(error.message);
+      setError(
+        error.message
+      );
     } else {
       setMessage(
         "News source added successfully."
@@ -174,7 +273,9 @@ export default function AdminDashboard() {
 
       setName("");
       setFeedUrl("");
-      setCategory("Top Stories");
+      setCategory(
+        "Top Stories"
+      );
 
       await loadData();
     }
@@ -182,7 +283,9 @@ export default function AdminDashboard() {
     setAddingSource(false);
   }
 
-  async function deleteSource(id: string) {
+  async function deleteSource(
+    id: string
+  ) {
     if (
       !window.confirm(
         "Delete this news source? This action cannot be undone."
@@ -194,40 +297,57 @@ export default function AdminDashboard() {
     setMessage("");
     setError("");
 
-    const authenticated = await checkAuthentication();
+    const authenticated =
+      await checkAuthentication();
 
     if (!authenticated) return;
 
-    const { error } = await supabase
-      .from("sources")
-      .delete()
-      .eq("id", id);
+    const { error } =
+      await supabase
+        .from("sources")
+        .delete()
+        .eq("id", id);
 
     if (error) {
-      setError(error.message);
+      setError(
+        error.message
+      );
     } else {
-      setMessage("News source deleted.");
+      setMessage(
+        "News source deleted."
+      );
+
       await loadData();
     }
   }
 
-  async function toggleSource(source: Source) {
+  async function toggleSource(
+    source: Source
+  ) {
     setMessage("");
     setError("");
 
-    const authenticated = await checkAuthentication();
+    const authenticated =
+      await checkAuthentication();
 
     if (!authenticated) return;
 
-    const { error } = await supabase
-      .from("sources")
-      .update({
-        active: !source.active,
-      })
-      .eq("id", source.id);
+    const { error } =
+      await supabase
+        .from("sources")
+        .update({
+          active:
+            !source.active,
+        })
+        .eq(
+          "id",
+          source.id
+        );
 
     if (error) {
-      setError(error.message);
+      setError(
+        error.message
+      );
     } else {
       setMessage(
         source.active
@@ -248,16 +368,22 @@ export default function AdminDashboard() {
     setMessage("");
     setError("");
 
-    const authenticated = await checkAuthentication();
+    const authenticated =
+      await checkAuthentication();
 
     if (!authenticated) {
       setAddingAd(false);
       return;
     }
 
-    const cleanTitle = adTitle.trim();
-    const cleanImageUrl = adImageUrl.trim();
-    const cleanLinkUrl = adLinkUrl.trim();
+    const cleanTitle =
+      adTitle.trim();
+
+    const cleanImageUrl =
+      adImageUrl.trim();
+
+    const cleanLinkUrl =
+      adLinkUrl.trim();
 
     if (
       !cleanTitle ||
@@ -273,39 +399,61 @@ export default function AdminDashboard() {
     }
 
     try {
-      const imageUrl = new URL(cleanImageUrl);
-      const linkUrl = new URL(cleanLinkUrl);
+      const imageUrl =
+        new URL(
+          cleanImageUrl
+        );
+
+      const linkUrl =
+        new URL(
+          cleanLinkUrl
+        );
 
       if (
-        !["http:", "https:"].includes(
+        ![
+          "http:",
+          "https:",
+        ].includes(
           imageUrl.protocol
         ) ||
-        !["http:", "https:"].includes(
+        ![
+          "http:",
+          "https:",
+        ].includes(
           linkUrl.protocol
         )
       ) {
-        throw new Error("Invalid protocol");
+        throw new Error(
+          "Invalid protocol"
+        );
       }
     } catch {
       setError(
         "Please enter valid advertisement image and link URLs."
       );
+
       setAddingAd(false);
       return;
     }
 
-    const { error } = await supabase
-      .from("direct_ads")
-      .insert({
-        title: cleanTitle,
-        image_url: cleanImageUrl,
-        link_url: cleanLinkUrl,
-        placement: adPlacement,
-        active: true,
-      });
+    const { error } =
+      await supabase
+        .from("direct_ads")
+        .insert({
+          title: cleanTitle,
+          image_url:
+            cleanImageUrl,
+          link_url:
+            cleanLinkUrl,
+          placement:
+            adPlacement,
+          active: true,
+        });
 
     if (error) {
-      setError(error.message);
+      setError(
+        error.message
+      );
     } else {
       setMessage(
         "Personal advertisement added successfully."
@@ -314,31 +462,113 @@ export default function AdminDashboard() {
       setAdTitle("");
       setAdImageUrl("");
       setAdLinkUrl("");
-      setAdPlacement("homepage");
+      setAdPlacement(
+        "home_top"
+      );
     }
 
     setAddingAd(false);
   }
 
   /*
-   * Secure manual news import.
+   * Runs one protected importer batch.
+   */
+  async function runImportBatch(
+    accessToken: string,
+    batch: number
+  ): Promise<ImportResponse> {
+    const response =
+      await fetch(
+        `/api/fetch-news?manual=true&batch=${batch}`,
+        {
+          method: "GET",
+          cache: "no-store",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept:
+              "application/json",
+          },
+        }
+      );
+
+    let data:
+      ImportResponse = {};
+
+    try {
+      data =
+        await response.json();
+    } catch {
+      data = {};
+    }
+
+    if (
+      response.status === 401
+    ) {
+      throw new Error(
+        "AUTH_EXPIRED"
+      );
+    }
+
+    if (
+      response.status === 403
+    ) {
+      throw new Error(
+        "ACCESS_DENIED"
+      );
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        data.error ||
+          data.message ||
+          `News import failed with status ${response.status}.`
+      );
+    }
+
+    if (
+      data.success === false
+    ) {
+      throw new Error(
+        data.error ||
+          data.message ||
+          "The news importer reported an error."
+      );
+    }
+
+    return data;
+  }
+
+  /*
+   * One button now processes every
+   * source batch automatically.
    *
-   * The browser gets the currently logged-in
-   * Supabase session and sends its access token
-   * to the protected API route.
+   * Example:
+   *
+   * 20 sources =
+   * 4 batches
+   *
+   * Batch 0
+   * Batch 1
+   * Batch 2
+   * Batch 3
    */
   async function runNewsImport() {
     if (importing) return;
 
     setMessage("");
     setError("");
+    setImportProgress("");
     setImporting(true);
 
     try {
       const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
+        data: {
+          session,
+        },
+        error:
+          sessionError,
+      } =
+        await supabase.auth.getSession();
 
       if (
         sessionError ||
@@ -349,15 +579,20 @@ export default function AdminDashboard() {
         );
 
         await supabase.auth.signOut();
-        router.replace("/admin/login");
+        router.replace(
+          "/admin/login"
+        );
+
         return;
       }
 
-      const user = session.user;
+      const user =
+        session.user;
 
       if (
         !user ||
-        user.app_metadata?.role !== "admin"
+        user.app_metadata?.role !==
+          "admin"
       ) {
         setError(
           "You are not authorized to run the news importer."
@@ -365,81 +600,252 @@ export default function AdminDashboard() {
 
         await supabase.auth.signOut();
         router.replace("/");
+
         return;
       }
 
-      const response = await fetch(
-        "/api/fetch-news?manual=true",
-        {
-          method: "GET",
-          cache: "no-store",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            Accept: "application/json",
-          },
-        }
+      const accessToken =
+        session.access_token;
+
+      /*
+       * First batch tells us how many
+       * total batches exist.
+       */
+      setImportProgress(
+        "Starting news import..."
       );
 
-      let data: {
-        message?: string;
-        error?: string;
-        added?: number;
-        skipped?: number;
-        success?: boolean;
-      } = {};
-
-      try {
-        data = await response.json();
-      } catch {
-        data = {};
-      }
-
-      if (response.status === 401) {
-        setError(
-          "Your admin session is no longer authorized. Please sign in again."
+      const firstResult =
+        await runImportBatch(
+          accessToken,
+          0
         );
 
-        await supabase.auth.signOut();
-        router.replace("/admin/login");
+      const totalBatches =
+        Math.max(
+          1,
+          Number(
+            firstResult.totalBatches ||
+              1
+          )
+        );
+
+      let totalAdded =
+        Number(
+          firstResult.articlesAddedForApproval ||
+            0
+        );
+
+      let totalSkipped =
+        Number(
+          firstResult.articlesSkipped ||
+            0
+        );
+
+      let totalFeedItems =
+        Number(
+          firstResult.feedItemsSeen ||
+            0
+        );
+
+      let totalSources =
+        Number(
+          firstResult.sourcesProcessed ||
+            0
+        );
+
+      let totalAiGenerated =
+        Number(
+          firstResult.aiGenerated ||
+            0
+        );
+
+      let totalNoImage =
+        Number(
+          firstResult.skippedNoImage ||
+            0
+        );
+
+      let totalDuplicates =
+        Number(
+          firstResult.skippedDuplicate ||
+            0
+        );
+
+      let totalShort =
+        Number(
+          firstResult.skippedShortSource ||
+            0
+        );
+
+      let totalPoorQuality =
+        Number(
+          firstResult.skippedPoorQuality ||
+            0
+        );
+
+      let allErrors =
+        Array.isArray(
+          firstResult.errors
+        )
+          ? [...firstResult.errors]
+          : [];
+
+      setImportProgress(
+        `Batch 1 of ${totalBatches} completed. Added ${totalAdded} article(s).`
+      );
+
+      /*
+       * If OpenAI credits are exhausted,
+       * stop immediately instead of sending
+       * unnecessary requests.
+       */
+      if (
+        firstResult.aiCreditsUnavailable
+      ) {
+        setError(
+          "News importing reached the OpenAI credit limit. RSS sources were reached, but AI article generation cannot continue until OpenAI credits are available."
+        );
+
         return;
       }
 
-      if (response.status === 403) {
-        setError(
-          "Access denied. Your account does not have administrator permissions."
+      /*
+       * Process remaining batches.
+       */
+      for (
+        let batch = 1;
+        batch < totalBatches;
+        batch++
+      ) {
+        setImportProgress(
+          `Importing batch ${
+            batch + 1
+          } of ${totalBatches}...`
         );
-        return;
+
+        const result =
+          await runImportBatch(
+            accessToken,
+            batch
+          );
+
+        totalAdded +=
+          Number(
+            result.articlesAddedForApproval ||
+              0
+          );
+
+        totalSkipped +=
+          Number(
+            result.articlesSkipped ||
+              0
+          );
+
+        totalFeedItems +=
+          Number(
+            result.feedItemsSeen ||
+              0
+          );
+
+        totalSources +=
+          Number(
+            result.sourcesProcessed ||
+              0
+          );
+
+        totalAiGenerated +=
+          Number(
+            result.aiGenerated ||
+              0
+          );
+
+        totalNoImage +=
+          Number(
+            result.skippedNoImage ||
+              0
+          );
+
+        totalDuplicates +=
+          Number(
+            result.skippedDuplicate ||
+              0
+          );
+
+        totalShort +=
+          Number(
+            result.skippedShortSource ||
+              0
+          );
+
+        totalPoorQuality +=
+          Number(
+            result.skippedPoorQuality ||
+              0
+          );
+
+        if (
+          Array.isArray(
+            result.errors
+          )
+        ) {
+          allErrors.push(
+            ...result.errors
+          );
+        }
+
+        setImportProgress(
+          `Batch ${
+            batch + 1
+          } of ${totalBatches} completed. ${totalAdded} article(s) added so far.`
+        );
+
+        if (
+          result.aiCreditsUnavailable
+        ) {
+          setError(
+            `Import stopped at batch ${
+              batch + 1
+            } because OpenAI credits are unavailable. ${totalAdded} article(s) were added before the limit was reached.`
+          );
+
+          return;
+        }
       }
 
-      if (!response.ok) {
-        setError(
-          data.error ||
-            `News import failed with status ${response.status}.`
-        );
-        return;
-      }
+      setMessage(
+        `News import completed successfully. ${totalAdded} new article(s) were added for approval from ${totalSources} source(s).`
+      );
 
-      if (data.success === false) {
-        setError(
-          data.error ||
-            "The news importer reported an error."
-        );
-        return;
-      }
+      setImportProgress(
+        `Finished ${totalBatches} of ${totalBatches} batches. ${totalFeedItems} feed item(s) checked, ${totalAiGenerated} article(s) generated, ${totalSkipped} item(s) skipped.`
+      );
 
       if (
-        typeof data.added === "number" &&
-        typeof data.skipped === "number"
+        allErrors.length > 0
       ) {
-        setMessage(
-          `News import completed. Added ${data.added} stories and skipped ${data.skipped}.`
-        );
-      } else {
-        setMessage(
-          data.message ||
-            "RSS news import completed successfully."
+        console.warn(
+          "Importer errors:",
+          allErrors
         );
       }
+
+      console.log(
+        "News import totals:",
+        {
+          totalAdded,
+          totalSkipped,
+          totalFeedItems,
+          totalSources,
+          totalAiGenerated,
+          totalNoImage,
+          totalDuplicates,
+          totalShort,
+          totalPoorQuality,
+          errors:
+            allErrors,
+        }
+      );
 
       await loadData();
     } catch (err) {
@@ -448,8 +854,39 @@ export default function AdminDashboard() {
         err
       );
 
+      if (
+        err instanceof Error &&
+        err.message ===
+          "AUTH_EXPIRED"
+      ) {
+        setError(
+          "Your admin session is no longer authorized. Please sign in again."
+        );
+
+        await supabase.auth.signOut();
+        router.replace(
+          "/admin/login"
+        );
+
+        return;
+      }
+
+      if (
+        err instanceof Error &&
+        err.message ===
+          "ACCESS_DENIED"
+      ) {
+        setError(
+          "Access denied. Your account does not have administrator permissions."
+        );
+
+        return;
+      }
+
       setError(
-        "Unable to connect to the news importer. Please try again."
+        err instanceof Error
+          ? err.message
+          : "Unable to connect to the news importer. Please try again."
       );
     } finally {
       setImporting(false);
@@ -467,12 +904,18 @@ export default function AdminDashboard() {
       await supabase.auth.signOut();
 
     if (error) {
-      setError(error.message);
+      setError(
+        error.message
+      );
+
       setLoggingOut(false);
       return;
     }
 
-    router.replace("/admin/login");
+    router.replace(
+      "/admin/login"
+    );
+
     router.refresh();
   }
 
@@ -542,9 +985,6 @@ export default function AdminDashboard() {
           font-size: 13px;
           font-weight: 800;
           cursor: pointer;
-          transition:
-            background .18s ease,
-            border-color .18s ease;
         }
 
         .logoutButton:hover {
@@ -576,6 +1016,17 @@ export default function AdminDashboard() {
           color: #b91c1c;
           font-size: 14px;
           font-weight: 650;
+        }
+
+        .importProgress {
+          margin-bottom: 18px;
+          padding: 13px 16px;
+          border: 1px solid #bfdbfe;
+          border-radius: 11px;
+          background: #eff6ff;
+          color: #1d4ed8;
+          font-size: 14px;
+          font-weight: 750;
         }
 
         .section {
@@ -626,14 +1077,10 @@ export default function AdminDashboard() {
           text-decoration: none;
           font-size: 13px;
           font-weight: 850;
-          transition:
-            background .18s ease,
-            transform .18s ease;
         }
 
         .adminLink:hover {
           background: #1d4ed8;
-          transform: translateY(-1px);
         }
 
         .form {
@@ -711,7 +1158,6 @@ export default function AdminDashboard() {
           font-size: 13px;
           font-weight: 850;
           cursor: pointer;
-          transition: background .18s ease;
         }
 
         .sectionHeader > button:hover:not(:disabled) {
@@ -1006,6 +1452,15 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {importProgress && (
+          <div
+            className="importProgress"
+            role="status"
+          >
+            {importProgress}
+          </div>
+        )}
+
         <div className="adminGrid">
           <div className="quickCard">
             <p className="quickLabel">
@@ -1073,8 +1528,8 @@ export default function AdminDashboard() {
               disabled={importing}
             >
               {importing
-                ? "Importing..."
-                : "Import News Now"}
+                ? "Importing All Batches..."
+                : "Import All News Now"}
             </button>
           </div>
 
@@ -1156,59 +1611,65 @@ export default function AdminDashboard() {
                 No RSS sources added yet.
               </p>
             ) : (
-              sources.map((source) => (
-                <div
-                  className="adminListItem"
-                  key={source.id}
-                >
-                  <div className="sourceInfo">
-                    <strong className="sourceName">
-                      {source.name}
-                    </strong>
+              sources.map(
+                (source) => (
+                  <div
+                    className="adminListItem"
+                    key={source.id}
+                  >
+                    <div className="sourceInfo">
+                      <strong className="sourceName">
+                        {source.name}
+                      </strong>
 
-                    <p className="sourceUrl">
-                      {source.feed_url}
-                    </p>
+                      <p className="sourceUrl">
+                        {source.feed_url}
+                      </p>
 
-                    <small
-                      className={`sourceMeta ${
-                        source.active
-                          ? "activeBadge"
-                          : "disabledBadge"
-                      }`}
-                    >
-                      {source.category} ·{" "}
-                      {source.active
-                        ? "Active"
-                        : "Disabled"}
-                    </small>
+                      <small
+                        className={`sourceMeta ${
+                          source.active
+                            ? "activeBadge"
+                            : "disabledBadge"
+                        }`}
+                      >
+                        {source.category} ·{" "}
+                        {source.active
+                          ? "Active"
+                          : "Disabled"}
+                      </small>
+                    </div>
+
+                    <div className="adminActions">
+                      <button
+                        type="button"
+                        className="actionButton"
+                        onClick={() =>
+                          toggleSource(
+                            source
+                          )
+                        }
+                      >
+                        {source.active
+                          ? "Disable"
+                          : "Enable"}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="actionButton deleteButton"
+                        onClick={() =>
+                          deleteSource(
+                            source.id
+                          )
+                        }
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
-
-                  <div className="adminActions">
-                    <button
-                      type="button"
-                      className="actionButton"
-                      onClick={() =>
-                        toggleSource(source)
-                      }
-                    >
-                      {source.active
-                        ? "Disable"
-                        : "Enable"}
-                    </button>
-
-                    <button
-                      type="button"
-                      className="actionButton deleteButton"
-                      onClick={() =>
-                        deleteSource(source.id)
-                      }
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))
+                )
+              )
             )}
           </div>
         </section>
@@ -1222,7 +1683,8 @@ export default function AdminDashboard() {
 
               <p>
                 Add image advertisements and
-                choose where they should appear.
+                choose exactly where they should
+                appear on JNMulee News.
               </p>
             </div>
 
@@ -1245,7 +1707,9 @@ export default function AdminDashboard() {
                 type="text"
                 value={adTitle}
                 onChange={(e) =>
-                  setAdTitle(e.target.value)
+                  setAdTitle(
+                    e.target.value
+                  )
                 }
                 placeholder="Example: JNMulee Business"
                 maxLength={150}
@@ -1259,7 +1723,9 @@ export default function AdminDashboard() {
                 type="url"
                 value={adImageUrl}
                 onChange={(e) =>
-                  setAdImageUrl(e.target.value)
+                  setAdImageUrl(
+                    e.target.value
+                  )
                 }
                 placeholder="https://example.com/ad-image.jpg"
                 maxLength={1000}
@@ -1273,7 +1739,9 @@ export default function AdminDashboard() {
                 type="url"
                 value={adLinkUrl}
                 onChange={(e) =>
-                  setAdLinkUrl(e.target.value)
+                  setAdLinkUrl(
+                    e.target.value
+                  )
                 }
                 placeholder="https://example.com"
                 maxLength={1000}
@@ -1286,14 +1754,18 @@ export default function AdminDashboard() {
               <select
                 value={adPlacement}
                 onChange={(e) =>
-                  setAdPlacement(e.target.value)
+                  setAdPlacement(
+                    e.target.value
+                  )
                 }
               >
                 {AD_PLACEMENTS.map(
                   (item) => (
                     <option
                       key={item.value}
-                      value={item.value}
+                      value={
+                        item.value
+                      }
                     >
                       {item.label}
                     </option>
