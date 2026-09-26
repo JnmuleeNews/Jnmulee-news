@@ -8,7 +8,7 @@ export const revalidate = 0;
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ||
-  "https://jnmulee-news-jnnation.vercel.app";
+  "https://jnmulee-news.vercel.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -132,7 +132,10 @@ function categoryMatches(
 ) {
   const current = normalizeCategory(story.category);
 
-  return current === category.slug || current === category.name.toLowerCase();
+  return (
+    current === category.slug ||
+    current === category.name.toLowerCase()
+  );
 }
 
 function StoryImage({
@@ -145,9 +148,11 @@ function StoryImage({
   if (!story.image_url) {
     return (
       <div
-        className={`flex h-full w-full items-center justify-center bg-slate-200 text-slate-500 ${className}`}
+        className={`flex h-full w-full items-center justify-center bg-slate-800 text-slate-400 ${className}`}
       >
-        <span className="text-sm font-semibold">JNMulee News</span>
+        <span className="text-sm font-semibold">
+          JNMulee News
+        </span>
       </div>
     );
   }
@@ -172,7 +177,8 @@ function SectionTitle({
   return (
     <div className="mb-5 flex items-center justify-between border-b border-slate-200 pb-3">
       <div className="flex items-center gap-3">
-        <span className="h-7 w-1 rounded-full bg-red-600" />
+        <span className="h-7 w-1 rounded-full bg-cyan-400" />
+
         <h2 className="text-xl font-black tracking-tight text-slate-950 sm:text-2xl">
           {title}
         </h2>
@@ -181,7 +187,7 @@ function SectionTitle({
       {href && (
         <Link
           href={href}
-          className="text-sm font-bold text-red-600 hover:text-red-700"
+          className="text-sm font-bold text-cyan-600 transition hover:text-cyan-500"
         >
           View all →
         </Link>
@@ -204,11 +210,11 @@ function SmallStoryCard({ story }: { story: Story }) {
       </div>
 
       <div className="min-w-0">
-        <div className="mb-1 text-[10px] font-black uppercase tracking-wider text-red-600">
+        <div className="mb-1 text-[10px] font-black uppercase tracking-wider text-cyan-600">
           {story.category || "News"}
         </div>
 
-        <h3 className="line-clamp-3 text-sm font-bold leading-snug text-slate-900 group-hover:text-red-600">
+        <h3 className="line-clamp-3 text-sm font-bold leading-snug text-slate-900 transition group-hover:text-cyan-600">
           {story.title}
         </h3>
       </div>
@@ -220,7 +226,7 @@ function StoryCard({ story }: { story: Story }) {
   return (
     <Link
       href={articleHref(story)}
-      className="group block overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+      className="group block overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-cyan-200 hover:shadow-lg"
     >
       <div className="relative aspect-[16/10] overflow-hidden bg-slate-200">
         <StoryImage
@@ -228,13 +234,13 @@ function StoryCard({ story }: { story: Story }) {
           className="transition duration-500 group-hover:scale-105"
         />
 
-        <div className="absolute left-3 top-3 rounded-full bg-red-600 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white shadow">
+        <div className="absolute left-3 top-3 rounded-full bg-cyan-400 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-950 shadow">
           {story.category || "News"}
         </div>
       </div>
 
       <div className="p-4">
-        <h3 className="line-clamp-3 text-base font-extrabold leading-snug text-slate-950 group-hover:text-red-600">
+        <h3 className="line-clamp-3 text-base font-extrabold leading-snug text-slate-950 transition group-hover:text-cyan-600">
           {story.title}
         </h3>
 
@@ -266,12 +272,12 @@ function NumberedStory({
       href={articleHref(story)}
       className="group flex gap-4 border-b border-slate-200 py-4 last:border-0"
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-sm font-black text-white">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-sm font-black text-cyan-400">
         {number}
       </div>
 
       <div className="min-w-0">
-        <h3 className="line-clamp-3 text-sm font-bold leading-5 text-slate-900 group-hover:text-red-600">
+        <h3 className="line-clamp-3 text-sm font-bold leading-5 text-slate-900 transition group-hover:text-cyan-600">
           {story.title}
         </h3>
 
@@ -319,20 +325,16 @@ export default async function HomePage() {
 
   const latestNews = latest.slice(5, 17);
 
-  const heroCategory = featured
-    ? categorySlug(featured.category)
-    : "news";
-
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
-      {/* TOP NEWS BAR */}
-      <div className="border-b border-slate-200 bg-slate-950 text-white">
+      {/* TOP BAR */}
+      <div className="border-b border-slate-800 bg-slate-950 text-white">
         <div className="mx-auto flex max-w-7xl items-center gap-3 overflow-hidden px-4 py-2 text-xs sm:px-6 lg:px-8">
-          <span className="shrink-0 rounded bg-red-600 px-2 py-1 font-black uppercase">
+          <span className="shrink-0 rounded bg-cyan-400 px-2 py-1 font-black uppercase text-slate-950">
             Latest
           </span>
 
-          <div className="truncate font-medium text-slate-200">
+          <div className="truncate font-medium text-slate-300">
             JNMulee News — Latest Nigerian, African and world news
           </div>
         </div>
@@ -342,8 +344,9 @@ export default async function HomePage() {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-4 py-5 sm:px-6 lg:px-8">
           <Link href="/" className="shrink-0">
-            <div className="text-2xl font-black tracking-tight sm:text-3xl">
-              JNMulee<span className="text-red-600">.</span>
+            <div className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+              JNMulee
+              <span className="text-cyan-400">.</span>
             </div>
 
             <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-slate-500">
@@ -363,7 +366,7 @@ export default async function HomePage() {
 
           <Link
             href="/news"
-            className="rounded-full bg-slate-950 px-4 py-2 text-xs font-black text-white transition hover:bg-red-600"
+            className="rounded-full bg-slate-950 px-4 py-2 text-xs font-black text-white transition hover:bg-cyan-400 hover:text-slate-950"
           >
             All News
           </Link>
@@ -371,10 +374,10 @@ export default async function HomePage() {
 
         {/* NAVIGATION */}
         <nav className="border-t border-slate-100">
-          <div className="mx-auto flex max-w-7xl gap-5 overflow-x-auto px-4 py-3 scrollbar-hide sm:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-7xl gap-5 overflow-x-auto px-4 py-3 sm:px-6 lg:px-8">
             <Link
               href="/"
-              className="shrink-0 text-sm font-black text-red-600"
+              className="shrink-0 text-sm font-black text-cyan-600"
             >
               Home
             </Link>
@@ -383,7 +386,7 @@ export default async function HomePage() {
               <Link
                 key={category.slug}
                 href={`/category/${category.slug}`}
-                className="shrink-0 text-sm font-semibold text-slate-600 transition hover:text-red-600"
+                className="shrink-0 text-sm font-semibold text-slate-600 transition hover:text-cyan-600"
               >
                 {category.name}
               </Link>
@@ -397,7 +400,6 @@ export default async function HomePage() {
         {featured ? (
           <section className="py-6 sm:py-8">
             <div className="grid gap-5 lg:grid-cols-12">
-              {/* MAIN STORY */}
               <Link
                 href={articleHref(featured)}
                 className="group relative overflow-hidden rounded-2xl bg-slate-950 lg:col-span-7"
@@ -411,7 +413,7 @@ export default async function HomePage() {
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-transparent" />
 
                   <div className="absolute inset-x-0 bottom-0 p-5 sm:p-8">
-                    <div className="mb-3 inline-flex rounded-full bg-red-600 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white">
+                    <div className="mb-3 inline-flex rounded-full bg-cyan-400 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-950">
                       {featured.category || "Top Story"}
                     </div>
 
@@ -436,7 +438,7 @@ export default async function HomePage() {
                   <Link
                     key={story.id}
                     href={articleHref(story)}
-                    className="group flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                    className="group flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:border-cyan-200"
                   >
                     <div className="relative h-32 w-36 shrink-0 overflow-hidden bg-slate-200 sm:h-36 sm:w-44 lg:h-auto lg:w-40">
                       <StoryImage
@@ -446,11 +448,11 @@ export default async function HomePage() {
                     </div>
 
                     <div className="p-3 sm:p-4">
-                      <div className="mb-1 text-[10px] font-black uppercase tracking-wider text-red-600">
+                      <div className="mb-1 text-[10px] font-black uppercase tracking-wider text-cyan-600">
                         {story.category || "News"}
                       </div>
 
-                      <h2 className="line-clamp-4 text-sm font-extrabold leading-5 text-slate-900 group-hover:text-red-600 sm:text-base">
+                      <h2 className="line-clamp-4 text-sm font-extrabold leading-5 text-slate-900 transition group-hover:text-cyan-600 sm:text-base">
                         {story.title}
                       </h2>
 
@@ -465,7 +467,10 @@ export default async function HomePage() {
           </section>
         ) : (
           <div className="py-10 text-center">
-            <h1 className="text-2xl font-black">No published stories yet</h1>
+            <h1 className="text-2xl font-black">
+              No published stories yet
+            </h1>
+
             <p className="mt-2 text-slate-500">
               Published stories will appear here.
             </p>
@@ -484,7 +489,10 @@ export default async function HomePage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               {trending.map((story) => (
-                <SmallStoryCard key={story.id} story={story} />
+                <SmallStoryCard
+                  key={story.id}
+                  story={story}
+                />
               ))}
             </div>
           </div>
@@ -504,11 +512,17 @@ export default async function HomePage() {
 
         {/* LATEST NEWS */}
         <section className="py-8">
-          <SectionTitle title="Latest News" href="/news" />
+          <SectionTitle
+            title="Latest News"
+            href="/news"
+          />
 
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {latestNews.map((story) => (
-              <StoryCard key={story.id} story={story} />
+              <StoryCard
+                key={story.id}
+                story={story}
+              />
             ))}
           </div>
         </section>
@@ -521,7 +535,9 @@ export default async function HomePage() {
         {/* CATEGORY SECTIONS */}
         {categories.map((category, categoryIndex) => {
           const stories = latest
-            .filter((story) => categoryMatches(story, category))
+            .filter((story) =>
+              categoryMatches(story, category)
+            )
             .slice(0, 5);
 
           if (!stories.length) return null;
@@ -538,11 +554,10 @@ export default async function HomePage() {
               />
 
               <div className="grid gap-5 lg:grid-cols-12">
-                {/* BIG CATEGORY STORY */}
                 {stories[0] && (
                   <Link
                     href={articleHref(stories[0])}
-                    className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 lg:col-span-6"
+                    className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 transition hover:ring-cyan-200 lg:col-span-6"
                   >
                     <div className="relative aspect-[16/9] overflow-hidden bg-slate-200">
                       <StoryImage
@@ -552,29 +567,36 @@ export default async function HomePage() {
                     </div>
 
                     <div className="p-5">
-                      <div className="text-[10px] font-black uppercase tracking-wider text-red-600">
+                      <div className="text-[10px] font-black uppercase tracking-wider text-cyan-600">
                         {category.name}
                       </div>
 
-                      <h3 className="mt-2 line-clamp-3 text-xl font-black leading-tight text-slate-950 group-hover:text-red-600 sm:text-2xl">
+                      <h3 className="mt-2 line-clamp-3 text-xl font-black leading-tight text-slate-950 transition group-hover:text-cyan-600 sm:text-2xl">
                         {stories[0].title}
                       </h3>
 
                       <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
-                        {excerpt(stories[0].content, 170)}
+                        {excerpt(
+                          stories[0].content,
+                          170
+                        )}
                       </p>
 
                       <div className="mt-4 text-xs text-slate-500">
-                        {formatDate(stories[0].created_at)}
+                        {formatDate(
+                          stories[0].created_at
+                        )}
                       </div>
                     </div>
                   </Link>
                 )}
 
-                {/* SMALL CATEGORY STORIES */}
                 <div className="grid gap-3 sm:grid-cols-2 lg:col-span-6">
                   {stories.slice(1).map((story) => (
-                    <SmallStoryCard key={story.id} story={story} />
+                    <SmallStoryCard
+                      key={story.id}
+                      story={story}
+                    />
                   ))}
                 </div>
               </div>
@@ -591,7 +613,7 @@ export default async function HomePage() {
         {/* NEWSLETTER */}
         <section className="my-10 overflow-hidden rounded-2xl bg-slate-950 px-6 py-10 text-white sm:px-10">
           <div className="mx-auto max-w-3xl text-center">
-            <div className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-red-500">
+            <div className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-cyan-400">
               Stay Updated
             </div>
 
@@ -612,8 +634,9 @@ export default async function HomePage() {
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="grid gap-8 md:grid-cols-3">
             <div>
-              <div className="text-2xl font-black">
-                JNMulee<span className="text-red-600">.</span>
+              <div className="text-2xl font-black text-slate-950">
+                JNMulee
+                <span className="text-cyan-400">.</span>
               </div>
 
               <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
@@ -623,14 +646,16 @@ export default async function HomePage() {
             </div>
 
             <div>
-              <h3 className="font-black text-slate-950">Categories</h3>
+              <h3 className="font-black text-slate-950">
+                Categories
+              </h3>
 
               <div className="mt-3 grid grid-cols-2 gap-2">
                 {categories.map((category) => (
                   <Link
                     key={category.slug}
                     href={`/category/${category.slug}`}
-                    className="text-sm text-slate-500 hover:text-red-600"
+                    className="text-sm text-slate-500 transition hover:text-cyan-600"
                   >
                     {category.name}
                   </Link>
@@ -639,19 +664,21 @@ export default async function HomePage() {
             </div>
 
             <div>
-              <h3 className="font-black text-slate-950">JNMulee News</h3>
+              <h3 className="font-black text-slate-950">
+                JNMulee News
+              </h3>
 
               <div className="mt-3 space-y-2 text-sm">
                 <Link
                   href="/news"
-                  className="block text-slate-500 hover:text-red-600"
+                  className="block text-slate-500 transition hover:text-cyan-600"
                 >
                   Latest News
                 </Link>
 
                 <Link
                   href="/"
-                  className="block text-slate-500 hover:text-red-600"
+                  className="block text-slate-500 transition hover:text-cyan-600"
                 >
                   Home
                 </Link>
