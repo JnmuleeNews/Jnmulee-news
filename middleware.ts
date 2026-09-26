@@ -2,13 +2,6 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  const pathname = request.nextUrl.pathname;
-
-  // Never protect the login page itself.
-  if (pathname === "/admin/login") {
-    return NextResponse.next();
-  }
-
   let response = NextResponse.next({
     request,
   });
@@ -21,49 +14,52 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
+
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => {
+          for (const { name, value } of cookiesToSet) {
             request.cookies.set(name, value);
-          });
+          }
 
           response = NextResponse.next({
             request,
           });
 
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
+          for (const {
+            name,
+            value,
+            options,
+          } of cookiesToSet) {
+            response.cookies.set(
+              name,
+              value,
+              options
+            );
+          }
         },
       },
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Protect /admin and everything underneath it.
-  if (pathname.startsWith("/admin")) {
-    if (!user) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/admin/login";
-      url.search = "";
-
-      return NextResponse.redirect(url);
-    }
-
-    if (user.app_metadata?.role !== "admin") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/admin/login";
-      url.search = "";
-
-      return NextResponse.redirect(url);
-    }
-  }
+  /*
+   * Refresh the Supabase session when necessary.
+   *
+   * IMPORTANT:
+   * We deliberately do NOT redirect /admin here.
+   * The browser-side admin dashboard handles the
+   * administrator check. This prevents the
+   * /admin/login <-> /admin redirect loop.
+   */
+  await supabase.auth.getUser();
 
   return response;
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: [
+    /*
+     * Run on admin pages so Supabase can refresh
+     * authentication cookies.
+     */
+    "/admin/:path*",
+  ],
 };
