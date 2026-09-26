@@ -1,19 +1,8 @@
-import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
 
-export async function middleware(request: Request) {
-  const url = new URL(request.url);
-  const pathname = url.pathname;
-
-  // The admin login page must always be accessible.
-  if (
-    pathname === "/admin/login" ||
-    pathname.startsWith("/admin/login/")
-  ) {
-    return NextResponse.next();
-  }
-
-  const response = NextResponse.next({
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next({
     request,
   });
 
@@ -23,41 +12,21 @@ export async function middleware(request: Request) {
     {
       cookies: {
         getAll() {
-          const cookieHeader =
-            request.headers.get("cookie") || "";
-
-          return cookieHeader
-            .split(";")
-            .map((cookie) => cookie.trim())
-            .filter(Boolean)
-            .map((cookie) => {
-              const index = cookie.indexOf("=");
-
-              return {
-                name:
-                  index >= 0
-                    ? cookie.slice(0, index)
-                    : cookie,
-                value:
-                  index >= 0
-                    ? decodeURIComponent(
-                        cookie.slice(index + 1)
-                      )
-                    : "",
-              };
-            });
+          return request.cookies.getAll();
         },
 
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(
-            ({ name, value, options }) => {
-              response.cookies.set(
-                name,
-                value,
-                options
-              );
-            }
-          );
+          cookiesToSet.forEach(({ name, value }) => {
+            request.cookies.set(name, value);
+          });
+
+          response = NextResponse.next({
+            request,
+          });
+
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
+          });
         },
       },
     }
@@ -67,23 +36,38 @@ export async function middleware(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    return NextResponse.redirect(
-      new URL("/admin/login", request.url)
-    );
+  const pathname = request.nextUrl.pathname;
+
+  // Allow the login page without authentication.
+  if (pathname === "/admin/login") {
+    return response;
   }
 
-  const role = user.app_metadata?.role;
+  // Protect every other /admin route.
+  if (pathname.startsWith("/admin")) {
+    if (!user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admin/login";
+      url.search = "";
 
-  if (role !== "admin") {
-    return NextResponse.redirect(
-      new URL("/", request.url)
-    );
+      return NextResponse.redirect(url);
+    }
+
+    // Only accounts with the admin role can enter.
+    if (user.app_metadata?.role !== "admin") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admin/login";
+      url.search = "";
+
+      return NextResponse.redirect(url);
+    }
   }
 
   return response;
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: [
+    "/admin/:path*",
+  ],
 };
