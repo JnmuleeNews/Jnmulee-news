@@ -1,761 +1,373 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import {
+  FormEvent,
+  useEffect,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
-
-type Permissions = {
-  can_import: boolean;
-  can_write: boolean;
-  can_publish: boolean;
-  can_manage_comments: boolean;
-};
-
-type Worker = {
-  id: string;
-  email: string;
-  display_name: string;
-  permissions: Permissions;
-  active: boolean;
-  created_at: string;
-  last_sign_in_at: string | null;
-};
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-const emptyPermissions: Permissions = {
-  can_import: false,
-  can_write: true,
-  can_publish: false,
-  can_manage_comments: false,
-};
+export default function AdminLoginPage() {
+  const router = useRouter();
 
-export default function WorkersPage() {
-  const [workers, setWorkers] = useState<Worker[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [email, setEmail] =
+    useState("");
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [password, setPassword] =
+    useState("");
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [loading, setLoading] =
+    useState(true);
 
-  const [permissions, setPermissions] =
-    useState<Permissions>({
-      ...emptyPermissions,
-    });
+  const [signingIn, setSigningIn] =
+    useState(false);
 
-  async function getAccessToken() {
-    const {
-      data,
-      error,
-    } = await supabase.auth.getSession();
-
-    if (error || !data.session) {
-      throw new Error(
-        "Your admin session has expired. Please sign in again."
-      );
-    }
-
-    return data.session.access_token;
-  }
-
-  async function loadWorkers() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const token =
-        await getAccessToken();
-
-      const response =
-        await fetch(
-          "/api/admin/workers",
-          {
-            method: "GET",
-            headers: {
-              Authorization:
-                `Bearer ${token}`,
-            },
-            cache: "no-store",
-          }
-        );
-
-      const result =
-        await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          result.error ||
-            "Unable to load workers."
-        );
-      }
-
-      setWorkers(
-        Array.isArray(
-          result.workers
-        )
-          ? result.workers
-          : []
-      );
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load workers."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [error, setError] =
+    useState("");
 
   useEffect(() => {
-    loadWorkers();
+    let mounted = true;
+
+    async function checkExistingUser() {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!mounted || !user) {
+          setLoading(false);
+          return;
+        }
+
+        const role =
+          user.app_metadata?.role;
+
+        if (role === "admin") {
+          window.location.replace(
+            "/admin"
+          );
+          return;
+        }
+
+        if (role === "worker") {
+          const bannedUntil =
+            user.banned_until;
+
+          if (
+            bannedUntil &&
+            new Date(
+              bannedUntil
+            ).getTime() >
+              Date.now()
+          ) {
+            await supabase.auth.signOut();
+
+            if (mounted) {
+              setError(
+                "This worker account is currently disabled."
+              );
+              setLoading(false);
+            }
+
+            return;
+          }
+
+          window.location.replace(
+            "/worker"
+          );
+          return;
+        }
+
+        await supabase.auth.signOut();
+
+        if (mounted) {
+          setLoading(false);
+        }
+      } catch {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    checkExistingUser();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  function updatePermission(
-    key: keyof Permissions
-  ) {
-    setPermissions(
-      (current) => ({
-        ...current,
-        [key]:
-          !current[key],
-      })
-    );
-  }
-
-  async function createWorker(
-    event: React.FormEvent
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
     setError("");
-    setSuccess("");
+    setSigningIn(true);
 
-    if (!name.trim()) {
+    const cleanEmail =
+      email.trim().toLowerCase();
+
+    if (!cleanEmail) {
       setError(
-        "Enter the worker's name."
+        "Enter your email address."
       );
+      setSigningIn(false);
       return;
     }
 
-    if (!email.trim()) {
+    if (!password) {
       setError(
-        "Enter the worker's email."
+        "Enter your password."
       );
+      setSigningIn(false);
       return;
     }
-
-    if (password.length < 8) {
-      setError(
-        "Worker password must be at least 8 characters."
-      );
-      return;
-    }
-
-    setSaving(true);
 
     try {
-      const token =
-        await getAccessToken();
+      /*
+       * Clear any stale session first.
+       * This helps prevent an old admin/worker
+       * session from causing a redirect loop.
+       */
+      await supabase.auth.signOut();
 
-      const response =
-        await fetch(
-          "/api/admin/workers",
+      const {
+        data,
+        error: signInError,
+      } =
+        await supabase.auth.signInWithPassword(
           {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Authorization:
-                `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              display_name:
-                name.trim(),
-              email:
-                email.trim(),
-              password,
-              permissions,
-            }),
+            email: cleanEmail,
+            password,
           }
         );
 
-      const result =
-        await response.json();
-
-      if (!response.ok) {
+      if (
+        signInError ||
+        !data.user
+      ) {
         throw new Error(
-          result.error ||
-            "Unable to create worker."
+          signInError?.message ||
+            "Invalid email or password."
         );
       }
 
-      setName("");
-      setEmail("");
-      setPassword("");
+      /*
+       * Read the authenticated user returned
+       * by Supabase after successful login.
+       */
+      const {
+        data: userData,
+        error:
+          userError,
+      } =
+        await supabase.auth.getUser();
 
-      setPermissions({
-        ...emptyPermissions,
-      });
+      if (
+        userError ||
+        !userData.user
+      ) {
+        await supabase.auth.signOut();
 
-      setSuccess(
-        "Worker account created successfully."
+        throw new Error(
+          "Unable to verify your account."
+        );
+      }
+
+      const user =
+        userData.user;
+
+      const role =
+        user.app_metadata?.role;
+
+      /*
+       * ADMIN
+       */
+      if (role === "admin") {
+        window.location.replace(
+          "/admin"
+        );
+        return;
+      }
+
+      /*
+       * WORKER
+       */
+      if (role === "worker") {
+        const bannedUntil =
+          user.banned_until;
+
+        if (
+          bannedUntil &&
+          new Date(
+            bannedUntil
+          ).getTime() >
+            Date.now()
+        ) {
+          await supabase.auth.signOut();
+
+          throw new Error(
+            "This worker account is currently disabled. Contact the administrator."
+          );
+        }
+
+        window.location.replace(
+          "/worker"
+        );
+        return;
+      }
+
+      /*
+       * No recognized staff role.
+       */
+      await supabase.auth.signOut();
+
+      throw new Error(
+        "This account does not have permission to access the staff area."
       );
-
-      await loadWorkers();
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Unable to create worker."
+          : "Unable to sign in."
       );
-    } finally {
-      setSaving(false);
+      setSigningIn(false);
     }
   }
 
-  async function toggleWorker(
-    worker: Worker
-  ) {
-    setError("");
-    setSuccess("");
+  if (loading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-white">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-cyan-400" />
 
-    try {
-      const token =
-        await getAccessToken();
-
-      const response =
-        await fetch(
-          "/api/admin/workers",
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Authorization:
-                `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              id: worker.id,
-              display_name:
-                worker.display_name,
-              permissions:
-                worker.permissions,
-              active:
-                !worker.active,
-            }),
-          }
-        );
-
-      const result =
-        await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          result.error ||
-            "Unable to update worker."
-        );
-      }
-
-      setSuccess(
-        worker.active
-          ? `${worker.display_name} has been disabled.`
-          : `${worker.display_name} has been enabled.`
-      );
-
-      await loadWorkers();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to update worker."
-      );
-    }
-  }
-
-  async function deleteWorker(
-    worker: Worker
-  ) {
-    const confirmed =
-      window.confirm(
-        `Delete the worker account "${worker.display_name}"? This cannot be undone.`
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setError("");
-    setSuccess("");
-
-    try {
-      const token =
-        await getAccessToken();
-
-      const response =
-        await fetch(
-          "/api/admin/workers",
-          {
-            method: "DELETE",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Authorization:
-                `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              id: worker.id,
-            }),
-          }
-        );
-
-      const result =
-        await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          result.error ||
-            "Unable to delete worker."
-        );
-      }
-
-      setSuccess(
-        `${worker.display_name} was deleted.`
-      );
-
-      await loadWorkers();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to delete worker."
-      );
-    }
-  }
-
-  function formatDate(
-    value: string | null
-  ) {
-    if (!value) {
-      return "Never";
-    }
-
-    try {
-      return new Date(
-        value
-      ).toLocaleString();
-    } catch {
-      return "Unknown";
-    }
+          <p className="text-sm font-semibold text-slate-400">
+            Checking staff session...
+          </p>
+        </div>
+      </main>
+    );
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-white">
+      <div className="w-full max-w-md">
 
-        {/* HEADER */}
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <Link
-              href="/admin"
-              className="mb-3 inline-block text-sm font-semibold text-cyan-400 hover:text-cyan-300"
-            >
-              ← Back to Admin
-            </Link>
+        {/* BRAND */}
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-cyan-400/30 bg-cyan-400/10">
+            <span className="text-2xl font-black text-cyan-300">
+              JN
+            </span>
+          </div>
 
-            <h1 className="text-3xl font-black tracking-tight">
-              Worker Management
-            </h1>
+          <h1 className="text-3xl font-black tracking-tight">
+            JNMulee News
+          </h1>
 
-            <p className="mt-2 text-sm text-slate-400">
-              Create staff accounts and control what each worker can do.
+          <p className="mt-2 text-sm text-slate-400">
+            Staff login
+          </p>
+        </div>
+
+        {/* LOGIN CARD */}
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-6 shadow-2xl sm:p-8">
+
+          <div className="mb-6">
+            <h2 className="text-xl font-black">
+              Sign in
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Admins and authorized workers can sign in here.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={loadWorkers}
-            disabled={loading}
-            className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400/20 disabled:opacity-50"
+          {error && (
+            <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-300">
+              {error}
+            </div>
+          )}
+
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5"
           >
-            {loading
-              ? "Refreshing..."
-              : "Refresh Workers"}
-          </button>
-        </div>
-
-        {/* MESSAGES */}
-        {error && (
-          <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-            {error}
-          </div>
-        )}
-
-        {success && (
-          <div className="mb-6 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-200">
-            {success}
-          </div>
-        )}
-
-        <div className="grid gap-8 lg:grid-cols-[420px_1fr]">
-
-          {/* CREATE WORKER */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl">
-            <div className="mb-6">
-              <h2 className="text-xl font-black">
-                Create Worker
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-400">
-                Give a trusted staff member their own login.
-              </p>
-            </div>
-
-            <form
-              onSubmit={createWorker}
-              className="space-y-5"
-            >
-              <div>
-                <label className="mb-2 block text-sm font-bold text-slate-200">
-                  Worker name
-                </label>
-
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(event) =>
-                    setName(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Example: John"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-bold text-slate-200">
-                  Email
-                </label>
-
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(event) =>
-                    setEmail(
-                      event.target.value
-                    )
-                  }
-                  placeholder="worker@example.com"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-bold text-slate-200">
-                  Password
-                </label>
-
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(event) =>
-                    setPassword(
-                      event.target.value
-                    )
-                  }
-                  placeholder="At least 8 characters"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400"
-                />
-              </div>
-
-              <div>
-                <h3 className="mb-3 text-sm font-black text-white">
-                  Permissions
-                </h3>
-
-                <div className="space-y-3">
-                  <PermissionBox
-                    label="Import news"
-                    description="Allow this worker to run news/feed imports."
-                    checked={
-                      permissions.can_import
-                    }
-                    onChange={() =>
-                      updatePermission(
-                        "can_import"
-                      )
-                    }
-                  />
-
-                  <PermissionBox
-                    label="Write articles"
-                    description="Allow this worker to create and edit articles."
-                    checked={
-                      permissions.can_write
-                    }
-                    onChange={() =>
-                      updatePermission(
-                        "can_write"
-                      )
-                    }
-                  />
-
-                  <PermissionBox
-                    label="Publish articles"
-                    description="Allow this worker to publish articles."
-                    checked={
-                      permissions.can_publish
-                    }
-                    onChange={() =>
-                      updatePermission(
-                        "can_publish"
-                      )
-                    }
-                  />
-
-                  <PermissionBox
-                    label="Manage comments"
-                    description="Allow this worker to moderate comments."
-                    checked={
-                      permissions.can_manage_comments
-                    }
-                    onChange={() =>
-                      updatePermission(
-                        "can_manage_comments"
-                      )
-                    }
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={saving}
-                className="w-full rounded-xl bg-cyan-400 px-5 py-3 font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+            <div>
+              <label
+                htmlFor="email"
+                className="mb-2 block text-sm font-bold text-slate-200"
               >
-                {saving
-                  ? "Creating Worker..."
-                  : "Create Worker"}
-              </button>
-            </form>
-          </section>
+                Email
+              </label>
 
-          {/* WORKER LIST */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl">
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-black">
-                  Your Workers
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-400">
-                  {workers.length} worker
-                  {workers.length === 1
-                    ? ""
-                    : "s"} registered
-                </p>
-              </div>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={(event) =>
+                  setEmail(
+                    event.target.value
+                  )
+                }
+                placeholder="you@example.com"
+                disabled={signingIn}
+                required
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400 disabled:opacity-60"
+              />
             </div>
 
-            {loading ? (
-              <div className="rounded-xl border border-slate-800 bg-slate-950 p-8 text-center text-slate-400">
-                Loading workers...
-              </div>
-            ) : workers.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950 p-10 text-center">
-                <div className="mb-3 text-4xl">
-                  👤
-                </div>
+            <div>
+              <label
+                htmlFor="password"
+                className="mb-2 block text-sm font-bold text-slate-200"
+              >
+                Password
+              </label>
 
-                <h3 className="font-bold text-white">
-                  No workers yet
-                </h3>
-
-                <p className="mt-2 text-sm text-slate-500">
-                  Create your first worker using the form.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {workers.map(
-                  (worker) => (
-                    <div
-                      key={worker.id}
-                      className="rounded-2xl border border-slate-800 bg-slate-950 p-5"
-                    >
-                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-3">
-                            <h3 className="text-lg font-black">
-                              {
-                                worker.display_name
-                              }
-                            </h3>
-
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs font-black ${
-                                worker.active
-                                  ? "bg-cyan-400/10 text-cyan-300"
-                                  : "bg-slate-800 text-slate-500"
-                              }`}
-                            >
-                              {worker.active
-                                ? "ACTIVE"
-                                : "DISABLED"}
-                            </span>
-                          </div>
-
-                          <p className="mt-1 break-all text-sm text-slate-400">
-                            {worker.email}
-                          </p>
-
-                          <p className="mt-2 text-xs text-slate-600">
-                            Last login:{" "}
-                            {formatDate(
-                              worker.last_sign_in_at
-                            )}
-                          </p>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              toggleWorker(
-                                worker
-                              )
-                            }
-                            className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-400/20"
-                          >
-                            {worker.active
-                              ? "Disable"
-                              : "Enable"}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              deleteWorker(
-                                worker
-                              )
-                            }
-                            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="mt-5 border-t border-slate-800 pt-4">
-                        <p className="mb-3 text-xs font-black uppercase tracking-wider text-slate-500">
-                          Permissions
-                        </p>
-
-                        <div className="flex flex-wrap gap-2">
-                          <PermissionBadge
-                            enabled={
-                              worker.permissions
-                                .can_import
-                            }
-                            label="Import"
-                          />
-
-                          <PermissionBadge
-                            enabled={
-                              worker.permissions
-                                .can_write
-                            }
-                            label="Write"
-                          />
-
-                          <PermissionBadge
-                            enabled={
-                              worker.permissions
-                                .can_publish
-                            }
-                            label="Publish"
-                          />
-
-                          <PermissionBadge
-                            enabled={
-                              worker.permissions
-                                .can_manage_comments
-                            }
-                            label="Comments"
-                          />
-                        </div>
-                      </div>
-                    </div>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) =>
+                  setPassword(
+                    event.target.value
                   )
-                )}
-              </div>
-            )}
-          </section>
+                }
+                placeholder="Your password"
+                disabled={signingIn}
+                required
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400 disabled:opacity-60"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={signingIn}
+              className="w-full rounded-xl bg-cyan-400 px-5 py-3.5 font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {signingIn
+                ? "Signing in..."
+                : "Sign In"}
+            </button>
+          </form>
         </div>
+
+        <p className="mt-6 text-center text-xs text-slate-600">
+          Authorized JNMulee News staff only.
+        </p>
       </div>
     </main>
-  );
-}
-
-function PermissionBox({
-  label,
-  description,
-  checked,
-  onChange,
-}: {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: () => void;
-}) {
-  return (
-    <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-800 bg-slate-950 p-3 transition hover:border-cyan-400/30">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        className="mt-1 h-4 w-4 accent-cyan-400"
-      />
-
-      <span>
-        <span className="block text-sm font-bold text-white">
-          {label}
-        </span>
-
-        <span className="mt-1 block text-xs leading-5 text-slate-500">
-          {description}
-        </span>
-      </span>
-    </label>
-  );
-}
-
-function PermissionBadge({
-  enabled,
-  label,
-}: {
-  enabled: boolean;
-  label: string;
-}) {
-  return (
-    <span
-      className={`rounded-full px-3 py-1 text-xs font-bold ${
-        enabled
-          ? "bg-cyan-400/10 text-cyan-300"
-          : "bg-slate-900 text-slate-600"
-      }`}
-    >
-      {enabled
-        ? `✓ ${label}`
-        : `— ${label}`}
-    </span>
   );
 }
