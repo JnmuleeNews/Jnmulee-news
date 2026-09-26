@@ -1196,6 +1196,12 @@ async function insertArticle(
 export async function GET(
   request: Request
 ) {
+  /*
+   * SECURITY:
+   * Authorization happens BEFORE manual detection.
+   * Therefore public/unauthenticated visitors cannot
+   * trigger a manual import.
+   */
   const authorized =
     await authorizeRequest(request);
 
@@ -1220,11 +1226,42 @@ export async function GET(
   const { searchParams } =
     new URL(request.url);
 
-  const isManualImport =
-    searchParams.get("manual") === "true";
-
   const batchParam =
     searchParams.get("batch");
+
+  /*
+   * IMPORTANT MANUAL IMPORT FIX
+   *
+   * Vercel Cron sends the CRON_SECRET.
+   *
+   * Admin sends a Supabase access token.
+   *
+   * Therefore:
+   *
+   * Cron request = automatic
+   * Admin request = manual
+   *
+   * The old system depended only on:
+   *
+   * ?manual=true
+   *
+   * This version also detects the request type
+   * from the authorization header.
+   */
+  const cronSecret =
+    process.env.CRON_SECRET;
+
+  const authorization =
+    request.headers.get("authorization");
+
+  const isCronRequest =
+    !!cronSecret &&
+    authorization ===
+      `Bearer ${cronSecret}`;
+
+  const isManualImport =
+    searchParams.get("manual") === "true" ||
+    !isCronRequest;
 
   const isManualBatch =
     batchParam !== null &&
@@ -1295,13 +1332,11 @@ export async function GET(
     /*
      * MANUAL ADMIN IMPORT
      *
-     * This is the important part.
+     * Manual Admin imports bypass the
+     * 50-minute scheduler interval.
      *
-     * When Admin calls:
-     * /api/fetch-news?manual=true
-     *
-     * the 50-minute scheduler check is
-     * completely bypassed.
+     * Existing unpublished news articles
+     * are immediately published.
      */
     if (isManualImport) {
       const {
@@ -1346,17 +1381,15 @@ export async function GET(
           pendingIds.length;
       }
 
-      /*
-       * Manual imports always begin
-       * with the first source batch.
-       */
       requestedBatch = 0;
     }
 
     /*
      * 50-MINUTE SCHEDULER CHECK
      *
-     * This does NOT run during manual=true.
+     * Only automatic requests use this check.
+     *
+     * Manual Admin imports bypass it.
      */
     if (
       !isManualBatch &&
