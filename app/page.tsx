@@ -4,7 +4,8 @@ import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import DirectAd from "@/components/DirectAd";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -126,7 +127,9 @@ function timeAgo(date: string | null) {
 
   if (Number.isNaN(timestamp)) return "";
 
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  const seconds = Math.floor(
+    (Date.now() - timestamp) / 1000
+  );
 
   if (seconds < 60) return "Just now";
 
@@ -215,6 +218,7 @@ function StoryCard({
             <div className="jnmulee-placeholder-mark">
               JN
             </div>
+
             <span>JNMulee News</span>
           </div>
         )}
@@ -420,8 +424,6 @@ export default async function HomePage() {
         .from("news")
         .select(storySelect)
         .eq("Published", true)
-        .not("image_url", "is", null)
-        .neq("image_url", "")
         .order("created_at", {
           ascending: false,
         })
@@ -431,8 +433,6 @@ export default async function HomePage() {
         .from("news")
         .select(storySelect)
         .eq("Published", true)
-        .not("image_url", "is", null)
-        .neq("image_url", "")
         .order("view_count", {
           ascending: false,
         })
@@ -482,13 +482,8 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* =========================
-          PREMIUM HEADER
-      ========================== */}
-
       <header className="jnmulee-main-header">
         <div className="jnmulee-header-inner">
-
           <Link
             href="/"
             className="jnmulee-logo"
@@ -522,10 +517,6 @@ export default async function HomePage() {
         </div>
       </header>
 
-      {/* =========================
-          CATEGORY NAVIGATION
-      ========================== */}
-
       <nav
         className="jnmulee-category-nav"
         aria-label="News categories"
@@ -543,13 +534,8 @@ export default async function HomePage() {
         </div>
       </nav>
 
-      {/* =========================
-          BREAKING NEWS
-      ========================== */}
-
       <div className="jnmulee-breaking-bar">
         <div className="jnmulee-breaking-inner">
-
           <span className="jnmulee-breaking-label">
             BREAKING
           </span>
@@ -578,22 +564,15 @@ export default async function HomePage() {
       </div>
 
       <main className="jnmulee-home">
-
-        {/* =========================
-            HERO
-        ========================== */}
-
         {featured && (
           <section className="jnmulee-hero-section">
             <div className="jnmulee-hero-grid">
-
               <StoryCard
                 story={featured}
                 large
               />
 
               <div className="jnmulee-hero-side">
-
                 <div className="jnmulee-side-heading">
                   <div>
                     <span className="jnmulee-side-heading-label">
@@ -623,21 +602,12 @@ export default async function HomePage() {
           </section>
         )}
 
-        {/* =========================
-            AD
-        ========================== */}
-
         <div className="jnmulee-ad-wrap">
           <DirectAd placement="homepage" />
         </div>
 
-        {/* =========================
-            TRENDING
-        ========================== */}
-
         {trending.length > 0 && (
           <section className="jnmulee-section">
-
             <SectionHeader
               title="Trending Now"
               eyebrow="WHAT PEOPLE ARE READING"
@@ -675,14 +645,8 @@ export default async function HomePage() {
           </section>
         )}
 
-        {/* =========================
-            MOST READ
-        ========================== */}
-
         <section className="jnmulee-section">
-
           <div className="jnmulee-most-read-box">
-
             <SectionHeader
               title="Most Read"
               eyebrow="POPULAR STORIES"
@@ -709,12 +673,7 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* =========================
-            LATEST NEWS
-        ========================== */}
-
         <section className="jnmulee-section">
-
           <SectionHeader
             title="Latest News"
             slug="news"
@@ -738,17 +697,9 @@ export default async function HomePage() {
           )}
         </section>
 
-        {/* =========================
-            AD
-        ========================== */}
-
         <div className="jnmulee-ad-wrap">
           <DirectAd placement="home_between" />
         </div>
-
-        {/* =========================
-            CATEGORY SECTIONS
-        ========================== */}
 
         {categories
           .filter(
@@ -787,16 +738,10 @@ export default async function HomePage() {
             );
           })}
 
-        {/* =========================
-            NEWSLETTER / CTA
-        ========================== */}
-
         <section className="jnmulee-newsletter">
-
           <div className="jnmulee-newsletter-glow" />
 
           <div className="jnmulee-newsletter-content">
-
             <div className="jnmulee-newsletter-label">
               JNMULEE NEWS
             </div>
@@ -823,18 +768,10 @@ export default async function HomePage() {
           </Link>
         </section>
 
-        {/* =========================
-            BOTTOM AD
-        ========================== */}
-
         <div className="jnmulee-ad-wrap jnmulee-bottom-ad">
           <DirectAd placement="home_bottom" />
         </div>
       </main>
-
-      {/* =========================
-          PREMIUM DESIGN SYSTEM
-      ========================== */}
 
       <style>{`
 
@@ -844,23 +781,16 @@ export default async function HomePage() {
           --jn-blue: #2563eb;
           --jn-blue-light: #60a5fa;
           --jn-blue-soft: #eff6ff;
-
           --jn-white: #ffffff;
           --jn-bg: #f7f9fc;
           --jn-card: #ffffff;
-
           --jn-text: #111827;
           --jn-text-soft: #526071;
           --jn-muted: #7b8796;
-
           --jn-border: #e4e9f0;
           --jn-border-dark: #d6dde8;
-
-          --jn-shadow:
-            0 8px 30px rgba(15, 23, 42, .06);
-
-          --jn-shadow-hover:
-            0 16px 45px rgba(15, 23, 42, .12);
+          --jn-shadow: 0 8px 30px rgba(15, 23, 42, .06);
+          --jn-shadow-hover: 0 16px 45px rgba(15, 23, 42, .12);
         }
 
         .jnmulee-main-header {
@@ -871,16 +801,12 @@ export default async function HomePage() {
               #0b1220 50%,
               #101b31 100%
             );
-
           color: #fff;
-
           position: sticky;
           top: 0;
           z-index: 100;
-
           box-shadow:
             0 5px 25px rgba(3, 8, 20, .22);
-
           border-bottom:
             1px solid rgba(255,255,255,.08);
         }
@@ -888,54 +814,40 @@ export default async function HomePage() {
         .jnmulee-header-inner {
           max-width: 1240px;
           margin: 0 auto;
-
           padding: 12px 18px;
-
           min-height: 70px;
-
           display: flex;
           align-items: center;
           justify-content: space-between;
-
           gap: 20px;
         }
 
         .jnmulee-logo {
           color: #fff;
           text-decoration: none;
-
           display: inline-flex;
           align-items: center;
-
           gap: 11px;
-
           min-width: 0;
         }
 
         .jnmulee-logo-mark {
           width: 42px;
           height: 42px;
-
           display: flex;
           align-items: center;
           justify-content: center;
-
           border-radius: 11px;
-
           background:
             linear-gradient(
               135deg,
               #2563eb,
               #60a5fa
             );
-
           color: #fff;
-
           font-size: 13px;
           font-weight: 1000;
-
           letter-spacing: -.5px;
-
           box-shadow:
             0 5px 18px rgba(37,99,235,.35);
         }
@@ -944,7 +856,6 @@ export default async function HomePage() {
           display: flex;
           align-items: baseline;
           gap: 5px;
-
           line-height: 1;
           white-space: nowrap;
         }
@@ -952,22 +863,16 @@ export default async function HomePage() {
         .jnmulee-logo-text strong {
           font-size:
             clamp(1.45rem, 4vw, 2rem);
-
           font-weight: 950;
-
           letter-spacing: -1.3px;
         }
 
         .jnmulee-logo-text em {
           font-style: normal;
-
           color: #60a5fa;
-
           font-size:
             clamp(.95rem, 2.5vw, 1.15rem);
-
           font-weight: 700;
-
           letter-spacing: -.3px;
         }
 
@@ -981,25 +886,17 @@ export default async function HomePage() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-
           gap: 7px;
-
           color: #fff;
           text-decoration: none;
-
           border:
             1px solid rgba(255,255,255,.17);
-
           background:
             rgba(255,255,255,.06);
-
           border-radius: 999px;
-
           padding: 9px 15px;
-
           font-size: 12px;
           font-weight: 850;
-
           transition:
             background .2s ease,
             border-color .2s ease,
@@ -1009,10 +906,8 @@ export default async function HomePage() {
         .jnmulee-search-button:hover {
           background:
             rgba(255,255,255,.12);
-
           border-color:
             rgba(255,255,255,.3);
-
           transform:
             translateY(-1px);
         }
@@ -1024,15 +919,11 @@ export default async function HomePage() {
 
         .jnmulee-category-nav {
           background: #fff;
-
           border-bottom:
             1px solid var(--jn-border);
-
           position: relative;
           z-index: 90;
-
           overflow-x: auto;
-
           scrollbar-width: none;
         }
 
@@ -1043,55 +934,38 @@ export default async function HomePage() {
         .jnmulee-category-nav-inner {
           max-width: 1240px;
           margin: 0 auto;
-
           padding: 0 18px;
-
           min-height: 47px;
-
           display: flex;
           align-items: center;
-
           gap: 25px;
-
           white-space: nowrap;
         }
 
         .jnmulee-nav-link {
           position: relative;
-
           color: #3f4a5a;
-
           text-decoration: none;
-
           font-size: 12px;
           font-weight: 800;
-
           padding: 16px 0;
-
           transition:
             color .2s ease;
         }
 
         .jnmulee-nav-link::after {
           content: "";
-
           position: absolute;
-
           left: 0;
           right: 0;
           bottom: 0;
-
           height: 3px;
-
           background:
             var(--jn-blue);
-
           transform:
             scaleX(0);
-
           transform-origin:
             center;
-
           transition:
             transform .2s ease;
         }
@@ -1109,9 +983,7 @@ export default async function HomePage() {
         .jnmulee-breaking-bar {
           background:
             var(--jn-navy);
-
           color: #fff;
-
           border-bottom:
             1px solid rgba(255,255,255,.05);
         }
@@ -1119,32 +991,22 @@ export default async function HomePage() {
         .jnmulee-breaking-inner {
           max-width: 1240px;
           margin: 0 auto;
-
           min-height: 43px;
-
           padding: 6px 18px;
-
           display: flex;
           align-items: center;
-
           gap: 10px;
         }
 
         .jnmulee-breaking-label {
           background:
             var(--jn-blue);
-
           padding: 6px 10px;
-
           border-radius: 5px;
-
           font-size: 9px;
           font-weight: 950;
-
           letter-spacing: .3px;
-
           white-space: nowrap;
-
           box-shadow:
             0 3px 12px rgba(37,99,235,.3);
         }
@@ -1152,44 +1014,31 @@ export default async function HomePage() {
         .jnmulee-breaking-live {
           display: inline-flex;
           align-items: center;
-
           gap: 5px;
-
           color: #60a5fa;
-
           font-size: 9px;
           font-weight: 950;
-
           white-space: nowrap;
         }
 
         .jnmulee-breaking-live i {
           width: 6px;
           height: 6px;
-
           display: inline-block;
-
           border-radius: 50%;
-
           background: #60a5fa;
-
           box-shadow:
             0 0 0 4px rgba(96,165,250,.1);
         }
 
         .jnmulee-breaking-title {
           flex: 1;
-
           min-width: 0;
-
           color: #fff;
-
           text-decoration: none;
-
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-
           font-size: 12px;
           font-weight: 650;
         }
@@ -1207,11 +1056,8 @@ export default async function HomePage() {
         .jnmulee-home {
           width: 100%;
           max-width: 1240px;
-
           margin: 0 auto;
-
-          padding:
-            30px 18px 75px;
+          padding: 30px 18px 75px;
         }
 
         .jnmulee-hero-section {
@@ -1220,27 +1066,20 @@ export default async function HomePage() {
 
         .jnmulee-hero-grid {
           display: grid;
-
           grid-template-columns:
             minmax(0, 1.72fr)
             minmax(300px, .9fr);
-
           gap: 24px;
         }
 
         .jnmulee-story-card {
           background: var(--jn-card);
-
           border:
             1px solid var(--jn-border);
-
           border-radius: 14px;
-
           overflow: hidden;
-
           box-shadow:
             var(--jn-shadow);
-
           transition:
             transform .22s ease,
             box-shadow .22s ease,
@@ -1250,31 +1089,24 @@ export default async function HomePage() {
         .jnmulee-story-card:hover {
           transform:
             translateY(-3px);
-
           box-shadow:
             var(--jn-shadow-hover);
-
           border-color:
             #d2dae7;
         }
 
         .jnmulee-story-link {
           display: block;
-
           color: inherit;
           text-decoration: none;
         }
 
         .jnmulee-image-wrap {
           position: relative;
-
           width: 100%;
-
           aspect-ratio: 16 / 10;
-
           background:
             #edf1f6;
-
           overflow: hidden;
         }
 
@@ -1284,7 +1116,6 @@ export default async function HomePage() {
 
         .jnmulee-story-image {
           object-fit: cover;
-
           transition:
             transform .5s ease;
         }
@@ -1297,28 +1128,20 @@ export default async function HomePage() {
 
         .jnmulee-featured-overlay {
           position: absolute;
-
           left: 16px;
           top: 16px;
-
           z-index: 2;
         }
 
         .jnmulee-featured-overlay span {
           display: inline-block;
-
           padding: 6px 9px;
-
           border-radius: 5px;
-
           background:
             rgba(11,18,32,.88);
-
           color: #fff;
-
           font-size: 8px;
           font-weight: 950;
-
           letter-spacing: .7px;
         }
 
@@ -1326,24 +1149,17 @@ export default async function HomePage() {
           display: flex;
           align-items: center;
           justify-content: center;
-
           flex-direction: column;
-
           gap: 7px;
-
           width: 100%;
-
           aspect-ratio: 16 / 10;
-
           background:
             linear-gradient(
               135deg,
               #eaf0f8,
               #f5f7fb
             );
-
           color: #8793a4;
-
           font-size: 12px;
           font-weight: 800;
         }
@@ -1351,18 +1167,13 @@ export default async function HomePage() {
         .jnmulee-placeholder-mark {
           width: 36px;
           height: 36px;
-
           display: flex;
           align-items: center;
           justify-content: center;
-
           border-radius: 9px;
-
           background:
             var(--jn-navy);
-
           color: #60a5fa;
-
           font-size: 10px;
           font-weight: 950;
         }
@@ -1378,31 +1189,21 @@ export default async function HomePage() {
         .jnmulee-story-category {
           color:
             var(--jn-blue);
-
           text-transform:
             uppercase;
-
           font-size: 9px;
-
           letter-spacing: .65px;
-
           font-weight: 950;
-
           margin-bottom: 8px;
         }
 
         .jnmulee-story-title {
           margin: 0;
-
           color:
             var(--jn-text);
-
           font-size: 1.06rem;
-
           line-height: 1.3;
-
           font-weight: 900;
-
           letter-spacing:
             -.25px;
         }
@@ -1410,21 +1211,16 @@ export default async function HomePage() {
         .jnmulee-story-title-large {
           font-size:
             clamp(1.55rem, 3vw, 2.5rem);
-
           line-height: 1.11;
-
           letter-spacing:
             -.7px;
         }
 
         .jnmulee-story-excerpt {
           margin: 12px 0 0;
-
           color:
             var(--jn-text-soft);
-
           font-size: 13.5px;
-
           line-height: 1.65;
         }
 
@@ -1432,14 +1228,10 @@ export default async function HomePage() {
           display: flex;
           gap: 7px;
           align-items: center;
-
           margin-top: 13px;
-
           color:
             var(--jn-muted);
-
           font-size: 10px;
-
           font-weight: 650;
         }
 
@@ -1451,91 +1243,65 @@ export default async function HomePage() {
         .jnmulee-hero-side {
           background:
             var(--jn-card);
-
           border:
             1px solid var(--jn-border);
-
           border-radius: 14px;
-
           padding: 18px;
-
           box-shadow:
             var(--jn-shadow);
         }
 
         .jnmulee-side-heading {
           display: flex;
-
           justify-content:
             space-between;
-
           align-items:
             center;
-
           border-bottom:
             2px solid var(--jn-blue);
-
           padding-bottom: 11px;
-
           margin-bottom: 3px;
         }
 
         .jnmulee-side-heading > div {
           display: flex;
-
           flex-direction: column;
-
           gap: 2px;
         }
 
         .jnmulee-side-heading-label {
           color:
             var(--jn-blue);
-
           font-size: 8px;
-
           letter-spacing: .9px;
-
           font-weight: 950;
         }
 
         .jnmulee-side-heading strong {
           color:
             var(--jn-text);
-
           font-size: 21px;
-
           line-height: 1;
-
           font-weight: 950;
         }
 
         .jnmulee-side-heading a {
           color:
             var(--jn-blue);
-
           text-decoration: none;
-
           font-size: 11px;
-
           font-weight: 900;
         }
 
         .jnmulee-compact-story {
           display: grid;
-
           grid-template-columns:
             86px minmax(0,1fr);
-
           gap: 12px;
-
           padding: 13px 0;
-
           border-bottom:
             1px solid #edf1f5;
-
           color: inherit;
-
           text-decoration: none;
         }
 
@@ -1545,20 +1311,16 @@ export default async function HomePage() {
 
         .jnmulee-compact-image-wrap {
           position: relative;
-
           width: 86px;
           height: 65px;
-
           border-radius: 8px;
-
           overflow: hidden;
-
-          background: #edf1f6;
+          background:
+            #edf1f6;
         }
 
         .jnmulee-compact-image {
           object-fit: cover;
-
           transition:
             transform .35s ease;
         }
@@ -1571,21 +1333,15 @@ export default async function HomePage() {
 
         .jnmulee-compact-placeholder {
           display: flex;
-
           align-items: center;
           justify-content: center;
-
           width: 86px;
           height: 65px;
-
           border-radius: 8px;
-
           background:
             var(--jn-navy);
-
           color:
             #60a5fa;
-
           font-size: 10px;
           font-weight: 950;
         }
@@ -1593,27 +1349,19 @@ export default async function HomePage() {
         .jnmulee-compact-category {
           color:
             var(--jn-blue);
-
           font-size: 8px;
-
           text-transform:
             uppercase;
-
           letter-spacing: .5px;
-
           font-weight: 950;
-
           margin-bottom: 4px;
         }
 
         .jnmulee-compact-title {
           color:
             var(--jn-text);
-
           font-size: 12.5px;
-
           line-height: 1.34;
-
           font-weight: 850;
         }
 
@@ -1626,16 +1374,13 @@ export default async function HomePage() {
         .jnmulee-compact-date {
           color:
             #8a95a4;
-
           font-size: 9px;
-
           margin-top: 5px;
         }
 
         .jnmulee-ad-wrap {
           margin:
             7px 0 38px;
-
           width: 100%;
         }
 
@@ -1645,60 +1390,40 @@ export default async function HomePage() {
 
         .jnmulee-section-header {
           display: flex;
-
           align-items: flex-end;
-
           justify-content:
             space-between;
-
           gap: 20px;
-
           border-bottom:
             1px solid var(--jn-border);
-
           padding-bottom: 10px;
-
           margin-bottom: 19px;
-
           position: relative;
         }
 
         .jnmulee-section-header::after {
           content: "";
-
           position: absolute;
-
           left: 0;
           bottom: -1px;
-
           width: 58px;
           height: 3px;
-
           background:
             var(--jn-blue);
-
           border-radius:
             3px 3px 0 0;
         }
 
         .jnmulee-section-eyebrow {
           display: flex;
-
           align-items: center;
-
           gap: 7px;
-
           color:
             var(--jn-blue);
-
           font-size: 8px;
-
           letter-spacing: .85px;
-
           font-weight: 950;
-
           margin-bottom: 3px;
-
           text-transform:
             uppercase;
         }
@@ -1706,52 +1431,37 @@ export default async function HomePage() {
         .jnmulee-eyebrow-line {
           width: 16px;
           height: 2px;
-
           background:
             var(--jn-blue);
-
           border-radius: 2px;
         }
 
         .jnmulee-section-title {
           margin: 0;
-
           color:
             var(--jn-text);
-
           font-size:
             clamp(1.45rem, 3vw, 1.85rem);
-
           line-height: 1.08;
-
           font-weight: 950;
-
           letter-spacing:
             -.5px;
         }
 
         .jnmulee-view-all {
           display: inline-flex;
-
           align-items: center;
-
           gap: 5px;
-
           color:
             var(--jn-blue);
-
           text-decoration: none;
-
           font-size: 11px;
-
           font-weight: 900;
-
           white-space: nowrap;
         }
 
         .jnmulee-view-all span {
           font-size: 15px;
-
           transition:
             transform .2s ease;
         }
@@ -1763,40 +1473,27 @@ export default async function HomePage() {
 
         .jnmulee-trending-grid {
           display: grid;
-
           grid-template-columns:
             repeat(5,minmax(0,1fr));
-
           gap: 12px;
         }
 
         .jnmulee-trending-card {
           display: grid;
-
           grid-template-columns:
             31px 1fr;
-
           gap: 9px;
-
           min-height: 112px;
-
           padding: 15px;
-
           border:
             1px solid var(--jn-border);
-
           border-radius: 10px;
-
           background:
             var(--jn-card);
-
           color: inherit;
-
           text-decoration: none;
-
           box-shadow:
             0 2px 9px rgba(15,23,42,.025);
-
           transition:
             transform .2s ease,
             border-color .2s ease,
@@ -1806,10 +1503,8 @@ export default async function HomePage() {
         .jnmulee-trending-card:hover {
           transform:
             translateY(-2px);
-
           border-color:
             #bfd1ed;
-
           box-shadow:
             0 10px 25px rgba(15,23,42,.07);
         }
@@ -1817,11 +1512,8 @@ export default async function HomePage() {
         .jnmulee-trending-number {
           color:
             #c5cedb;
-
           font-size: 21px;
-
           font-weight: 950;
-
           line-height: 1;
         }
 
@@ -1834,82 +1526,58 @@ export default async function HomePage() {
         .jnmulee-trending-category {
           color:
             var(--jn-blue);
-
           font-size: 8px;
-
           letter-spacing: .55px;
-
           text-transform:
             uppercase;
-
           font-weight: 950;
-
           margin-bottom: 5px;
         }
 
         .jnmulee-trending-title {
           color:
             var(--jn-text);
-
           font-size: 12px;
-
           line-height: 1.4;
-
           font-weight: 850;
         }
 
         .jnmulee-most-read-box {
           background:
             var(--jn-card);
-
           border:
             1px solid var(--jn-border);
-
           border-radius: 14px;
-
           padding: 20px;
-
           box-shadow:
             var(--jn-shadow);
         }
 
         .jnmulee-most-read-grid {
           display: grid;
-
           grid-template-columns:
             1fr 1fr;
-
           column-gap: 30px;
         }
 
         .jnmulee-most-read-item {
           display: grid;
-
           grid-template-columns:
             32px 82px minmax(0,1fr);
-
           align-items: center;
-
           gap: 10px;
-
           min-width: 0;
-
           padding: 12px 0;
-
           border-bottom:
             1px solid #edf1f5;
-
           color: inherit;
-
           text-decoration: none;
         }
 
         .jnmulee-most-read-number {
           color:
             #c4ccd8;
-
           font-size: 17px;
-
           text-align: center;
         }
 
@@ -1921,21 +1589,16 @@ export default async function HomePage() {
 
         .jnmulee-most-read-image-wrap {
           position: relative;
-
           width: 82px;
           height: 61px;
-
           border-radius: 7px;
-
           overflow: hidden;
-
           background:
             #edf1f6;
         }
 
         .jnmulee-most-read-image {
           object-fit: cover;
-
           transition:
             transform .35s ease;
         }
@@ -1949,19 +1612,14 @@ export default async function HomePage() {
         .jnmulee-most-read-placeholder {
           width: 82px;
           height: 61px;
-
           display: flex;
           align-items: center;
           justify-content: center;
-
           border-radius: 7px;
-
           background:
             var(--jn-navy);
-
           color:
             #60a5fa;
-
           font-size: 10px;
           font-weight: 950;
         }
@@ -1969,11 +1627,8 @@ export default async function HomePage() {
         .jnmulee-most-read-title {
           color:
             var(--jn-text);
-
           font-size: 12.5px;
-
           line-height: 1.35;
-
           font-weight: 850;
         }
 
@@ -1986,72 +1641,53 @@ export default async function HomePage() {
         .jnmulee-most-read-views {
           color:
             var(--jn-blue);
-
           font-size: 9px;
-
           font-weight: 800;
-
           margin-top: 5px;
         }
 
         .jnmulee-empty-message {
           color:
             var(--jn-muted);
-
           font-size: 13px;
-
           padding:
             5px 0 15px;
         }
 
         .jnmulee-news-grid {
           display: grid;
-
           grid-template-columns:
             repeat(3,minmax(0,1fr));
-
           gap: 20px;
         }
 
         .jnmulee-category-grid {
           display: grid;
-
           grid-template-columns:
             repeat(4,minmax(0,1fr));
-
           gap: 18px;
         }
 
         .jnmulee-empty {
           border:
             1px dashed #cbd4df;
-
           border-radius: 12px;
-
           padding: 38px;
-
           text-align: center;
-
           color:
             var(--jn-muted);
-
           background:
             rgba(255,255,255,.6);
         }
 
         .jnmulee-newsletter {
           position: relative;
-
           overflow: hidden;
-
           margin:
             48px 0 36px;
-
           padding:
             34px 36px;
-
           border-radius: 17px;
-
           background:
             linear-gradient(
               135deg,
@@ -2059,33 +1695,23 @@ export default async function HomePage() {
               #0d1830 60%,
               #13244a
             );
-
           color: #fff;
-
           display: flex;
-
           align-items: center;
-
           justify-content:
             space-between;
-
           gap: 30px;
-
           box-shadow:
             0 15px 45px rgba(11,18,32,.16);
         }
 
         .jnmulee-newsletter::before {
           content: "";
-
           position: absolute;
-
           left: 0;
           top: 0;
-
           width: 4px;
           height: 100%;
-
           background:
             linear-gradient(
               #2563eb,
@@ -2095,21 +1721,15 @@ export default async function HomePage() {
 
         .jnmulee-newsletter-glow {
           position: absolute;
-
           width: 300px;
           height: 300px;
-
           right: -100px;
           top: -140px;
-
           border-radius: 50%;
-
           background:
             rgba(37,99,235,.18);
-
           filter:
             blur(8px);
-
           pointer-events: none;
         }
 
@@ -2121,26 +1741,18 @@ export default async function HomePage() {
         .jnmulee-newsletter-label {
           color:
             #60a5fa;
-
           font-size: 9px;
-
           font-weight: 950;
-
           letter-spacing: 1.1px;
-
           margin-bottom: 8px;
         }
 
         .jnmulee-newsletter h2 {
           margin: 0;
-
           font-size:
             clamp(1.75rem,4vw,2.5rem);
-
           line-height: 1.04;
-
           font-weight: 950;
-
           letter-spacing:
             -.8px;
         }
@@ -2152,52 +1764,34 @@ export default async function HomePage() {
 
         .jnmulee-newsletter p {
           max-width: 560px;
-
           margin:
             11px 0 0;
-
           color:
             #b9c6d9;
-
           line-height: 1.6;
-
           font-size: 13px;
         }
 
         .jnmulee-newsletter-button {
           position: relative;
           z-index: 2;
-
           flex-shrink: 0;
-
           display: inline-flex;
-
           align-items: center;
-
           gap: 8px;
-
           background:
             #2563eb;
-
           color: #fff;
-
           text-decoration: none;
-
           border:
             1px solid rgba(255,255,255,.08);
-
           border-radius: 999px;
-
           padding:
             12px 18px;
-
           font-size: 11px;
-
           font-weight: 900;
-
           box-shadow:
             0 8px 20px rgba(37,99,235,.25);
-
           transition:
             transform .2s ease,
             background .2s ease;
@@ -2206,7 +1800,6 @@ export default async function HomePage() {
         .jnmulee-newsletter-button:hover {
           background:
             #1d4ed8;
-
           transform:
             translateY(-2px);
         }
@@ -2219,12 +1812,7 @@ export default async function HomePage() {
           margin-top: 15px;
         }
 
-        /* =========================
-           RESPONSIVE TABLET
-        ========================== */
-
         @media (max-width:1050px) {
-
           .jnmulee-trending-grid {
             grid-template-columns:
               repeat(3,minmax(0,1fr));
@@ -2237,7 +1825,6 @@ export default async function HomePage() {
         }
 
         @media (max-width:900px) {
-
           .jnmulee-hero-grid {
             grid-template-columns: 1fr;
           }
@@ -2260,7 +1847,6 @@ export default async function HomePage() {
           .jnmulee-newsletter {
             align-items:
               flex-start;
-
             flex-direction:
               column;
           }
@@ -2270,16 +1856,10 @@ export default async function HomePage() {
           }
         }
 
-        /* =========================
-           MOBILE
-        ========================== */
-
         @media (max-width:650px) {
-
           .jnmulee-header-inner {
             padding:
               11px 14px;
-
             min-height: 62px;
           }
 
@@ -2290,9 +1870,7 @@ export default async function HomePage() {
           .jnmulee-logo-mark {
             width: 36px;
             height: 36px;
-
             border-radius: 9px;
-
             font-size: 11px;
           }
 
@@ -2303,7 +1881,6 @@ export default async function HomePage() {
           .jnmulee-logo-text strong {
             font-size:
               1.35rem;
-
             letter-spacing:
               -1px;
           }
@@ -2316,9 +1893,7 @@ export default async function HomePage() {
           .jnmulee-search-button {
             width: 36px;
             height: 36px;
-
             padding: 0;
-
             border-radius: 50%;
           }
 
@@ -2333,13 +1908,11 @@ export default async function HomePage() {
           .jnmulee-category-nav-inner {
             padding:
               0 14px;
-
             gap: 19px;
           }
 
           .jnmulee-nav-link {
             font-size: 11px;
-
             padding:
               14px 0;
           }
@@ -2347,7 +1920,6 @@ export default async function HomePage() {
           .jnmulee-breaking-inner {
             padding:
               6px 14px;
-
             min-height: 40px;
           }
 
@@ -2376,7 +1948,6 @@ export default async function HomePage() {
           .jnmulee-story-title-large {
             font-size:
               1.55rem;
-
             line-height:
               1.15;
           }
@@ -2400,7 +1971,6 @@ export default async function HomePage() {
           .jnmulee-category-grid {
             grid-template-columns:
               1fr;
-
             gap: 15px;
           }
 
@@ -2432,7 +2002,6 @@ export default async function HomePage() {
           .jnmulee-most-read-item {
             grid-template-columns:
               30px 76px minmax(0,1fr);
-
             gap: 8px;
           }
 
@@ -2450,17 +2019,14 @@ export default async function HomePage() {
           .jnmulee-newsletter {
             padding:
               26px 24px;
-
             margin:
               38px 0 28px;
           }
 
           .jnmulee-newsletter-button {
             width: 100%;
-
             justify-content:
               center;
-
             text-align: center;
           }
 
@@ -2470,23 +2036,15 @@ export default async function HomePage() {
           }
         }
 
-        /* =========================
-           ACCESSIBILITY
-        ========================== */
-
         @media (prefers-reduced-motion: reduce) {
-
           *,
           *::before,
           *::after {
             scroll-behavior: auto !important;
-
             transition-duration:
               .01ms !important;
-
             animation-duration:
               .01ms !important;
-
             animation-iteration-count:
               1 !important;
           }
