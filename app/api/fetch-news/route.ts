@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 
@@ -9,26 +10,12 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-/**
- * Authorize the importer.
- *
- * Allowed:
- * 1. Vercel Cron using CRON_SECRET.
- * 2. A logged-in Supabase user whose app_metadata.role is "admin".
- *
- * Denied:
- * - Public/anonymous visitors.
- * - Users without the admin role.
- */
 async function authorizeRequest(
   request: Request
 ): Promise<boolean> {
   const cronSecret = process.env.CRON_SECRET;
+  const authorization = request.headers.get("authorization");
 
-  const authorization =
-    request.headers.get("authorization");
-
-  // Allow Vercel Cron.
   if (
     cronSecret &&
     authorization === `Bearer ${cronSecret}`
@@ -36,13 +23,11 @@ async function authorizeRequest(
     return true;
   }
 
-  // Manual admin request must contain a Supabase access token.
   if (!authorization?.startsWith("Bearer ")) {
     return false;
   }
 
-  const accessToken =
-    authorization.slice(7).trim();
+  const accessToken = authorization.slice(7).trim();
 
   if (!accessToken) {
     return false;
@@ -62,9 +47,7 @@ async function authorizeRequest(
   const {
     data: { user },
     error,
-  } = await authClient.auth.getUser(
-    accessToken
-  );
+  } = await authClient.auth.getUser(accessToken);
 
   if (error || !user) {
     return false;
@@ -703,7 +686,6 @@ async function fetchArticlePage(
 
       try {
         const data = JSON.parse(jsonText);
-
         const candidates =
           Array.isArray(data) ? data : [data];
 
@@ -804,7 +786,6 @@ async function fetchArticlePage(
 
       try {
         const data = JSON.parse(jsonText);
-
         const candidates =
           Array.isArray(data) ? data : [data];
 
@@ -1004,8 +985,6 @@ ${material.text}
 TASK
 
 Create a completely original JNMulee News article from the verified reporting material above.
-
-This is an editorial reconstruction, NOT a summary and NOT a sentence-by-sentence rewrite.
 
 Write the article from scratch.
 
@@ -1217,18 +1196,6 @@ async function insertArticle(
 export async function GET(
   request: Request
 ) {
-  /*
-   * SECURITY CHECK
-   *
-   * This must happen before:
-   * - loading sources
-   * - calling RSS feeds
-   * - calling OpenAI
-   * - writing to Supabase
-   *
-   * Therefore an unauthorized visitor
-   * cannot trigger the importer.
-   */
   const authorized =
     await authorizeRequest(request);
 
@@ -1253,21 +1220,8 @@ export async function GET(
   const { searchParams } =
     new URL(request.url);
 
-  /*
-   * MANUAL IMPORT FLAG
-   *
-   * The Admin page calls:
-   *
-   * /api/fetch-news?manual=true
-   *
-   * This is different from the normal
-   * scheduled/Cron importer.
-   */
-  const manualParam =
-    searchParams.get("manual");
-
   const isManualImport =
-    manualParam === "true";
+    searchParams.get("manual") === "true";
 
   const batchParam =
     searchParams.get("batch");
@@ -1341,15 +1295,13 @@ export async function GET(
     /*
      * MANUAL ADMIN IMPORT
      *
-     * When the Admin page calls:
+     * This is the important part.
      *
+     * When Admin calls:
      * /api/fetch-news?manual=true
      *
-     * publish existing pending articles
-     * immediately.
-     *
-     * This intentionally bypasses the
-     * scheduled 50-minute claim check.
+     * the 50-minute scheduler check is
+     * completely bypassed.
      */
     if (isManualImport) {
       const {
@@ -1395,21 +1347,16 @@ export async function GET(
       }
 
       /*
-       * Manual Admin imports start from
-       * the first source batch and do not
-       * wait for the scheduled interval.
+       * Manual imports always begin
+       * with the first source batch.
        */
       requestedBatch = 0;
     }
 
     /*
-     * SCHEDULED IMPORT
+     * 50-MINUTE SCHEDULER CHECK
      *
-     * The Supabase RPC performs the
-     * timing check AND batch assignment
-     * atomically.
-     *
-     * Manual imports bypass this section.
+     * This does NOT run during manual=true.
      */
     if (
       !isManualBatch &&
@@ -1434,10 +1381,6 @@ export async function GET(
       const batch =
         Number(claimedBatch);
 
-      /*
-       * -1 means the 50-minute window
-       * has not elapsed.
-       */
       if (batch < 0) {
         return Response.json(
           {
@@ -1556,9 +1499,6 @@ export async function GET(
               continue;
             }
 
-            /*
-             * Duplicate protection.
-             */
             const {
               data: existing,
               error:
@@ -1590,9 +1530,6 @@ export async function GET(
               continue;
             }
 
-            /*
-             * Get full article page.
-             */
             const articlePage =
               await fetchArticlePage(
                 item.link
@@ -1609,11 +1546,6 @@ export async function GET(
                 articlePage.imageUrl
               );
 
-            /*
-             * Every NEW automatically
-             * published article must have
-             * an image.
-             */
             if (
               !material.imageUrl ||
               !isSafeUrl(
@@ -1625,9 +1557,6 @@ export async function GET(
               continue;
             }
 
-            /*
-             * Reject thin source material.
-             */
             if (
               wordCount(
                 material.text
@@ -1644,9 +1573,6 @@ export async function GET(
                 material.text
               );
 
-            /*
-             * Generate original article.
-             */
             const article =
               await generateJnmuleeArticle(
                 material
