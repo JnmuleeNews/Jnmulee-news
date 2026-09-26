@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
-const supabase = createClient(
+const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
@@ -55,9 +55,9 @@ function formatDate(value: string) {
 export default function WorkerDashboard() {
   const router = useRouter();
 
+  const [userId, setUserId] = useState("");
   const [workerName, setWorkerName] = useState("");
   const [workerEmail, setWorkerEmail] = useState("");
-
   const [posts, setPosts] = useState<Post[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -87,23 +87,24 @@ export default function WorkerDashboard() {
     try {
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
 
-      if (!user) {
-        router.replace("/admin/login");
+      if (userError || !user) {
+        router.replace("/worker/login");
         return;
       }
 
       const role = user.app_metadata?.role;
 
-      if (role !== "worker") {
-        if (role === "admin") {
-          router.replace("/admin");
-        } else {
-          await supabase.auth.signOut();
-          router.replace("/admin/login");
-        }
+      if (role === "admin") {
+        router.replace("/admin");
+        return;
+      }
 
+      if (role !== "worker") {
+        await supabase.auth.signOut();
+        router.replace("/worker/login");
         return;
       }
 
@@ -112,9 +113,11 @@ export default function WorkerDashboard() {
         new Date(user.banned_until).getTime() > Date.now()
       ) {
         await supabase.auth.signOut();
-        router.replace("/admin/login");
+        router.replace("/worker/login");
         return;
       }
+
+      setUserId(user.id);
 
       setWorkerName(
         user.user_metadata?.display_name ||
@@ -124,7 +127,7 @@ export default function WorkerDashboard() {
 
       setWorkerEmail(user.email || "");
 
-      await loadPosts();
+      await loadPosts(user.id);
     } catch (err) {
       console.error(err);
       setError("Unable to load your worker account.");
@@ -133,20 +136,20 @@ export default function WorkerDashboard() {
     }
   }
 
-  async function loadPosts() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  async function loadPosts(currentUserId?: string) {
+    const id = currentUserId || userId;
 
-    if (!user) return;
+    if (!id) return;
 
     const { data, error: postsError } = await supabase
       .from("news")
       .select(
         "id,title,slug,content,category,image_url,Published,created_at"
       )
-      .eq("author_id", user.id)
-      .order("created_at", { ascending: false });
+      .eq("author_id", id)
+      .order("created_at", {
+        ascending: false,
+      });
 
     if (postsError) {
       console.error(postsError);
@@ -165,8 +168,6 @@ export default function WorkerDashboard() {
     setCategory("Top Stories");
     setImageUrl("");
     setPublished(true);
-    setError("");
-    setSuccess("");
   }
 
   function startEdit(post: Post) {
@@ -187,8 +188,12 @@ export default function WorkerDashboard() {
     });
   }
 
-  async function savePost(event: React.FormEvent<HTMLFormElement>) {
+  async function savePost(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
+
+    if (saving) return;
 
     setSaving(true);
     setError("");
@@ -200,19 +205,21 @@ export default function WorkerDashboard() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.replace("/admin/login");
+        router.replace("/worker/login");
         return;
       }
 
       if (user.app_metadata?.role !== "worker") {
         await supabase.auth.signOut();
-        router.replace("/admin/login");
+        router.replace("/worker/login");
         return;
       }
 
       const cleanTitle = title.trim();
       const cleanContent = content.trim();
       const cleanImageUrl = imageUrl.trim();
+      const finalSlug =
+        slug.trim() || makeSlug(cleanTitle);
 
       if (!cleanTitle) {
         setError("Enter a headline.");
@@ -224,30 +231,19 @@ export default function WorkerDashboard() {
         return;
       }
 
-      if (published && !cleanImageUrl) {
-        setError(
-          "A published article must have an image. Add an image URL or save the article as a draft."
-        );
-        return;
-      }
-
-      const finalSlug =
-        slug.trim() || makeSlug(cleanTitle);
-
       if (!finalSlug) {
         setError("Enter a valid headline.");
         return;
       }
 
+      if (published && !cleanImageUrl) {
+        setError(
+          "A published article must have an image. Add an image URL or save it as a draft."
+        );
+        return;
+      }
+
       if (editingId) {
-        /*
-         * IMPORTANT:
-         * author_id is included in the filter.
-         *
-         * This means a worker cannot edit another
-         * worker's article even if they manually
-         * change the article ID in the browser.
-         */
         const { error: updateError } = await supabase
           .from("news")
           .update({
@@ -268,10 +264,6 @@ export default function WorkerDashboard() {
 
         setSuccess("Your post has been updated.");
       } else {
-        /*
-         * author_id is assigned to the authenticated
-         * worker's own user ID.
-         */
         const { error: insertError } = await supabase
           .from("news")
           .insert({
@@ -296,36 +288,25 @@ export default function WorkerDashboard() {
         );
       }
 
-      await loadPosts();
+      await loadPosts(user.id);
 
       resetForm();
-
-      setSuccess(
-        editingId
-          ? "Your post has been updated."
-          : published
-          ? "Your post has been published."
-          : "Your post has been saved as a draft."
-      );
-
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
     } catch (err) {
       console.error(err);
-      setError("Something went wrong while saving your post.");
+      setError("Something went wrong while saving the post.");
     } finally {
       setSaving(false);
     }
   }
 
   async function logout() {
+    if (loggingOut) return;
+
     setLoggingOut(true);
 
     await supabase.auth.signOut();
 
-    window.location.replace("/admin/login");
+    window.location.replace("/worker/login");
   }
 
   if (loading) {
@@ -333,7 +314,6 @@ export default function WorkerDashboard() {
       <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
         <div className="text-center">
           <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-cyan-400" />
-
           <p className="text-sm font-semibold text-slate-400">
             Loading worker dashboard...
           </p>
@@ -344,37 +324,29 @@ export default function WorkerDashboard() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      {/* HEADER */}
       <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-400/10 text-sm font-black text-cyan-300">
-              JN
-            </div>
-
-            <div>
-              <h1 className="font-black">
-                JNMulee News
-              </h1>
-
-              <p className="text-xs text-slate-500">
-                Worker Dashboard
-              </p>
-            </div>
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
+          <div>
+            <h1 className="text-xl font-black">
+              <span className="text-white">JNMulee</span>{" "}
+              <span className="text-cyan-400">News</span>
+            </h1>
+            <p className="text-xs text-slate-500">
+              Worker Dashboard
+            </p>
           </div>
 
           <button
             onClick={logout}
             disabled={loggingOut}
-            className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-bold text-slate-300 transition hover:border-cyan-400 hover:text-cyan-300 disabled:opacity-50"
+            className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-bold text-slate-300 hover:border-cyan-400 hover:text-cyan-300 disabled:opacity-50"
           >
             {loggingOut ? "Signing out..." : "Sign Out"}
           </button>
         </div>
       </header>
 
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* WELCOME */}
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         <section className="mb-8 rounded-2xl border border-slate-800 bg-slate-900 p-6">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-400">
             Worker Account
@@ -388,15 +360,13 @@ export default function WorkerDashboard() {
             {workerEmail}
           </p>
 
-          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-xs font-bold text-cyan-300">
-            <span className="h-2 w-2 rounded-full bg-cyan-400" />
+          <div className="mt-4 inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-xs font-bold text-cyan-300">
             Worker Access
           </div>
         </section>
 
-        {/* CREATE / EDIT */}
         <section className="mb-10 rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
-          <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div className="mb-6 flex items-center justify-between gap-4">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-400">
                 {editingId ? "Edit Post" : "Create Post"}
@@ -404,7 +374,7 @@ export default function WorkerDashboard() {
 
               <h3 className="mt-1 text-2xl font-black">
                 {editingId
-                  ? "Fix or update your article"
+                  ? "Edit your article"
                   : "Write a new article"}
               </h3>
             </div>
@@ -415,19 +385,19 @@ export default function WorkerDashboard() {
                 onClick={resetForm}
                 className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-bold text-slate-300 hover:border-cyan-400 hover:text-cyan-300"
               >
-                Cancel Edit
+                Cancel
               </button>
             )}
           </div>
 
           {error && (
-            <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-300">
+            <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
               {error}
             </div>
           )}
 
           {success && (
-            <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm leading-6 text-cyan-300">
+            <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-300">
               {success}
             </div>
           )}
@@ -437,19 +407,18 @@ export default function WorkerDashboard() {
             className="space-y-5"
           >
             <div>
-              <label className="mb-2 block text-sm font-bold text-slate-200">
+              <label className="mb-2 block text-sm font-bold">
                 Headline
               </label>
 
               <input
                 value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value);
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setTitle(value);
 
                   if (!editingId && !slug) {
-                    setSlug(
-                      makeSlug(e.target.value)
-                    );
+                    setSlug(makeSlug(value));
                   }
                 }}
                 required
@@ -459,14 +428,14 @@ export default function WorkerDashboard() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-bold text-slate-200">
+              <label className="mb-2 block text-sm font-bold">
                 Slug
               </label>
 
               <input
                 value={slug}
-                onChange={(e) =>
-                  setSlug(e.target.value)
+                onChange={(event) =>
+                  setSlug(makeSlug(event.target.value))
                 }
                 placeholder="article-url-slug"
                 className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-600 focus:border-cyan-400"
@@ -474,22 +443,19 @@ export default function WorkerDashboard() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-bold text-slate-200">
+              <label className="mb-2 block text-sm font-bold">
                 Category
               </label>
 
               <select
                 value={category}
-                onChange={(e) =>
-                  setCategory(e.target.value)
+                onChange={(event) =>
+                  setCategory(event.target.value)
                 }
                 className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-400"
               >
                 {categories.map((item) => (
-                  <option
-                    key={item}
-                    value={item}
-                  >
+                  <option key={item} value={item}>
                     {item}
                   </option>
                 ))}
@@ -497,61 +463,59 @@ export default function WorkerDashboard() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-bold text-slate-200">
+              <label className="mb-2 block text-sm font-bold">
                 Image URL
               </label>
 
               <input
+                type="url"
                 value={imageUrl}
-                onChange={(e) =>
-                  setImageUrl(e.target.value)
+                onChange={(event) =>
+                  setImageUrl(event.target.value)
                 }
                 placeholder="https://example.com/image.jpg"
-                type="url"
                 className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-600 focus:border-cyan-400"
               />
 
-              <p className="mt-2 text-xs text-slate-600">
+              <p className="mt-2 text-xs text-slate-500">
                 A published article must have an image.
               </p>
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-bold text-slate-200">
+              <label className="mb-2 block text-sm font-bold">
                 Article Content
               </label>
 
               <textarea
                 value={content}
-                onChange={(e) =>
-                  setContent(e.target.value)
+                onChange={(event) =>
+                  setContent(event.target.value)
                 }
                 required
                 rows={16}
-                placeholder="Write your article here..."
+                placeholder="Write the complete article here..."
                 className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-600 focus:border-cyan-400"
               />
             </div>
 
-            <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
+            <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 p-4">
               <input
                 type="checkbox"
                 checked={published}
-                onChange={(e) =>
-                  setPublished(
-                    e.target.checked
-                  )
+                onChange={(event) =>
+                  setPublished(event.target.checked)
                 }
                 className="h-5 w-5 accent-cyan-400"
               />
 
               <span>
-                <span className="block text-sm font-bold">
+                <span className="block font-bold">
                   Publish immediately
                 </span>
 
-                <span className="block text-xs text-slate-500">
-                  Turn this off to save the article as a draft.
+                <span className="text-xs text-slate-500">
+                  Turn this off to save a draft.
                 </span>
               </span>
             </label>
@@ -559,57 +523,58 @@ export default function WorkerDashboard() {
             <button
               type="submit"
               disabled={saving}
-              className="w-full rounded-xl bg-cyan-400 px-5 py-3.5 font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-xl bg-cyan-400 px-5 py-3.5 font-black text-slate-950 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving
                 ? "Saving..."
                 : editingId
                 ? "Update My Post"
                 : published
-                ? "Publish My Post"
+                ? "Publish Post"
                 : "Save Draft"}
             </button>
           </form>
         </section>
 
-        {/* MY POSTS */}
-        <section>
-          <div className="mb-5">
+        <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
+          <div className="mb-6">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-400">
-              Your Content
+              My Posts
             </p>
 
             <h3 className="mt-1 text-2xl font-black">
-              My Posts
+              Your Articles
             </h3>
-
-            <p className="mt-1 text-sm text-slate-500">
-              You can only see and edit posts created by your worker account.
-            </p>
           </div>
 
           {posts.length === 0 ? (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center">
-              <p className="font-bold text-slate-300">
-                You have not created any posts yet.
-              </p>
-
-              <p className="mt-2 text-sm text-slate-500">
-                Create your first article above.
-              </p>
+            <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500">
+              You have not created any posts yet.
             </div>
           ) : (
             <div className="space-y-4">
               {posts.map((post) => (
                 <article
                   key={post.id}
-                  className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+                  className="rounded-xl border border-slate-800 bg-slate-950 p-5"
                 >
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <div>
+                      <h4 className="text-lg font-black">
+                        {post.title}
+                      </h4>
+
+                      <p className="mt-2 text-xs text-slate-500">
+                        {formatDate(post.created_at)}
+                      </p>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
+                          {post.category || "News"}
+                        </span>
+
                         <span
-                          className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
                             post.Published
                               ? "bg-cyan-400/10 text-cyan-300"
                               : "bg-slate-800 text-slate-400"
@@ -619,33 +584,13 @@ export default function WorkerDashboard() {
                             ? "Published"
                             : "Draft"}
                         </span>
-
-                        {post.category && (
-                          <span className="rounded-full bg-slate-800 px-2.5 py-1 text-[10px] font-black uppercase text-slate-400">
-                            {post.category}
-                          </span>
-                        )}
                       </div>
-
-                      <h4 className="text-lg font-black">
-                        {post.title}
-                      </h4>
-
-                      <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
-                        {post.content}
-                      </p>
-
-                      <p className="mt-3 text-xs text-slate-600">
-                        Created {formatDate(post.created_at)}
-                      </p>
                     </div>
 
                     <button
                       type="button"
-                      onClick={() =>
-                        startEdit(post)
-                      }
-                      className="shrink-0 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2.5 text-sm font-black text-cyan-300 transition hover:bg-cyan-400/20"
+                      onClick={() => startEdit(post)}
+                      className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-bold text-slate-300 hover:border-cyan-400 hover:text-cyan-300"
                     >
                       Edit My Post
                     </button>
@@ -654,20 +599,6 @@ export default function WorkerDashboard() {
               ))}
             </div>
           )}
-        </section>
-
-        {/* SECURITY NOTICE */}
-        <section className="mt-10 rounded-2xl border border-cyan-400/10 bg-cyan-400/5 p-6">
-          <h3 className="font-black text-cyan-300">
-            Worker Access
-          </h3>
-
-          <p className="mt-2 text-sm leading-6 text-slate-400">
-            Your account is limited to creating, publishing,
-            and editing your own content. You cannot access
-            OpenAI settings, news feeds, advertisements,
-            administrator settings, or another worker&apos;s posts.
-          </p>
         </section>
       </div>
     </main>
