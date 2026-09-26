@@ -1253,6 +1253,22 @@ export async function GET(
   const { searchParams } =
     new URL(request.url);
 
+  /*
+   * MANUAL IMPORT FLAG
+   *
+   * The Admin page calls:
+   *
+   * /api/fetch-news?manual=true
+   *
+   * This is different from the normal
+   * scheduled/Cron importer.
+   */
+  const manualParam =
+    searchParams.get("manual");
+
+  const isManualImport =
+    manualParam === "true";
+
   const batchParam =
     searchParams.get("batch");
 
@@ -1283,6 +1299,7 @@ export async function GET(
     skippedPoorQuality: 0,
     articlePagesFetched: 0,
     aiGenerated: 0,
+    manuallyPublished: 0,
   };
 
   const errors: string[] = [];
@@ -1322,13 +1339,82 @@ export async function GET(
       );
 
     /*
+     * MANUAL ADMIN IMPORT
+     *
+     * When the Admin page calls:
+     *
+     * /api/fetch-news?manual=true
+     *
+     * publish existing pending articles
+     * immediately.
+     *
+     * This intentionally bypasses the
+     * scheduled 50-minute claim check.
+     */
+    if (isManualImport) {
+      const {
+        data: pendingNews,
+        error: pendingError,
+      } = await supabase
+        .from("news")
+        .select("id")
+        .eq("Published", false);
+
+      if (pendingError) {
+        throw new Error(
+          `Unable to load pending news: ${pendingError.message}`
+        );
+      }
+
+      const pendingIds =
+        (pendingNews || []).map(
+          (item) => item.id
+        );
+
+      if (pendingIds.length > 0) {
+        const {
+          error: publishError,
+        } = await supabase
+          .from("news")
+          .update({
+            Published: true,
+          })
+          .in("id", pendingIds);
+
+        if (publishError) {
+          throw new Error(
+            `Unable to publish pending news: ${publishError.message}`
+          );
+        }
+
+        stats.manuallyPublished =
+          pendingIds.length;
+
+        stats.articlesPublished =
+          pendingIds.length;
+      }
+
+      /*
+       * Manual Admin imports start from
+       * the first source batch and do not
+       * wait for the scheduled interval.
+       */
+      requestedBatch = 0;
+    }
+
+    /*
      * SCHEDULED IMPORT
      *
      * The Supabase RPC performs the
      * timing check AND batch assignment
      * atomically.
+     *
+     * Manual imports bypass this section.
      */
-    if (!isManualBatch) {
+    if (
+      !isManualBatch &&
+      !isManualImport
+    ) {
       const {
         data: claimedBatch,
         error: claimError,
@@ -1407,7 +1493,10 @@ export async function GET(
           totalBatches,
           sourceStart,
           sourcesProcessed: 0,
-          articlesPublished: 0,
+          articlesPublished:
+            stats.articlesPublished,
+          manuallyPublished:
+            stats.manuallyPublished,
           articlesSkipped: 0,
           durationMs:
             Date.now() - startedAt,
@@ -1521,8 +1610,9 @@ export async function GET(
               );
 
             /*
-             * Every published article
-             * must have an image.
+             * Every NEW automatically
+             * published article must have
+             * an image.
              */
             if (
               !material.imageUrl ||
@@ -1664,8 +1754,13 @@ export async function GET(
     return Response.json(
       {
         success: true,
-        message:
-          "JNMulee News batch completed. Articles were reconstructed in original JNMulee News wording and published only when they met the image and 180-word quality requirements.",
+        message: isManualImport
+          ? `Manual import completed. ${stats.manuallyPublished} pending article(s) were published and ${Math.max(
+              0,
+              stats.articlesPublished -
+                stats.manuallyPublished
+            )} new article(s) were imported.`
+          : "JNMulee News batch completed. Articles were reconstructed in original JNMulee News wording and published only when they met the image and 180-word quality requirements.",
         batch,
         totalSources:
           allSources.length,
