@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 
@@ -11,119 +10,20 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-/*
- * Refresh public pages after an article is published.
- */
-function refreshPublishedPages() {
-  try {
-    revalidatePath("/", "page");
-    revalidatePath("/news", "page");
-    revalidatePath("/category/[category]", "page");
-    revalidatePath("/news/[slug]", "page");
-    revalidatePath("/sitemap.xml", "page");
-  } catch (error) {
-    console.error(
-      "Unable to refresh published pages:",
-      error
-    );
-  }
-}
-
-/*
- * AUTHORIZE REQUEST
- *
- * Accepted:
- * 1. Vercel Cron using CRON_SECRET
- * 2. Logged-in Supabase admin using access token
- */
-async function authorizeRequest(
-  request: Request
-): Promise<boolean> {
-  const cronSecret =
-    process.env.CRON_SECRET;
-
-  const authorization =
-    request.headers.get("authorization");
-
-  if (
-    cronSecret &&
-    authorization ===
-      `Bearer ${cronSecret}`
-  ) {
-    return true;
-  }
-
-  if (
-    !authorization?.startsWith(
-      "Bearer "
-    )
-  ) {
-    return false;
-  }
-
-  const accessToken =
-    authorization
-      .slice(7)
-      .trim();
-
-  if (!accessToken) {
-    return false;
-  }
-
-  const authClient =
-    createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
-
-  const {
-    data: { user },
-    error,
-  } =
-    await authClient.auth.getUser(
-      accessToken
-    );
-
-  if (error || !user) {
-    return false;
-  }
-
-  return (
-    user.app_metadata?.role ===
-    "admin"
-  );
-}
-
-const openai =
-  process.env.OPENAI_API_KEY
-    ? new OpenAI({
-        apiKey:
-          process.env.OPENAI_API_KEY,
-      })
-    : null;
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  : null;
 
 const AI_MODEL =
-  process.env.OPENAI_MODEL ||
-  "gpt-4o-mini";
+  process.env.OPENAI_MODEL || "gpt-4o-mini";
 
-/*
- * Keep each invocation reasonably small.
- *
- * Your current Vercel setup should process
- * multiple batches rather than attempting
- * hundreds of articles in one function.
- */
 const MAX_SOURCES_PER_BATCH = 5;
 const MAX_FEED_ITEMS_PER_SOURCE = 3;
 
-const FEED_FETCH_TIMEOUT_MS = 7_000;
-const ARTICLE_FETCH_TIMEOUT_MS = 7_000;
+const FEED_FETCH_TIMEOUT_MS = 7000;
+const ARTICLE_FETCH_TIMEOUT_MS = 7000;
 
 const MIN_SOURCE_WORDS = 180;
 const MIN_FINAL_WORDS = 180;
@@ -169,6 +69,78 @@ type Material = {
   text: string;
 };
 
+type DatabaseErrorLike = {
+  code?: string;
+  message?: string;
+  details?: string | null;
+  hint?: string | null;
+};
+
+function isDatabaseError(
+  value: unknown
+): value is DatabaseErrorLike {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    ("code" in value ||
+      "message" in value ||
+      "details" in value ||
+      "hint" in value)
+  );
+}
+
+function getErrorMessage(
+  value: unknown
+): string {
+  if (
+    value instanceof Error
+  ) {
+    return value.message;
+  }
+
+  if (
+    isDatabaseError(value) &&
+    value.message
+  ) {
+    return value.message;
+  }
+
+  return String(value);
+}
+
+function getErrorCode(
+  value: unknown
+): string | undefined {
+  if (
+    isDatabaseError(value)
+  ) {
+    return value.code;
+  }
+
+  return undefined;
+}
+
+function normalizeWhitespace(
+  value: string
+): string {
+  return value
+    .replace(/\r/g, "")
+    .replace(/\t/g, " ")
+    .replace(
+      /[ \u00a0]+/g,
+      " "
+    )
+    .replace(
+      /\n[ \t]+/g,
+      "\n"
+    )
+    .replace(
+      /\n{3,}/g,
+      "\n\n"
+    )
+    .trim();
+}
+
 function decodeHtml(
   value: string
 ): string {
@@ -207,49 +179,32 @@ function decodeHtml(
     )
     .replace(
       /&#(\d+);/g,
-      (_, n) =>
+      (_, number) =>
         String.fromCharCode(
-          Number(n)
+          Number(number)
         )
     )
     .replace(
       /&#x([0-9a-f]+);/gi,
-      (_, n) =>
+      (_, number) =>
         String.fromCharCode(
-          parseInt(n, 16)
+          parseInt(
+            number,
+            16
+          )
         )
     );
-}
-
-function normalizeWhitespace(
-  value: string
-): string {
-  return decodeHtml(value)
-    .replace(/\r/g, "")
-    .replace(/\t/g, " ")
-    .replace(
-      /[ \u00a0]+/g,
-      " "
-    )
-    .replace(
-      /\n[ \t]+/g,
-      "\n"
-    )
-    .replace(
-      /\n{3,}/g,
-      "\n\n"
-    )
-    .trim();
 }
 
 function wordCount(
   value: string
 ): number {
   return normalizeWhitespace(
-    value.replace(
-      /<[^>]*>/g,
-      " "
-    )
+    value
+      .replace(
+        /<[^>]*>/g,
+        " "
+      )
   )
     .split(/\s+/)
     .filter(Boolean)
@@ -310,8 +265,10 @@ function dedupeParagraphs(
   const paragraphs =
     value
       .split(/\n{2,}/)
-      .map((p) =>
-        normalizeWhitespace(p)
+      .map((paragraph) =>
+        normalizeWhitespace(
+          paragraph
+        )
       )
       .filter(Boolean);
 
@@ -320,7 +277,10 @@ function dedupeParagraphs(
 
   const output: string[] = [];
 
-  for (const paragraph of paragraphs) {
+  for (
+    const paragraph of
+    paragraphs
+  ) {
     const key =
       paragraph
         .toLowerCase()
@@ -338,7 +298,9 @@ function dedupeParagraphs(
     }
 
     seen.add(key);
-    output.push(paragraph);
+    output.push(
+      paragraph
+    );
   }
 
   return output.join(
@@ -375,7 +337,10 @@ function removeSourceBoilerplate(
     /privacy policy[\s\S]{0,500}/gi,
   ];
 
-  for (const pattern of patterns) {
+  for (
+    const pattern of
+    patterns
+  ) {
     text =
       text.replace(
         pattern,
@@ -392,14 +357,19 @@ function removeAuthorBiography(
   const paragraphs =
     value
       .split(/\n{2,}/)
-      .map((p) =>
-        normalizeWhitespace(p)
+      .map((paragraph) =>
+        normalizeWhitespace(
+          paragraph
+        )
       )
       .filter(Boolean);
 
   const output: string[] = [];
 
-  for (const paragraph of paragraphs) {
+  for (
+    const paragraph of
+    paragraphs
+  ) {
     const lower =
       paragraph.toLowerCase();
 
@@ -416,13 +386,9 @@ function removeAuthorBiography(
         ) ||
         lower.includes(
           "meet the author"
-        ) ||
-        lower.includes(
-          "about our author"
         )
       ) &&
-      paragraph.length <
-        1500;
+      paragraph.length < 1500;
 
     const isByline =
       /^by\s+[a-z][a-z .,'’-]{2,100}$/i.test(
@@ -457,8 +423,10 @@ function removeAdvertising(
 ): string {
   return value
     .split(/\n{2,}/)
-    .map((p) =>
-      normalizeWhitespace(p)
+    .map((paragraph) =>
+      normalizeWhitespace(
+        paragraph
+      )
     )
     .filter(Boolean)
     .filter(
@@ -487,9 +455,6 @@ function removeAdvertising(
           ) ||
           lower.includes(
             "promo code"
-          ) ||
-          lower.includes(
-            "use code "
           ) ||
           lower.includes(
             "advertisement"
@@ -548,6 +513,11 @@ function cleanText(
     );
 
   text =
+    decodeHtml(
+      text
+    );
+
+  text =
     normalizeWhitespace(
       text
     );
@@ -581,7 +551,10 @@ function extractTag(
   xml: string,
   tagNames: string[]
 ): string {
-  for (const tag of tagNames) {
+  for (
+    const tag of
+    tagNames
+  ) {
     const escaped =
       tag.replace(
         /[-/\\^$*+?.()|[\]{}]/g,
@@ -596,7 +569,9 @@ function extractTag(
         )
       );
 
-    if (match?.[1]) {
+    if (
+      match?.[1]
+    ) {
       return decodeHtml(
         match[1]
       );
@@ -630,40 +605,38 @@ function extractImage(
     return null;
   }
 
-  const direct =
+  const image =
     value.match(
       /https?:\/\/[^\s"'<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s"'<>]*)?/i
     )?.[0] || null;
 
-  if (direct) {
-    return direct;
+  if (image) {
+    return image
+      .replace(
+        /&amp;/g,
+        "&"
+      );
   }
 
-  const contentUrl =
+  return (
     value.match(
       /https?:\/\/[^\s"'<>]+/i
-    )?.[0] || null;
-
-  if (contentUrl) {
-    return contentUrl
-      .replace(
+    )?.[0]
+      ?.replace(
         /&amp;/g,
         "&"
       )
       .replace(
         /[)"'<>]+$/,
         ""
-      );
-  }
-
-  return null;
+      ) ||
+    null
+  );
 }
 
 function parseFeed(
   xml: string
 ): FeedItem[] {
-  const items: FeedItem[] = [];
-
   const rssItems =
     xml.match(
       /<item\b[\s\S]*?<\/item>/gi
@@ -679,7 +652,12 @@ function parseFeed(
       ? rssItems
       : atomEntries;
 
-  for (const block of blocks) {
+  const items: FeedItem[] = [];
+
+  for (
+    const block of
+    blocks
+  ) {
     const title =
       normalizeWhitespace(
         extractTag(
@@ -693,9 +671,9 @@ function parseFeed(
         block,
         [
           "content:encoded",
-          "content",
           "description",
           "summary",
+          "content",
         ]
       );
 
@@ -705,6 +683,7 @@ function parseFeed(
         [
           "content:encoded",
           "content",
+          "description",
         ]
       );
 
@@ -749,7 +728,10 @@ function parseFeed(
         /<media:content\b[^>]*>/gi
       ) || [];
 
-    for (const tag of mediaContent) {
+    for (
+      const tag of
+      mediaContent
+    ) {
       const url =
         extractAttribute(
           tag,
@@ -763,14 +745,14 @@ function parseFeed(
     }
 
     if (!imageUrl) {
-      const mediaThumbnail =
+      const thumbnail =
         block.match(
           /<media:thumbnail\b[^>]*>/gi
         ) || [];
 
       for (
         const tag of
-        mediaThumbnail
+        thumbnail
       ) {
         const url =
           extractAttribute(
@@ -786,14 +768,14 @@ function parseFeed(
     }
 
     if (!imageUrl) {
-      const enclosure =
+      const enclosures =
         block.match(
           /<enclosure\b[^>]*>/gi
         ) || [];
 
       for (
         const tag of
-        enclosure
+        enclosures
       ) {
         const type =
           extractAttribute(
@@ -809,10 +791,12 @@ function parseFeed(
 
         if (
           url &&
-          (!type ||
+          (
+            !type ||
             type.startsWith(
               "image/"
-            ))
+            )
+          )
         ) {
           imageUrl = url;
           break;
@@ -823,14 +807,14 @@ function parseFeed(
     if (!imageUrl) {
       imageUrl =
         extractImage(
-          description
+          content
         );
     }
 
     if (!imageUrl) {
       imageUrl =
         extractImage(
-          content
+          description
         );
     }
 
@@ -849,7 +833,9 @@ function parseFeed(
             description
           ),
         content:
-          cleanText(content),
+          cleanText(
+            content
+          ),
         pubDate,
         imageUrl,
       });
@@ -857,6 +843,429 @@ function parseFeed(
   }
 
   return items;
+}
+
+function isSafeUrl(
+  value: string
+): boolean {
+  try {
+    const url =
+      new URL(value);
+
+    return (
+      url.protocol ===
+        "http:" ||
+      url.protocol ===
+        "https:"
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function fetchExternalText(
+  url: string,
+  timeoutMs: number
+): Promise<string> {
+  const controller =
+    new AbortController();
+
+  const timeout =
+    setTimeout(
+      () =>
+        controller.abort(),
+      timeoutMs
+    );
+
+  try {
+    const response =
+      await fetch(
+        url,
+        {
+          signal:
+            controller.signal,
+          headers: {
+            "User-Agent":
+              "JNMuleeNewsBot/1.0",
+            Accept:
+              "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
+          },
+          cache:
+            "no-store",
+        }
+      );
+
+    if (
+      !response.ok
+    ) {
+      return "";
+    }
+
+    return await response.text();
+  } catch {
+    return "";
+  } finally {
+    clearTimeout(
+      timeout
+    );
+  }
+}
+
+async function fetchArticlePage(
+  url: string
+): Promise<{
+  text: string;
+  imageUrl:
+    | string
+    | null;
+}> {
+  const html =
+    await fetchExternalText(
+      url,
+      ARTICLE_FETCH_TIMEOUT_MS
+    );
+
+  if (!html) {
+    return {
+      text: "",
+      imageUrl: null,
+    };
+  }
+
+  let imageUrl:
+    | string
+    | null = null;
+
+  const ogImage =
+    html.match(
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
+    )?.[1] || null;
+
+  if (ogImage) {
+    imageUrl = ogImage;
+  }
+
+  if (!imageUrl) {
+    const twitterImage =
+      html.match(
+        /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
+      )?.[1] || null;
+
+    if (twitterImage) {
+      imageUrl =
+        twitterImage;
+    }
+  }
+
+  if (!imageUrl) {
+    const jsonLdBlocks =
+      html.match(
+        /<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi
+      ) || [];
+
+    for (
+      const block of
+      jsonLdBlocks
+    ) {
+      const jsonText =
+        block
+          .replace(
+            /<script[^>]*>/i,
+            ""
+          )
+          .replace(
+            /<\/script>$/i,
+            ""
+          )
+          .trim();
+
+      try {
+        const data =
+          JSON.parse(
+            jsonText
+          );
+
+        const candidates =
+          Array.isArray(data)
+            ? data
+            : [data];
+
+        for (
+          const candidate of
+          candidates
+        ) {
+          const image =
+            candidate?.image;
+
+          if (
+            typeof image ===
+            "string"
+          ) {
+            imageUrl =
+              image;
+            break;
+          }
+
+          if (
+            image &&
+            typeof image ===
+              "object" &&
+            typeof image.url ===
+              "string"
+          ) {
+            imageUrl =
+              image.url;
+            break;
+          }
+
+          if (
+            Array.isArray(
+              image
+            )
+          ) {
+            const first =
+              image.find(
+                (
+                  item
+                ) =>
+                  typeof item ===
+                  "string"
+              );
+
+            if (first) {
+              imageUrl =
+                first;
+              break;
+            }
+          }
+        }
+
+        if (imageUrl) {
+          break;
+        }
+      } catch {
+        // Ignore malformed JSON-LD.
+      }
+    }
+  }
+
+  const candidates: string[] =
+    [];
+
+  const articleMatch =
+    html.match(
+      /<article\b[^>]*>([\s\S]*?)<\/article>/i
+    );
+
+  if (
+    articleMatch?.[1]
+  ) {
+    candidates.push(
+      articleMatch[1]
+    );
+  }
+
+  const mainMatch =
+    html.match(
+      /<main\b[^>]*>([\s\S]*?)<\/main>/i
+    );
+
+  if (mainMatch?.[1]) {
+    candidates.push(
+      mainMatch[1]
+    );
+  }
+
+  const commonContainers = [
+    /<div[^>]+class=["'][^"']*(?:article-body|article-content|post-content|entry-content|story-body|story-content)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+    /<div[^>]+id=["'][^"']*(?:article-body|article-content|post-content|entry-content|story-body|story-content)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+  ];
+
+  for (
+    const pattern of
+    commonContainers
+  ) {
+    const match =
+      html.match(
+        pattern
+      );
+
+    if (
+      match?.[1]
+    ) {
+      candidates.push(
+        match[1]
+      );
+    }
+  }
+
+  const cleaned =
+    candidates
+      .map(
+        (candidate) =>
+          cleanText(
+            candidate
+          )
+      )
+      .filter(
+        (candidate) =>
+          wordCount(
+            candidate
+          ) >=
+          MIN_SOURCE_WORDS
+      )
+      .sort(
+        (a, b) =>
+          wordCount(b) -
+          wordCount(a)
+      );
+
+  let bestText =
+    cleaned[0] || "";
+
+  if (!bestText) {
+    const jsonLdBlocks =
+      html.match(
+        /<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi
+      ) || [];
+
+    for (
+      const block of
+      jsonLdBlocks
+    ) {
+      const jsonText =
+        block
+          .replace(
+            /<script[^>]*>/i,
+            ""
+          )
+          .replace(
+            /<\/script>$/i,
+            ""
+          )
+          .trim();
+
+      try {
+        const data =
+          JSON.parse(
+            jsonText
+          );
+
+        const candidates =
+          Array.isArray(data)
+            ? data
+            : [data];
+
+        for (
+          const candidate of
+          candidates
+        ) {
+          if (
+            typeof candidate?.articleBody ===
+            "string"
+          ) {
+            const body =
+              cleanText(
+                candidate.articleBody
+              );
+
+            if (
+              wordCount(
+                body
+              ) >
+              wordCount(
+                bestText
+              )
+            ) {
+              bestText =
+                body;
+            }
+          }
+        }
+      } catch {
+        // Ignore malformed JSON-LD.
+      }
+    }
+  }
+
+  return {
+    text: bestText,
+    imageUrl:
+      imageUrl &&
+      isSafeUrl(imageUrl)
+        ? imageUrl
+        : null,
+  };
+}
+
+function buildSourceMaterial(
+  item: FeedItem,
+  articlePageText: string,
+  articlePageImage:
+    | string
+    | null
+): Material {
+  const parts = [
+    articlePageText,
+    item.content,
+    item.description,
+  ].filter(Boolean);
+
+  let text =
+    dedupeParagraphs(
+      parts.join(
+        "\n\n"
+      )
+    );
+
+  text =
+    removeSourceBoilerplate(
+      text
+    );
+
+  text =
+    removeAdvertising(
+      text
+    );
+
+  text =
+    removeAuthorBiography(
+      text
+    );
+
+  text =
+    dedupeParagraphs(
+      text
+    );
+
+  const imageUrl =
+    articlePageImage ||
+    item.imageUrl ||
+    extractImage(
+      item.content
+    ) ||
+    extractImage(
+      item.description
+    );
+
+  return {
+    title:
+      normalizeWhitespace(
+        item.title
+      ),
+    url: item.link,
+    publishedAt:
+      item.pubDate,
+    imageUrl:
+      imageUrl &&
+      isSafeUrl(imageUrl)
+        ? imageUrl
+        : null,
+    text:
+      normalizeWhitespace(
+        text
+      ),
+  };
 }
 
 function classifyCategory(
@@ -941,420 +1350,6 @@ function classifyCategory(
   return "News";
 }
 
-function isSafeUrl(
-  value: string
-): boolean {
-  try {
-    const url =
-      new URL(value);
-
-    return (
-      url.protocol ===
-        "http:" ||
-      url.protocol ===
-        "https:"
-    );
-  } catch {
-    return false;
-  }
-}
-
-async function fetchExternalText(
-  url: string,
-  timeoutMs =
-    FEED_FETCH_TIMEOUT_MS
-): Promise<string> {
-  const controller =
-    new AbortController();
-
-  const timeout =
-    setTimeout(
-      () =>
-        controller.abort(),
-      timeoutMs
-    );
-
-  try {
-    const response =
-      await fetch(
-        url,
-        {
-          signal:
-            controller.signal,
-          headers: {
-            "User-Agent":
-              "JNMuleeNewsBot/1.0 (+https://jnmulee-news-jnnation.vercel.app)",
-            Accept:
-              "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
-          },
-          cache:
-            "no-store",
-        }
-      );
-
-    if (!response.ok) {
-      return "";
-    }
-
-    return await response.text();
-  } catch {
-    return "";
-  } finally {
-    clearTimeout(
-      timeout
-    );
-  }
-}
-
-async function fetchArticlePage(
-  url: string
-): Promise<{
-  text: string;
-  imageUrl:
-    | string
-    | null;
-}> {
-  const html =
-    await fetchExternalText(
-      url,
-      ARTICLE_FETCH_TIMEOUT_MS
-    );
-
-  if (!html) {
-    return {
-      text: "",
-      imageUrl: null,
-    };
-  }
-
-  let imageUrl:
-    | string
-    | null = null;
-
-  const ogImage =
-    html.match(
-      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
-    )?.[1] || null;
-
-  if (ogImage) {
-    imageUrl = ogImage;
-  }
-
-  if (!imageUrl) {
-    const twitterImage =
-      html.match(
-        /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
-      )?.[1] || null;
-
-    if (twitterImage) {
-      imageUrl =
-        twitterImage;
-    }
-  }
-
-  if (!imageUrl) {
-    const jsonLdMatches =
-      html.match(
-        /<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi
-      ) || [];
-
-    for (
-      const block of
-      jsonLdMatches
-    ) {
-      const jsonText =
-        block
-          .replace(
-            /<script[^>]*>/i,
-            ""
-          )
-          .replace(
-            /<\/script>$/i,
-            ""
-          )
-          .trim();
-
-      try {
-        const data =
-          JSON.parse(
-            jsonText
-          );
-
-        const candidates =
-          Array.isArray(data)
-            ? data
-            : [data];
-
-        for (
-          const candidate of
-          candidates
-        ) {
-          const image =
-            candidate?.image;
-
-          if (
-            typeof image ===
-            "string"
-          ) {
-            imageUrl =
-              image;
-            break;
-          }
-
-          if (
-            image &&
-            typeof image ===
-              "object" &&
-            typeof image.url ===
-              "string"
-          ) {
-            imageUrl =
-              image.url;
-            break;
-          }
-
-          if (
-            Array.isArray(
-              image
-            )
-          ) {
-            const first =
-              image.find(
-                (item) =>
-                  typeof item ===
-                  "string"
-              );
-
-            if (first) {
-              imageUrl =
-                first;
-              break;
-            }
-          }
-        }
-
-        if (imageUrl) {
-          break;
-        }
-      } catch {
-        // Ignore invalid JSON-LD.
-      }
-    }
-  }
-
-  const articleCandidates:
-    string[] = [];
-
-  const articleMatch =
-    html.match(
-      /<article\b[^>]*>([\s\S]*?)<\/article>/i
-    );
-
-  if (
-    articleMatch?.[1]
-  ) {
-    articleCandidates.push(
-      articleMatch[1]
-    );
-  }
-
-  const mainMatch =
-    html.match(
-      /<main\b[^>]*>([\s\S]*?)<\/main>/i
-    );
-
-  if (mainMatch?.[1]) {
-    articleCandidates.push(
-      mainMatch[1]
-    );
-  }
-
-  const commonContainers = [
-    /<div[^>]+class=["'][^"']*(?:article-body|article-content|post-content|entry-content|story-body|story-content)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-    /<div[^>]+id=["'][^"']*(?:article-body|article-content|post-content|entry-content|story-body|story-content)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-  ];
-
-  for (
-    const pattern of
-    commonContainers
-  ) {
-    const match =
-      html.match(
-        pattern
-      );
-
-    if (match?.[1]) {
-      articleCandidates.push(
-        match[1]
-      );
-    }
-  }
-
-  const cleanedCandidates =
-    articleCandidates
-      .map((candidate) =>
-        cleanText(candidate)
-      )
-      .filter(
-        (candidate) =>
-          wordCount(
-            candidate
-          ) >=
-          MIN_SOURCE_WORDS
-      );
-
-  let bestText =
-    cleanedCandidates.sort(
-      (a, b) =>
-        wordCount(b) -
-        wordCount(a)
-    )[0] || "";
-
-  if (!bestText) {
-    const jsonLdMatches =
-      html.match(
-        /<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi
-      ) || [];
-
-    for (
-      const block of
-      jsonLdMatches
-    ) {
-      const jsonText =
-        block
-          .replace(
-            /<script[^>]*>/i,
-            ""
-          )
-          .replace(
-            /<\/script>$/i,
-            ""
-          )
-          .trim();
-
-      try {
-        const data =
-          JSON.parse(
-            jsonText
-          );
-
-        const candidates =
-          Array.isArray(data)
-            ? data
-            : [data];
-
-        for (
-          const candidate of
-          candidates
-        ) {
-          if (
-            typeof candidate?.articleBody ===
-            "string"
-          ) {
-            const candidateText =
-              cleanText(
-                candidate.articleBody
-              );
-
-            if (
-              wordCount(
-                candidateText
-              ) >
-              wordCount(
-                bestText
-              )
-            ) {
-              bestText =
-                candidateText;
-            }
-          }
-        }
-      } catch {
-        // Ignore invalid JSON-LD.
-      }
-    }
-  }
-
-  return {
-    text: bestText,
-    imageUrl:
-      imageUrl &&
-      isSafeUrl(imageUrl)
-        ? imageUrl
-        : null,
-  };
-}
-
-function buildSourceMaterial(
-  item: FeedItem,
-  articlePageText: string,
-  articlePageImage:
-    | string
-    | null
-): Material {
-  const textParts = [
-    articlePageText,
-    item.content,
-    item.description,
-  ].filter(Boolean);
-
-  let text =
-    dedupeParagraphs(
-      textParts.join(
-        "\n\n"
-      )
-    );
-
-  text =
-    removeSourceBoilerplate(
-      text
-    );
-
-  text =
-    removeAdvertising(
-      text
-    );
-
-  text =
-    removeAuthorBiography(
-      text
-    );
-
-  text =
-    dedupeParagraphs(
-      text
-    );
-
-  const imageUrl =
-    articlePageImage ||
-    item.imageUrl ||
-    extractImage(
-      item.content
-    ) ||
-    extractImage(
-      item.description
-    );
-
-  return {
-    title:
-      normalizeWhitespace(
-        item.title
-      ),
-    url: item.link,
-    publishedAt:
-      item.pubDate,
-    imageUrl:
-      imageUrl &&
-      isSafeUrl(imageUrl)
-        ? imageUrl
-        : null,
-    text:
-      normalizeWhitespace(
-        text
-      ),
-  };
-}
-
 function cleanFinalArticle(
   value: string
 ): string {
@@ -1398,36 +1393,38 @@ function cleanFinalArticle(
 function textToHtml(
   value: string
 ): string {
-  const paragraphs =
-    value
-      .split(/\n{2,}/)
-      .map((p) =>
-        normalizeWhitespace(p)
-      )
-      .filter(Boolean);
-
-  return paragraphs
-    .map((paragraph) => {
-      if (
-        /^#{2,4}\s+/.test(
+  return value
+    .split(/\n{2,}/)
+    .map(
+      (paragraph) =>
+        normalizeWhitespace(
           paragraph
         )
-      ) {
-        const heading =
-          paragraph.replace(
-            /^#{2,4}\s+/,
-            ""
-          );
+    )
+    .filter(Boolean)
+    .map(
+      (paragraph) => {
+        if (
+          /^#{2,4}\s+/.test(
+            paragraph
+          )
+        ) {
+          const heading =
+            paragraph.replace(
+              /^#{2,4}\s+/,
+              ""
+            );
 
-        return `<h2>${escapeHtml(
-          heading
-        )}</h2>`;
+          return `<h2>${escapeHtml(
+            heading
+          )}</h2>`;
+        }
+
+        return `<p>${escapeHtml(
+          paragraph
+        )}</p>`;
       }
-
-      return `<p>${escapeHtml(
-        paragraph
-      )}</p>`;
-    })
+    )
     .join("\n");
 }
 
@@ -1471,7 +1468,10 @@ function qualityScore(
   const words =
     wordCount(value);
 
-  if (words < 180) {
+  if (
+    words <
+    MIN_FINAL_WORDS
+  ) {
     return 0;
   }
 
@@ -1514,17 +1514,6 @@ function qualityScore(
     score += 5;
   }
 
-  const repeated =
-    paragraphs.filter(
-      (p, index) =>
-        paragraphs.indexOf(
-          p
-        ) !== index
-    ).length;
-
-  score -=
-    repeated * 10;
-
   return Math.max(
     0,
     Math.min(
@@ -1538,7 +1527,9 @@ async function generateJnmuleeArticle(
   material: Material
 ): Promise<string | null> {
   if (!openai) {
-    return null;
+    throw new Error(
+      "OPENAI_API_KEY_MISSING"
+    );
   }
 
   const prompt = `
@@ -1654,8 +1645,7 @@ Return only the article.
             },
             {
               role: "user",
-              content:
-                prompt,
+              content: prompt,
             },
           ],
         }
@@ -1674,8 +1664,8 @@ Return only the article.
 
     if (
       result
-        .trim()
-        .toUpperCase() ===
+        .toUpperCase()
+        .trim() ===
       "INSUFFICIENT_SOURCE_MATERIAL"
     ) {
       return null;
@@ -1686,9 +1676,9 @@ Return only the article.
     );
   } catch (error) {
     const message =
-      error instanceof Error
-        ? error.message
-        : String(error);
+      getErrorMessage(
+        error
+      );
 
     const status =
       typeof error ===
@@ -1706,7 +1696,7 @@ Return only the article.
 
     if (
       status === 429 ||
-      /credit_balance_exhausted|insufficient_quota|quota/i.test(
+      /credit_balance_exhausted|insufficient_quota|quota|no credits remaining/i.test(
         message
       )
     ) {
@@ -1724,21 +1714,25 @@ Return only the article.
   }
 }
 
-/*
- * INSERT AI-GENERATED ARTICLE
- *
- * IMPORTANT:
- * Published is FALSE.
- *
- * The Admin dashboard is responsible for
- * approving/publishing the article.
- */
 async function insertArticle(
   material: Material,
   category: Category,
   article: string,
   source: SourceRow
-) {
+): Promise<
+  DatabaseErrorLike | Error | null
+> {
+  if (
+    !material.imageUrl ||
+    !isSafeUrl(
+      material.imageUrl
+    )
+  ) {
+    return new Error(
+      "ARTICLE_IMAGE_REQUIRED"
+    );
+  }
+
   const title =
     normalizeWhitespace(
       material.title
@@ -1753,6 +1747,7 @@ async function insertArticle(
 
   const {
     data: existingSlug,
+    error: slugError,
   } = await supabase
     .from("news")
     .select("id")
@@ -1762,6 +1757,10 @@ async function insertArticle(
     )
     .limit(1);
 
+  if (slugError) {
+    return slugError;
+  }
+
   if (
     existingSlug &&
     existingSlug.length > 0
@@ -1769,30 +1768,15 @@ async function insertArticle(
     slug = `${slugBase}-${Date.now()}`;
   }
 
-  const content =
-    textToHtml(article);
-
-  /*
-   * Final safety check:
-   *
-   * No article is inserted unless
-   * it has an image.
-   */
-  if (
-    !material.imageUrl ||
-    !isSafeUrl(
-      material.imageUrl
-    )
-  ) {
-    return new Error(
-      "ARTICLE_IMAGE_REQUIRED"
-    );
-  }
-
   const payload = {
     title,
+
     slug,
-    content,
+
+    content:
+      textToHtml(
+        article
+      ),
 
     image_url:
       material.imageUrl,
@@ -1800,8 +1784,9 @@ async function insertArticle(
     /*
      * IMPORTANT:
      *
-     * New AI articles are NOT public.
-     * Admin must approve them.
+     * Every newly generated article
+     * stays unpublished until Admin
+     * approves it.
      */
     Published: false,
 
@@ -1824,31 +1809,103 @@ async function insertArticle(
       "Published by JNMulee News",
   };
 
-  const { error } =
-    await supabase
-      .from("news")
-      .upsert(
-        payload,
-        {
-          onConflict:
-            "source_url",
-          ignoreDuplicates:
-            true,
-        }
-      );
+  const {
+    error,
+  } = await supabase
+    .from("news")
+    .upsert(
+      payload,
+      {
+        onConflict:
+          "source_url",
+        ignoreDuplicates:
+          true,
+      }
+    );
 
   return error;
+}
+
+async function authorizeRequest(
+  request: Request
+): Promise<boolean> {
+  const cronSecret =
+    process.env.CRON_SECRET;
+
+  const authorization =
+    request.headers.get(
+      "authorization"
+    );
+
+  /*
+   * Vercel Cron
+   */
+  if (
+    cronSecret &&
+    authorization ===
+      `Bearer ${cronSecret}`
+  ) {
+    return true;
+  }
+
+  /*
+   * Admin access token
+   */
+  if (
+    !authorization?.startsWith(
+      "Bearer "
+    )
+  ) {
+    return false;
+  }
+
+  const accessToken =
+    authorization
+      .slice(7)
+      .trim();
+
+  if (!accessToken) {
+    return false;
+  }
+
+  const authClient =
+    createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+
+  const {
+    data: {
+      user,
+    },
+    error,
+  } =
+    await authClient.auth.getUser(
+      accessToken
+    );
+
+  if (
+    error ||
+    !user
+  ) {
+    return false;
+  }
+
+  return (
+    user.app_metadata?.role ===
+    "admin"
+  );
 }
 
 export async function GET(
   request: Request
 ) {
-  /*
-   * SECURITY
-   *
-   * Authorization happens BEFORE
-   * any importing work.
-   */
   const authorized =
     await authorizeRequest(
       request
@@ -1865,7 +1922,7 @@ export async function GET(
         status: 401,
         headers: {
           "Cache-Control":
-            "no-store, max-age=0",
+            "no-store",
         },
       }
     );
@@ -1884,10 +1941,6 @@ export async function GET(
       "batch"
     );
 
-  /*
-   * Determine whether this is
-   * a Vercel Cron request.
-   */
   const cronSecret =
     process.env.CRON_SECRET;
 
@@ -1902,8 +1955,7 @@ export async function GET(
       `Bearer ${cronSecret}`;
 
   /*
-   * If it is not Cron, it is treated
-   * as an authenticated admin request.
+   * Manual admin import
    */
   const isManualImport =
     searchParams.get(
@@ -1919,8 +1971,8 @@ export async function GET(
 
   let requestedBatch =
     isManualBatch
-      ? Math.floor(
-          Number(batchParam)
+      ? Number(
+          batchParam
         )
       : 0;
 
@@ -1938,11 +1990,9 @@ export async function GET(
     feedItemsSeen: 0,
 
     /*
-     * This now means:
-     * AI-generated articles successfully
-     * inserted into the database.
+     * Compatibility field.
      *
-     * They are NOT public yet.
+     * Importer no longer auto-publishes.
      */
     articlesPublished: 0,
 
@@ -1956,15 +2006,9 @@ export async function GET(
     skippedPoorQuality: 0,
 
     articlePagesFetched: 0,
+
     aiGenerated: 0,
 
-    /*
-     * Kept for compatibility with
-     * your existing response structure.
-     *
-     * It will always remain 0 because
-     * importer no longer auto-publishes.
-     */
     manuallyPublished: 0,
   };
 
@@ -1996,7 +2040,9 @@ export async function GET(
         }
       );
 
-    if (sourcesError) {
+    if (
+      sourcesError
+    ) {
       throw new Error(
         `Unable to load sources: ${sourcesError.message}`
       );
@@ -2018,17 +2064,19 @@ export async function GET(
     /*
      * MANUAL IMPORT
      *
-     * Manual import ONLY fetches and
-     * generates new stories.
+     * Manual import fetches and generates
+     * new articles only.
      *
-     * It DOES NOT publish pending stories.
+     * It NEVER publishes pending articles.
      */
-    if (isManualImport) {
+    if (
+      isManualImport
+    ) {
       requestedBatch = 0;
     }
 
     /*
-     * AUTOMATIC SCHEDULER CHECK
+     * AUTOMATIC BATCH CLAIM
      */
     if (
       !isManualBatch &&
@@ -2045,7 +2093,9 @@ export async function GET(
         }
       );
 
-      if (claimError) {
+      if (
+        claimError
+      ) {
         throw new Error(
           `Unable to claim importer batch: ${claimError.message}`
         );
@@ -2064,7 +2114,7 @@ export async function GET(
             success: true,
             skipped: true,
             message:
-              "Importer trigger received, but the 50-minute interval has not elapsed yet.",
+              "Importer trigger received, but the scheduled interval has not elapsed yet.",
             totalSources:
               allSources.length,
             totalBatches,
@@ -2076,7 +2126,7 @@ export async function GET(
             status: 200,
             headers: {
               "Cache-Control":
-                "no-store, max-age=0",
+                "no-store",
             },
           }
         );
@@ -2118,8 +2168,7 @@ export async function GET(
           sourcesProcessed: 0,
           articlesAddedForApproval:
             0,
-          articlesSkipped:
-            0,
+          articlesSkipped: 0,
           durationMs:
             Date.now() -
             startedAt,
@@ -2128,7 +2177,7 @@ export async function GET(
           status: 200,
           headers: {
             "Cache-Control":
-              "no-store, max-age=0",
+              "no-store",
           },
         }
       );
@@ -2164,7 +2213,7 @@ export async function GET(
 
       try {
         /*
-         * FETCH RSS/ATOM FEED
+         * FETCH FEED
          */
         const feedXml =
           await fetchExternalText(
@@ -2188,7 +2237,7 @@ export async function GET(
           items.length;
 
         /*
-         * PROCESS EACH ARTICLE
+         * PROCESS FEED ITEMS
          */
         for (
           const item of
@@ -2251,7 +2300,7 @@ export async function GET(
             }
 
             /*
-             * FETCH FULL ARTICLE PAGE
+             * FETCH FULL ARTICLE
              */
             const articlePage =
               await fetchArticlePage(
@@ -2265,7 +2314,7 @@ export async function GET(
             }
 
             /*
-             * BUILD VERIFIED SOURCE MATERIAL
+             * BUILD MATERIAL
              */
             const material =
               buildSourceMaterial(
@@ -2275,7 +2324,7 @@ export async function GET(
               );
 
             /*
-             * IMAGE IS REQUIRED
+             * IMAGE REQUIRED
              */
             if (
               !material.imageUrl ||
@@ -2289,7 +2338,7 @@ export async function GET(
             }
 
             /*
-             * SOURCE MUST HAVE ENOUGH MATERIAL
+             * SOURCE MATERIAL REQUIRED
              */
             if (
               wordCount(
@@ -2312,7 +2361,7 @@ export async function GET(
               );
 
             /*
-             * OPENAI GENERATION
+             * OPENAI ARTICLE
              */
             const article =
               await generateJnmuleeArticle(
@@ -2327,15 +2376,12 @@ export async function GET(
             stats.aiGenerated++;
 
             /*
-             * FINAL ARTICLE QUALITY CHECK
+             * FINAL LENGTH
              */
-            const finalWords =
+            if (
               wordCount(
                 article
-              );
-
-            if (
-              finalWords <
+              ) <
               MIN_FINAL_WORDS
             ) {
               stats.skippedPoorQuality++;
@@ -2344,8 +2390,7 @@ export async function GET(
             }
 
             /*
-             * SOURCE/ATTRIBUTION
-             * PHRASE CHECK
+             * FORBIDDEN PHRASES
              */
             if (
               containsForbiddenContent(
@@ -2358,7 +2403,7 @@ export async function GET(
             }
 
             /*
-             * QUALITY SCORE
+             * QUALITY
              */
             const score =
               qualityScore(
@@ -2389,7 +2434,7 @@ export async function GET(
             ) {
               if (
                 insertError instanceof
-                Error &&
+                  Error &&
                 insertError.message ===
                   "ARTICLE_IMAGE_REQUIRED"
               ) {
@@ -2398,8 +2443,16 @@ export async function GET(
                 continue;
               }
 
+              /*
+               * FIXED TYPESCRIPT ERROR
+               *
+               * Supabase/Postgres errors have
+               * a `code` property.
+               */
               if (
-                insertError.code ===
+                getErrorCode(
+                  insertError
+                ) ===
                 "23505"
               ) {
                 stats.skippedDuplicate++;
@@ -2408,7 +2461,7 @@ export async function GET(
               }
 
               errors.push(
-                `${source.name || source.id}: insert failed: ${insertError.message}`
+                `${source.name || source.id}: insert failed: ${getErrorMessage(insertError)}`
               );
 
               stats.articlesSkipped++;
@@ -2416,20 +2469,17 @@ export async function GET(
             }
 
             /*
-             * Successfully added to Admin
-             * for approval.
+             * Successfully inserted as
+             * Published = false.
              */
-            stats.articlesPublished++;
-
             stats.articlesAddedForApproval++;
           } catch (
             error
           ) {
             const message =
-              error instanceof
-              Error
-                ? error.message
-                : String(error);
+              getErrorMessage(
+                error
+              );
 
             stats.articlesSkipped++;
 
@@ -2452,10 +2502,9 @@ export async function GET(
         error
       ) {
         const message =
-          error instanceof
-          Error
-            ? error.message
-            : String(error);
+          getErrorMessage(
+            error
+          );
 
         errors.push(
           `${source.name || source.id}: source processing failed: ${message}`
@@ -2464,16 +2513,13 @@ export async function GET(
     }
 
     /*
-     * IMPORTANT
+     * IMPORTANT:
      *
-     * New articles are unpublished,
-     * so we do NOT refresh public pages
-     * just because articles were imported.
+     * We do NOT publish anything here.
      *
-     * The Admin publish action will call
-     * revalidation after approval.
+     * New stories are waiting for Admin
+     * approval.
      */
-
     return NextResponse.json(
       {
         success: true,
@@ -2495,14 +2541,11 @@ export async function GET(
         batchSourcesProcessed:
           batchSources.length,
 
-        /*
-         * Clear workflow status
-         */
         articlesAddedForApproval:
           stats.articlesAddedForApproval,
 
         /*
-         * Kept for compatibility
+         * Importer never auto-publishes.
          */
         articlesPublished:
           0,
@@ -2549,7 +2592,7 @@ export async function GET(
         status: 200,
         headers: {
           "Cache-Control":
-            "no-store, max-age=0",
+            "no-store",
         },
       }
     );
@@ -2561,10 +2604,9 @@ export async function GET(
         success: false,
 
         message:
-          error instanceof
-          Error
-            ? error.message
-            : String(error),
+          getErrorMessage(
+            error
+          ),
 
         ...stats,
 
@@ -2580,7 +2622,7 @@ export async function GET(
         status: 500,
         headers: {
           "Cache-Control":
-            "no-store, max-age=0",
+            "no-store",
         },
       }
     );
