@@ -17,7 +17,8 @@ export default function AdminLogin() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [checkingSession, setCheckingSession] =
+    useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -31,7 +32,8 @@ export default function AdminLogin() {
         if (!mounted) return;
 
         if (user) {
-          const role = user.app_metadata?.role;
+          const role =
+            user.app_metadata?.role;
 
           if (role === "admin") {
             router.replace("/admin");
@@ -66,7 +68,8 @@ export default function AdminLogin() {
     setError("");
     setLoading(true);
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail =
+      email.trim().toLowerCase();
 
     if (!cleanEmail || !password) {
       setError(
@@ -80,10 +83,11 @@ export default function AdminLogin() {
       const {
         data,
         error: signInError,
-      } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password,
-      });
+      } =
+        await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
 
       if (signInError) {
         setError(
@@ -102,7 +106,8 @@ export default function AdminLogin() {
         return;
       }
 
-      const role = data.user.app_metadata?.role;
+      const role =
+        data.user.app_metadata?.role;
 
       if (role !== "admin") {
         await supabase.auth.signOut();
@@ -114,11 +119,6 @@ export default function AdminLogin() {
         return;
       }
 
-      /*
-       * Give Supabase time to persist the authenticated
-       * session cookies before navigating to the protected
-       * admin route.
-       */
       await new Promise((resolve) =>
         setTimeout(resolve, 150)
       );
@@ -135,20 +135,28 @@ export default function AdminLogin() {
 
   if (checkingSession) {
     return (
-      <main className="auth">
-        <div className="authBox">
-          <Link href="/" className="brand">
-            JNMulee <span>News</span>
-          </Link>
+      <main className="min-h-screen bg-slate-950 px-4 py-10 text-white">
+        <div className="flex min-h-[80vh] items-center justify-center">
+          <div className="w-full max-w-md rounded-3xl border border-cyan-400/20 bg-gradient-to-br from-slate-900 via-slate-900 to-cyan-950/30 p-8 shadow-2xl shadow-black/40">
+            <Link
+              href="/"
+              className="mb-8 block text-center text-2xl font-black tracking-tight"
+            >
+              <span className="text-white">
+                JNMulee
+              </span>{" "}
+              <span className="text-cyan-400">
+                News
+              </span>
+            </Link>
 
-          <div
-            style={{
-              textAlign: "center",
-              padding: "28px 0",
-              color: "#64748b",
-            }}
-          >
-            Checking your session...
+            <div className="flex flex-col items-center py-8">
+              <div className="mb-5 h-10 w-10 animate-spin rounded-full border-2 border-cyan-400/20 border-t-cyan-400" />
+
+              <p className="text-center text-sm text-slate-400">
+                Checking your session...
+              </p>
+            </div>
           </div>
         </div>
       </main>
@@ -156,92 +164,124 @@ export default function AdminLogin() {
   }
 
   return (
-    <main className="auth">
-      <form
-        className="authBox"
-        onSubmit={handleLogin}
-      >
-        <Link href="/" className="brand">
-          JNMulee <span>News</span>
-        </Link>
-
-        <h1>Admin Login</h1>
-
-        <p>
-          Sign in to access the JNMulee News
-          administration area.
-        </p>
-
-        <label htmlFor="admin-email">
-          Email
-        </label>
-
-        <input
-          id="admin-email"
-          name="email"
-          type="email"
-          placeholder="admin@example.com"
-          value={email}
-          onChange={(e) =>
-            setEmail(e.target.value)
-          }
-          autoComplete="username"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          required
-          disabled={loading}
-        />
-
-        <label htmlFor="admin-password">
-          Password
-        </label>
-
-        <input
-          id="admin-password"
-          name="password"
-          type="password"
-          placeholder="Enter your password"
-          value={password}
-          onChange={(e) =>
-            setPassword(e.target.value)
-          }
-          autoComplete="current-password"
-          required
-          disabled={loading}
-        />
-
-        {error && (
-          <div
-            role="alert"
-            style={{
-              marginTop: 4,
-              padding: "11px 13px",
-              borderRadius: 10,
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              color: "#b91c1c",
-              fontSize: 14,
-              lineHeight: 1.45,
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={loading}
+    <main className="min-h-screen bg-slate-950 px-4 py-10 text-white">
+      <div className="flex min-h-[80vh] items-center justify-center">
+        <form
+          onSubmit={handleLogin}
+          className="w-full max-w-md overflow-hidden rounded-3xl border border-cyan-400/20 bg-gradient-to-br from-slate-900 via-slate-900 to-cyan-950/30 p-7 shadow-2xl shadow-black/40 sm:p-9"
         >
-          {loading
-            ? "Signing in..."
-            : "Sign in"}
-        </button>
+          {/* BRAND */}
+          <div className="mb-8 text-center">
+            <Link
+              href="/"
+              className="inline-block text-3xl font-black tracking-tight"
+            >
+              <span className="text-white">
+                JNMulee
+              </span>{" "}
+              <span className="text-cyan-400">
+                News
+              </span>
+            </Link>
 
-        <Link href="/">
-          Back to website
-        </Link>
-      </form>
+            <div className="mx-auto mt-4 h-1 w-12 rounded-full bg-cyan-400 shadow-lg shadow-cyan-400/30" />
+          </div>
+
+          {/* TITLE */}
+          <div className="mb-7">
+            <div className="mb-3 inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold tracking-wide text-cyan-300">
+              ADMINISTRATION
+            </div>
+
+            <h1 className="text-2xl font-black tracking-tight">
+              Admin Login
+            </h1>
+
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Sign in to access the JNMulee News
+              administration area.
+            </p>
+          </div>
+
+          {/* EMAIL */}
+          <label
+            htmlFor="admin-email"
+            className="mb-2 block text-sm font-semibold text-slate-200"
+          >
+            Email
+          </label>
+
+          <input
+            id="admin-email"
+            name="email"
+            type="email"
+            placeholder="admin@example.com"
+            value={email}
+            onChange={(e) =>
+              setEmail(e.target.value)
+            }
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+            disabled={loading}
+            className="mb-5 w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3.5 text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+          />
+
+          {/* PASSWORD */}
+          <label
+            htmlFor="admin-password"
+            className="mb-2 block text-sm font-semibold text-slate-200"
+          >
+            Password
+          </label>
+
+          <input
+            id="admin-password"
+            name="password"
+            type="password"
+            placeholder="Enter your password"
+            value={password}
+            onChange={(e) =>
+              setPassword(e.target.value)
+            }
+            autoComplete="current-password"
+            required
+            disabled={loading}
+            className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3.5 text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+          />
+
+          {/* ERROR */}
+          {error && (
+            <div
+              role="alert"
+              className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-4 py-3 text-sm leading-6 text-cyan-200"
+            >
+              {error}
+            </div>
+          )}
+
+          {/* LOGIN */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="mt-6 w-full rounded-xl bg-cyan-400 px-5 py-3.5 font-black text-slate-950 shadow-lg shadow-cyan-400/10 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading
+              ? "Signing in..."
+              : "Sign in"}
+          </button>
+
+          {/* BACK */}
+          <Link
+            href="/"
+            className="mt-6 block text-center text-sm font-semibold text-slate-500 transition hover:text-cyan-300"
+          >
+            ← Back to website
+          </Link>
+        </form>
+      </div>
     </main>
   );
 }
