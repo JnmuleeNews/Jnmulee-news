@@ -16,30 +16,29 @@ export default function WorkerLoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    let active = true;
-
-    async function checkSession() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!active || !user) return;
-
-      const role = user.app_metadata?.role;
-
-      if (role === "worker") {
-        window.location.replace("/worker");
-      } else if (role === "admin") {
-        window.location.replace("/admin");
-      }
-    }
-
-    checkSession();
-
-    return () => {
-      active = false;
-    };
+    checkWorkerSession();
   }, []);
+
+  async function checkWorkerSession() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const role = user.app_metadata?.role;
+
+    /*
+     * Only automatically redirect an existing WORKER.
+     *
+     * Do NOT redirect an existing admin session to /admin.
+     * The user may be trying to switch from the admin account
+     * to a worker account in the same browser.
+     */
+    if (role === "worker") {
+      window.location.replace("/worker");
+    }
+  }
 
   async function handleLogin(
     event: React.FormEvent<HTMLFormElement>
@@ -60,6 +59,12 @@ export default function WorkerLoginPage() {
         return;
       }
 
+      /*
+       * Sign in with the worker credentials.
+       *
+       * Supabase will replace the current browser session
+       * with this account's session.
+       */
       const { data, error: loginError } =
         await supabase.auth.signInWithPassword({
           email: cleanEmail,
@@ -85,7 +90,7 @@ export default function WorkerLoginPage() {
 
         if (role === "admin") {
           setError(
-            "This is an administrator account. Please use the admin login."
+            "This account is an administrator account. Use a worker account to enter the Worker Dashboard."
           );
         } else {
           setError(
@@ -97,22 +102,32 @@ export default function WorkerLoginPage() {
         return;
       }
 
+      /*
+       * Confirm the browser has the new session.
+       */
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
       if (!session) {
         setError(
-          "The login session could not be created. Please try again."
+          "The worker session could not be created. Please try again."
         );
         setLoading(false);
         return;
       }
 
+      /*
+       * Worker authentication is successful.
+       */
       window.location.replace("/worker");
     } catch (err) {
       console.error(err);
-      setError("Unable to sign in. Please try again.");
+
+      setError(
+        "Unable to sign in. Please try again."
+      );
+
       setLoading(false);
     }
   }
@@ -129,8 +144,12 @@ export default function WorkerLoginPage() {
               href="/"
               className="text-3xl font-black tracking-tight"
             >
-              <span className="text-white">JNMulee</span>{" "}
-              <span className="text-cyan-400">News</span>
+              <span className="text-white">
+                JNMulee
+              </span>{" "}
+              <span className="text-cyan-400">
+                News
+              </span>
             </Link>
 
             <div className="mx-auto mt-4 h-1 w-12 rounded-full bg-cyan-400" />
@@ -146,7 +165,7 @@ export default function WorkerLoginPage() {
             </h1>
 
             <p className="mt-2 text-sm leading-6 text-slate-400">
-              Sign in to create and manage your own articles.
+              Sign in to create and manage your own posts.
             </p>
           </div>
 
@@ -154,7 +173,7 @@ export default function WorkerLoginPage() {
             htmlFor="email"
             className="mb-2 block text-sm font-semibold text-slate-200"
           >
-            Email
+            Worker Email
           </label>
 
           <input
@@ -178,7 +197,7 @@ export default function WorkerLoginPage() {
             htmlFor="password"
             className="mb-2 block text-sm font-semibold text-slate-200"
           >
-            Password
+            Worker Password
           </label>
 
           <input
@@ -206,7 +225,9 @@ export default function WorkerLoginPage() {
             disabled={loading}
             className="mt-6 w-full rounded-xl bg-cyan-400 px-5 py-3.5 font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? "Signing in..." : "Sign in"}
+            {loading
+              ? "Signing in..."
+              : "Sign in as Worker"}
           </button>
 
           <Link
