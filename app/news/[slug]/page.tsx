@@ -1,3 +1,4 @@
+
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
@@ -21,6 +22,17 @@ type Props = {
   searchParams?: Promise<{ comment?: string }>;
 };
 
+type Story = {
+  id: string;
+  title: string | null;
+  slug: string | null;
+  content: string | null;
+  image_url: string | null;
+  category: string | null;
+  created_at: string | null;
+  Published: boolean | null;
+};
+
 function cleanText(value: unknown): string {
   if (typeof value !== "string") return "";
 
@@ -40,14 +52,66 @@ function stripHtml(value: string): string {
     .trim();
 }
 
-function formatDate(value: string | null | undefined): string {
+function makeExcerpt(
+  value: unknown,
+  max = 160
+): string {
+  const text = stripHtml(
+    typeof value === "string"
+      ? value
+      : ""
+  );
+
+  if (!text) {
+    return "Latest news and updates from JNMulee News.";
+  }
+
+  return text.length > max
+    ? text.slice(0, max).trimEnd() + "…"
+    : text;
+}
+
+function formatDate(
+  value: string | null | undefined
+): string {
   if (!value) return "";
 
-  return new Intl.DateTimeFormat("en-NG", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(new Date(value));
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-NG",
+    {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }
+  ).format(date);
+}
+
+function isValidImageUrl(
+  value: unknown
+): value is string {
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+
+    return (
+      url.protocol === "http:" ||
+      url.protocol === "https:"
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function generateMetadata({
@@ -55,64 +119,85 @@ export async function generateMetadata({
 }: Props): Promise<Metadata> {
   const { slug } = await params;
 
-  const { data: story } = await supabase
-    .from("news")
-    .select(
-      "id,title,slug,content,excerpt,image,category,created_at,Published"
-    )
-    .eq("slug", slug)
-    .eq("Published", true)
-    .maybeSingle();
+  const { data: story } =
+    await supabase
+      .from("news")
+      .select(
+        "id,title,slug,content,image_url,category,created_at,Published"
+      )
+      .eq("slug", slug)
+      .eq("Published", true)
+      .maybeSingle();
 
   if (!story) {
     return {
       title: "News Article | JNMulee News",
+      description:
+        "Latest news from JNMulee News.",
     };
   }
 
   const title =
-    typeof story.title === "string"
-      ? story.title
+    typeof story.title === "string" &&
+    story.title.trim()
+      ? story.title.trim()
       : "JNMulee News";
 
-  const description =
-    typeof story.excerpt === "string" && story.excerpt.trim()
-      ? story.excerpt.trim().slice(0, 160)
-      : stripHtml(
-          typeof story.content === "string" ? story.content : ""
-        ).slice(0, 160);
+  const description = makeExcerpt(
+    story.content,
+    160
+  );
 
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
     "https://jnmulee-news-jnnation.vercel.app";
 
-  const canonical = `${siteUrl}/news/${story.slug}`;
+  const canonical =
+    `${siteUrl}/news/${story.slug}`;
 
   const image =
-    typeof story.image === "string" && story.image.trim()
-      ? story.image
+    isValidImageUrl(story.image_url)
+      ? story.image_url
       : undefined;
 
   return {
     title,
     description,
+
     alternates: {
       canonical,
     },
+
     openGraph: {
       title,
       description,
       url: canonical,
       type: "article",
       siteName: "JNMulee News",
-      publishedTime: story.created_at || undefined,
-      images: image ? [{ url: image }] : undefined,
+      publishedTime:
+        story.created_at || undefined,
+
+      images: image
+        ? [
+            {
+              url: image,
+              alt: title,
+            },
+          ]
+        : undefined,
     },
+
     twitter: {
-      card: image ? "summary_large_image" : "summary",
+      card: image
+        ? "summary_large_image"
+        : "summary",
+
       title,
       description,
-      images: image ? [image] : undefined,
+
+      images: image
+        ? [image]
+        : undefined,
     },
   };
 }
@@ -122,135 +207,218 @@ export default async function NewsArticlePage({
   searchParams,
 }: Props) {
   const { slug } = await params;
-  const query = searchParams ? await searchParams : {};
 
-  const { data: story, error: storyError } = await supabase
+  const query = searchParams
+    ? await searchParams
+    : {};
+
+  const {
+    data: storyData,
+    error: storyError,
+  } = await supabase
     .from("news")
-    .select("*")
+    .select(
+      "id,title,slug,content,image_url,category,created_at,Published"
+    )
     .eq("slug", slug)
     .eq("Published", true)
     .maybeSingle();
 
-  if (storyError || !story) {
+  if (storyError || !storyData) {
     notFound();
   }
 
-  const commentsResult = await supabase
+  const story =
+    storyData as Story;
+
+  /*
+   * APPROVED COMMENTS
+   */
+
+  const {
+    data: commentsData,
+  } = await supabase
     .from("comments")
-    .select("id,name,comment,created_at")
+    .select(
+      "id,name,comment,created_at"
+    )
     .eq("news_id", story.id)
     .eq("approved", true)
-    .order("created_at", { ascending: false })
+    .order("created_at", {
+      ascending: false,
+    })
     .limit(100);
 
-  const comments = commentsResult.data || [];
+  const comments =
+    commentsData || [];
 
-  const { data: relatedStories } = await supabase
+  /*
+   * RELATED NEWS
+   *
+   * IMPORTANT:
+   * Database column is image_url.
+   */
+
+  const {
+    data: relatedStories,
+  } = await supabase
     .from("news")
-    .select("id,title,slug,image,category,created_at")
+    .select(
+      "id,title,slug,image_url,category,created_at"
+    )
     .eq("Published", true)
-    .eq("category", story.category)
-    .neq("id", story.id)
-    .order("created_at", { ascending: false })
+    .eq(
+      "category",
+      story.category
+    )
+    .neq(
+      "id",
+      story.id
+    )
+    .order(
+      "created_at",
+      {
+        ascending: false,
+      }
+    )
     .limit(6);
 
   const articleTitle =
-    typeof story.title === "string"
-      ? story.title
+    typeof story.title === "string" &&
+    story.title.trim()
+      ? story.title.trim()
       : "JNMulee News";
 
   const articleContent =
-    typeof story.content === "string"
-      ? cleanText(story.content)
-      : "";
+    cleanText(story.content);
 
   const articleImage =
-    typeof story.image === "string" && story.image.trim()
-      ? story.image
+    isValidImageUrl(
+      story.image_url
+    )
+      ? story.image_url
       : null;
 
   const category =
-    typeof story.category === "string" && story.category.trim()
-      ? story.category
+    typeof story.category === "string" &&
+    story.category.trim()
+      ? story.category.trim()
       : "News";
 
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
     "https://jnmulee-news-jnnation.vercel.app";
 
-  const canonical = `${siteUrl}/news/${story.slug}`;
+  const canonical =
+    `${siteUrl}/news/${story.slug}`;
 
   /*
-   * COMMENTS
-   *
-   * New comments are automatically approved.
-   * SUPABASE_SERVICE_ROLE_KEY is used ONLY on the server.
-   * Never put this key in a NEXT_PUBLIC_ variable.
+   * COMMENT SUBMISSION
    */
-  async function postComment(formData: FormData) {
+
+  async function postComment(
+    formData: FormData
+  ) {
     "use server";
 
-    const name = String(formData.get("name") || "").trim();
-    const comment = String(formData.get("comment") || "").trim();
+    const name = String(
+      formData.get("name") || ""
+    ).trim();
 
-    if (!name || name.length < 1 || name.length > 80) {
-      redirect(`/news/${slug}?comment=invalid`);
+    const comment = String(
+      formData.get("comment") || ""
+    ).trim();
+
+    if (
+      !name ||
+      name.length > 80 ||
+      !comment ||
+      comment.length > 2000
+    ) {
+      redirect(
+        `/news/${slug}?comment=invalid`
+      );
     }
 
-    if (!comment || comment.length < 1 || comment.length > 2000) {
-      redirect(`/news/${slug}?comment=invalid`);
-    }
-
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceRoleKey =
+      process.env
+        .SUPABASE_SERVICE_ROLE_KEY;
 
     if (!serviceRoleKey) {
       console.error(
-        "SUPABASE_SERVICE_ROLE_KEY is missing from the server environment."
+        "SUPABASE_SERVICE_ROLE_KEY is missing."
       );
 
-      redirect(`/news/${slug}?comment=error`);
+      redirect(
+        `/news/${slug}?comment=error`
+      );
     }
 
-    const adminClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceRoleKey!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    const adminClient =
+      createClient(
+        process.env
+          .NEXT_PUBLIC_SUPABASE_URL!,
+        serviceRoleKey,
+        {
+          auth: {
+            autoRefreshToken:
+              false,
+            persistSession:
+              false,
+          },
+        }
+      );
 
-    const { data: article, error: articleError } = await adminClient
+    const {
+      data: article,
+      error: articleError,
+    } = await adminClient
       .from("news")
       .select("id")
       .eq("slug", slug)
       .eq("Published", true)
       .maybeSingle();
 
-    if (articleError || !article) {
-      console.error("Comment article lookup error:", articleError);
+    if (
+      articleError ||
+      !article
+    ) {
+      console.error(
+        "Comment article lookup error:",
+        articleError
+      );
 
-      redirect(`/news/${slug}?comment=error`);
+      redirect(
+        `/news/${slug}?comment=error`
+      );
     }
 
-    const { error: insertError } = await adminClient
+    const {
+      error: insertError,
+    } = await adminClient
       .from("comments")
       .insert({
-        news_id: article.id,
+        news_id:
+          article.id,
         name,
         comment,
         approved: true,
       });
 
     if (insertError) {
-      console.error("Comment insert error:", insertError);
+      console.error(
+        "Comment insert error:",
+        insertError
+      );
 
-      redirect(`/news/${slug}?comment=error`);
+      redirect(
+        `/news/${slug}?comment=error`
+      );
     }
 
-    redirect(`/news/${slug}?comment=success`);
+    redirect(
+      `/news/${slug}?comment=success`
+    );
   }
 
   const commentStatus =
@@ -262,56 +430,120 @@ export default async function NewsArticlePage({
           ? "error"
           : null;
 
+  /*
+   * NEWS ARTICLE JSON-LD
+   */
+
   const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "NewsArticle",
-    headline: articleTitle,
-    datePublished: story.created_at || undefined,
-    dateModified: story.created_at || undefined,
+    "@context":
+      "https://schema.org",
+
+    "@type":
+      "NewsArticle",
+
+    headline:
+      articleTitle,
+
+    description:
+      makeExcerpt(
+        story.content,
+        200
+      ),
+
+    datePublished:
+      story.created_at ||
+      undefined,
+
+    dateModified:
+      story.created_at ||
+      undefined,
+
     mainEntityOfPage: {
-      "@type": "WebPage",
-      "@id": canonical,
+      "@type":
+        "WebPage",
+
+      "@id":
+        canonical,
     },
+
     publisher: {
-      "@type": "Organization",
-      name: "JNMulee News",
-      url: siteUrl,
+      "@type":
+        "Organization",
+
+      name:
+        "JNMulee News",
+
+      url:
+        siteUrl,
     },
-    image: articleImage ? [articleImage] : undefined,
+
+    image:
+      articleImage
+        ? [articleImage]
+        : undefined,
   };
 
   return (
     <>
-      <ArticleViewTracker newsId={story.id} />
+      <ArticleViewTracker
+        newsId={story.id}
+      />
 
       <main className="jn-article-page">
         <div className="jn-container">
-          <nav className="jn-breadcrumb">
-            <Link href="/">Home</Link>
+
+          <nav
+            className="jn-breadcrumb"
+            aria-label="Breadcrumb"
+          >
+            <Link href="/">
+              Home
+            </Link>
+
             <span>›</span>
-            <Link href={`/category/${encodeURIComponent(category)}`}>
+
+            <Link
+              href={`/category/${encodeURIComponent(
+                category
+              )}`}
+            >
               {category}
             </Link>
+
             <span>›</span>
-            <span>Article</span>
+
+            <span>
+              Article
+            </span>
           </nav>
 
           <article className="jn-article">
-            <div className="jn-category">{category}</div>
 
-            <h1>{articleTitle}</h1>
+            <div className="jn-category">
+              {category}
+            </div>
+
+            <h1>
+              {articleTitle}
+            </h1>
 
             {story.created_at && (
               <div className="jn-date">
-                {formatDate(story.created_at)}
+                {formatDate(
+                  story.created_at
+                )}
               </div>
             )}
 
             {articleImage && (
               <div className="jn-hero-image">
                 <Image
-                  src={articleImage}
-                  alt={articleTitle}
+                  src={
+                    articleImage
+                  }
+                  alt={
+                    articleTitle
+                  }
                   width={1200}
                   height={675}
                   priority
@@ -327,7 +559,8 @@ export default async function NewsArticlePage({
             <div
               className="jn-content"
               dangerouslySetInnerHTML={{
-                __html: articleContent,
+                __html:
+                  articleContent,
               }}
             />
 
@@ -337,37 +570,64 @@ export default async function NewsArticlePage({
 
             <div className="jn-share">
               <ShareButtons
-                title={articleTitle}
-                url={canonical}
+                title={
+                  articleTitle
+                }
+                url={
+                  canonical
+                }
               />
             </div>
+
           </article>
 
-          <section className="jn-comments" id="comments">
+          <section
+            className="jn-comments"
+            id="comments"
+          >
+
             <div className="jn-section-heading">
-              <h2>Comments</h2>
-              <span>{comments.length}</span>
+              <h2>
+                Comments
+              </h2>
+
+              <span>
+                {
+                  comments.length
+                }
+              </span>
             </div>
 
-            {commentStatus === "success" && (
+            {commentStatus ===
+              "success" && (
               <div className="jn-comment-success">
-                Your comment was posted successfully.
+                Your comment was posted
+                successfully.
               </div>
             )}
 
-            {commentStatus === "invalid" && (
+            {commentStatus ===
+              "invalid" && (
               <div className="jn-comment-error">
-                Please enter a valid name and comment.
+                Please enter a valid
+                name and comment.
               </div>
             )}
 
-            {commentStatus === "error" && (
+            {commentStatus ===
+              "error" && (
               <div className="jn-comment-error">
-                Your comment could not be posted. Please try again.
+                Your comment could
+                not be posted.
+                Please try again.
               </div>
             )}
 
-            <form action={postComment} className="jn-comment-form">
+            <form
+              action={postComment}
+              className="jn-comment-form"
+            >
+
               <input
                 type="text"
                 name="name"
@@ -391,86 +651,156 @@ export default async function NewsArticlePage({
               >
                 Post Comment
               </button>
+
             </form>
 
             <div className="jn-comment-list">
-              {comments.length === 0 ? (
+
+              {comments.length ===
+              0 ? (
                 <p className="jn-no-comments">
-                  No comments yet. Be the first to comment.
+                  No comments yet.
+                  Be the first to
+                  comment.
                 </p>
               ) : (
-                comments.map((item) => (
-                  <div
-                    className="jn-comment"
-                    key={item.id}
-                  >
-                    <div className="jn-comment-top">
-                      <strong>{item.name}</strong>
+                comments.map(
+                  (item) => (
+                    <div
+                      className="jn-comment"
+                      key={
+                        item.id
+                      }
+                    >
 
-                      <span>
-                        {formatDate(item.created_at)}
-                      </span>
+                      <div className="jn-comment-top">
+
+                        <strong>
+                          {
+                            item.name
+                          }
+                        </strong>
+
+                        <span>
+                          {
+                            formatDate(
+                              item.created_at
+                            )
+                          }
+                        </span>
+
+                      </div>
+
+                      <p>
+                        {
+                          item.comment
+                        }
+                      </p>
+
                     </div>
-
-                    <p>{item.comment}</p>
-                  </div>
-                ))
+                  )
+                )
               )}
+
             </div>
           </section>
 
-          {relatedStories && relatedStories.length > 0 && (
-            <section className="jn-related">
-              <div className="jn-section-heading">
-                <h2>Related News</h2>
-              </div>
+          {relatedStories &&
+            relatedStories.length >
+              0 && (
+              <section className="jn-related">
 
-              <div className="jn-related-grid">
-                {relatedStories.map((related) => (
-                  <Link
-                    href={`/news/${related.slug}`}
-                    className="jn-related-card"
-                    key={related.id}
-                  >
-                    {related.image && (
-                      <div className="jn-related-image">
-                        <Image
-                          src={related.image}
-                          alt={related.title || "Related news"}
-                          width={500}
-                          height={280}
-                          unoptimized
-                        />
-                      </div>
-                    )}
+                <div className="jn-section-heading">
+                  <h2>
+                    Related News
+                  </h2>
+                </div>
 
-                    <div className="jn-related-body">
-                      <span>{related.category || "News"}</span>
+                <div className="jn-related-grid">
 
-                      <h3>{related.title}</h3>
+                  {relatedStories.map(
+                    (related) => (
+                      <Link
+                        href={`/news/${related.slug}`}
+                        className="jn-related-card"
+                        key={
+                          related.id
+                        }
+                      >
 
-                      {related.created_at && (
-                        <small>
-                          {formatDate(related.created_at)}
-                        </small>
-                      )}
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
+                        {isValidImageUrl(
+                          related.image_url
+                        ) && (
+                          <div className="jn-related-image">
+
+                            <Image
+                              src={
+                                related.image_url
+                              }
+                              alt={
+                                related.title ||
+                                "Related news"
+                              }
+                              width={500}
+                              height={280}
+                              loading="lazy"
+                              unoptimized
+                            />
+
+                          </div>
+                        )}
+
+                        <div className="jn-related-body">
+
+                          <span>
+                            {
+                              related.category ||
+                              "News"
+                            }
+                          </span>
+
+                          <h3>
+                            {
+                              related.title
+                            }
+                          </h3>
+
+                          {related.created_at && (
+                            <small>
+                              {
+                                formatDate(
+                                  related.created_at
+                                )
+                              }
+                            </small>
+                          )}
+
+                        </div>
+
+                      </Link>
+                    )
+                  )}
+
+                </div>
+
+              </section>
+            )}
+
         </div>
       </main>
 
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(jsonLd),
+          __html:
+            JSON.stringify(
+              jsonLd
+            ),
         }}
       />
 
       <style>{`
+
         .jn-article-page {
           width: 100%;
           background: #fff;
@@ -478,7 +808,10 @@ export default async function NewsArticlePage({
         }
 
         .jn-container {
-          width: min(1180px, calc(100% - 32px));
+          width: min(
+            1180px,
+            calc(100% - 32px)
+          );
           margin: 0 auto;
           padding: 24px 0 60px;
         }
@@ -516,7 +849,11 @@ export default async function NewsArticlePage({
 
         .jn-article h1 {
           margin: 0;
-          font-size: clamp(32px, 5vw, 58px);
+          font-size: clamp(
+            32px,
+            5vw,
+            58px
+          );
           line-height: 1.08;
           letter-spacing: -1.5px;
           color: #0f172a;
@@ -636,7 +973,14 @@ export default async function NewsArticlePage({
         .jn-comment-form input:focus,
         .jn-comment-form textarea:focus {
           border-color: #2563eb;
-          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+          box-shadow:
+            0 0 0 3px
+            rgba(
+              37,
+              99,
+              235,
+              0.12
+            );
         }
 
         .jn-comment-form textarea {
@@ -722,7 +1066,8 @@ export default async function NewsArticlePage({
 
         .jn-related-grid {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns:
+            repeat(3, 1fr);
           gap: 18px;
         }
 
@@ -734,12 +1079,22 @@ export default async function NewsArticlePage({
           border-radius: 14px;
           overflow: hidden;
           background: #fff;
-          transition: transform 0.2s ease, box-shadow 0.2s ease;
+          transition:
+            transform 0.2s ease,
+            box-shadow 0.2s ease;
         }
 
         .jn-related-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+          transform:
+            translateY(-2px);
+          box-shadow:
+            0 10px 25px
+            rgba(
+              15,
+              23,
+              42,
+              0.08
+            );
         }
 
         .jn-related-image {
@@ -779,13 +1134,18 @@ export default async function NewsArticlePage({
 
         @media (max-width: 800px) {
           .jn-related-grid {
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns:
+              repeat(2, 1fr);
           }
         }
 
         @media (max-width: 560px) {
           .jn-container {
-            width: min(100% - 20px, 1180px);
+            width:
+              min(
+                100% - 20px,
+                1180px
+              );
             padding-top: 16px;
           }
 
@@ -807,6 +1167,7 @@ export default async function NewsArticlePage({
             gap: 4px;
           }
         }
+
       `}</style>
     </>
   );
