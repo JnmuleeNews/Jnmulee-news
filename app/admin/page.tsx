@@ -62,9 +62,10 @@ export default function AdminDashboard() {
   async function checkAuthentication() {
     const {
       data: { user },
+      error: userError,
     } = await supabase.auth.getUser();
 
-    if (!user) {
+    if (userError || !user) {
       router.replace("/admin/login");
       return false;
     }
@@ -319,6 +320,13 @@ export default function AdminDashboard() {
     setAddingAd(false);
   }
 
+  /*
+   * Secure manual news import.
+   *
+   * The browser gets the currently logged-in
+   * Supabase session and sends its access token
+   * to the protected API route.
+   */
   async function runNewsImport() {
     if (importing) return;
 
@@ -328,45 +336,38 @@ export default function AdminDashboard() {
 
     try {
       const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-      if (userError || !user) {
+      if (
+        sessionError ||
+        !session?.access_token
+      ) {
+        setError(
+          "Your admin session has expired. Please sign in again."
+        );
+
+        await supabase.auth.signOut();
         router.replace("/admin/login");
         return;
       }
 
-      if (user.app_metadata?.role !== "admin") {
+      const user = session.user;
+
+      if (
+        !user ||
+        user.app_metadata?.role !== "admin"
+      ) {
+        setError(
+          "You are not authorized to run the news importer."
+        );
+
         await supabase.auth.signOut();
         router.replace("/");
         return;
       }
 
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError || !session?.access_token) {
-        setError(
-          "Your admin session has expired. Please sign in again."
-        );
-        router.replace("/admin/login");
-        return;
-      }
-
-      /*
-       * IMPORTANT:
-       *
-       * manual=true tells the API route that
-       * this import was explicitly started by
-       * the administrator.
-       *
-       * Automatic/scheduled imports do not send
-       * this parameter and continue using the
-       * normal OpenAI and quality rules.
-       */
       const response = await fetch(
         "/api/fetch-news?manual=true",
         {
@@ -374,6 +375,7 @@ export default function AdminDashboard() {
           cache: "no-store",
           headers: {
             Authorization: `Bearer ${session.access_token}`,
+            Accept: "application/json",
           },
         }
       );
@@ -381,6 +383,9 @@ export default function AdminDashboard() {
       let data: {
         message?: string;
         error?: string;
+        added?: number;
+        skipped?: number;
+        success?: boolean;
       } = {};
 
       try {
@@ -399,23 +404,52 @@ export default function AdminDashboard() {
         return;
       }
 
-      if (!response.ok) {
+      if (response.status === 403) {
         setError(
-          data?.error ||
-            "News import failed."
+          "Access denied. Your account does not have administrator permissions."
         );
         return;
       }
 
-      setMessage(
-        data?.message ||
-          "RSS news import completed successfully."
-      );
+      if (!response.ok) {
+        setError(
+          data.error ||
+            `News import failed with status ${response.status}.`
+        );
+        return;
+      }
+
+      if (data.success === false) {
+        setError(
+          data.error ||
+            "The news importer reported an error."
+        );
+        return;
+      }
+
+      if (
+        typeof data.added === "number" &&
+        typeof data.skipped === "number"
+      ) {
+        setMessage(
+          `News import completed. Added ${data.added} stories and skipped ${data.skipped}.`
+        );
+      } else {
+        setMessage(
+          data.message ||
+            "RSS news import completed successfully."
+        );
+      }
 
       await loadData();
-    } catch {
+    } catch (err) {
+      console.error(
+        "Manual news import error:",
+        err
+      );
+
       setError(
-        "Unable to start the news import."
+        "Unable to connect to the news importer. Please try again."
       );
     } finally {
       setImporting(false);
