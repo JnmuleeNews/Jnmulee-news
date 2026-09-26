@@ -41,13 +41,11 @@ export async function middleware(request: NextRequest) {
   );
 
   /*
-   * Refresh the Supabase session when necessary.
+   * Refresh Supabase authentication cookies.
    *
-   * IMPORTANT:
-   * We deliberately do NOT redirect /admin here.
-   * The browser-side admin dashboard handles the
-   * administrator check. This prevents the
-   * /admin/login <-> /admin redirect loop.
+   * We intentionally do not perform role redirects
+   * here. Admin and worker pages perform their own
+   * authorization checks.
    */
   await supabase.auth.getUser();
 
@@ -56,10 +54,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Run on admin pages so Supabase can refresh
-     * authentication cookies.
-     */
     "/admin/:path*",
+    "/worker/:path*",
   ],
 };
