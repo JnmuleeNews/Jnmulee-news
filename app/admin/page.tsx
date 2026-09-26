@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
-const supabase = createClient(
+const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
@@ -831,6 +831,7 @@ export default function AdminPage() {
 
   async function signOut() {
     await supabase.auth.signOut();
+
     window.location.replace(
       "/admin/login"
     );
@@ -903,7 +904,6 @@ export default function AdminPage() {
     <main className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
 
-        {/* HEADER */}
         <header className="mb-6 overflow-hidden rounded-2xl border border-cyan-400/20 bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/30 p-5 shadow-2xl shadow-black/20">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
 
@@ -952,9 +952,9 @@ export default function AdminPage() {
           </div>
         </header>
 
-        {/* ADMIN NAV */}
         <nav className="mb-8 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.035] p-2">
           <div className="flex min-w-max gap-2">
+
             {[
               ["dashboard", "Dashboard"],
               ["import", "News Import"],
@@ -1001,10 +1001,10 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* DASHBOARD */}
         {activeSection === "dashboard" && (
           <>
             <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
               <DashboardCard
                 title="Published Stories"
                 value={publishedCount}
@@ -1024,9 +1024,11 @@ export default function AdminPage() {
                 title="Active Ads"
                 value={activeAds}
               />
+
             </section>
 
             <section className="mb-8 grid gap-5 lg:grid-cols-2">
+
               <QuickCard
                 title="News Import"
                 description="Fetch active feeds and process available articles."
@@ -1060,14 +1062,16 @@ export default function AdminPage() {
                   setActiveSection("ads")
                 }
               />
+
             </section>
           </>
         )}
 
-        {/* IMPORT */}
         {activeSection === "import" && (
           <section className="mb-8 rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-cyan-400/[0.07] to-white/[0.02] p-5 shadow-xl shadow-black/10">
+
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
               <div>
                 <p className="text-xs font-bold tracking-widest text-cyan-400">
                   NEWS IMPORT
@@ -1091,6 +1095,7 @@ export default function AdminPage() {
                   ? "Importing..."
                   : "Import News"}
               </button>
+
             </div>
 
             {importProgress && (
@@ -1101,6 +1106,7 @@ export default function AdminPage() {
 
             {importStats && (
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+
                 <Stat
                   label="Sources"
                   value={
@@ -1132,6 +1138,7 @@ export default function AdminPage() {
                     0
                   }
                 />
+
               </div>
             )}
 
@@ -1144,6 +1151,7 @@ export default function AdminPage() {
             {importStats?.diagnostics &&
               importStats.diagnostics.length > 0 && (
                 <details className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4">
+
                   <summary className="cursor-pointer text-sm font-bold text-cyan-300">
                     Import diagnostics
                   </summary>
@@ -1162,14 +1170,16 @@ export default function AdminPage() {
                         )
                       )}
                   </div>
+
                 </details>
               )}
+
           </section>
         )}
 
-        {/* SOURCES */}
         {activeSection === "sources" && (
           <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
+
             <div className="mb-5">
               <p className="text-xs font-bold tracking-widest text-cyan-400">
                 SOURCES
@@ -1181,6 +1191,7 @@ export default function AdminPage() {
             </div>
 
             <div className="grid gap-3 md:grid-cols-3">
+
               <input
                 value={sourceName}
                 onChange={(event) =>
@@ -1224,6 +1235,7 @@ export default function AdminPage() {
                   )
                 )}
               </select>
+
             </div>
 
             <button
@@ -1235,15 +1247,20 @@ export default function AdminPage() {
             </button>
 
             <div className="mt-6 space-y-3">
+
               {sources.map(
                 (source) => (
                   <div
                     key={source.id}
                     className="rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-cyan-400/20"
                   >
+
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+
                       <div className="min-w-0">
+
                         <div className="flex flex-wrap items-center gap-2">
+
                           <h3 className="font-bold">
                             {source.name ||
                               "Unnamed source"}
@@ -1265,14 +1282,17 @@ export default function AdminPage() {
                               ? "Active"
                               : "Inactive"}
                           </span>
+
                         </div>
 
                         <p className="mt-2 break-all text-xs text-slate-500">
                           {source.feed_url}
                         </p>
+
                       </div>
 
                       <div className="flex shrink-0 gap-2">
+
                         <button
                           onClick={() =>
                             toggleSource(
@@ -1296,8 +1316,11 @@ export default function AdminPage() {
                         >
                           Delete
                         </button>
+
                       </div>
+
                     </div>
+
                   </div>
                 )
               )}
@@ -1307,14 +1330,17 @@ export default function AdminPage() {
                   No news sources found.
                 </p>
               )}
+
             </div>
+
           </section>
         )}
 
-        {/* ARTICLES */}
         {activeSection === "articles" && (
           <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
+
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+
               <div>
                 <p className="text-xs font-bold tracking-widest text-cyan-400">
                   CONTENT
@@ -1328,16 +1354,20 @@ export default function AdminPage() {
               <span className="text-sm text-slate-400">
                 Showing latest 100
               </span>
+
             </div>
 
             <div className="space-y-3">
+
               {news.map(
                 (item) => (
                   <div
                     key={item.id}
                     className="rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-cyan-400/20"
                   >
+
                     <div className="flex flex-col gap-4 sm:flex-row">
+
                       {item.image_url && (
                         <img
                           src={item.image_url}
@@ -1347,11 +1377,13 @@ export default function AdminPage() {
                       )}
 
                       <div className="min-w-0 flex-1">
+
                         <h3 className="font-bold">
                           {item.title}
                         </h3>
 
                         <div className="mt-2 flex flex-wrap gap-2 text-xs">
+
                           <span className="rounded-full bg-white/10 px-2 py-1 text-slate-300">
                             {item.category ||
                               "News"}
@@ -1374,10 +1406,13 @@ export default function AdminPage() {
                               No image
                             </span>
                           )}
+
                         </div>
+
                       </div>
 
                       <div className="flex shrink-0 gap-2 sm:flex-col">
+
                         <button
                           onClick={() =>
                             togglePublished(
@@ -1411,8 +1446,11 @@ export default function AdminPage() {
                         >
                           Delete
                         </button>
+
                       </div>
+
                     </div>
+
                   </div>
                 )
               )}
@@ -1422,14 +1460,17 @@ export default function AdminPage() {
                   No articles found.
                 </p>
               )}
+
             </div>
+
           </section>
         )}
 
-        {/* ADS */}
         {activeSection === "ads" && (
           <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
+
             <div className="mb-4">
+
               <p className="text-xs font-bold tracking-widest text-cyan-400">
                 MONETIZATION
               </p>
@@ -1441,9 +1482,11 @@ export default function AdminPage() {
               <p className="mt-1 text-sm text-slate-400">
                 Manage your own advertising placements.
               </p>
+
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
+
               <input
                 value={adTitle}
                 onChange={(event) =>
@@ -1502,6 +1545,7 @@ export default function AdminPage() {
                 placeholder="Destination URL"
                 className={inputClass}
               />
+
             </div>
 
             <button
@@ -1513,14 +1557,18 @@ export default function AdminPage() {
             </button>
 
             <div className="mt-6 space-y-3">
+
               {ads.map(
                 (ad) => (
                   <div
                     key={ad.id}
                     className="rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-cyan-400/20"
                   >
+
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
                       <div className="min-w-0">
+
                         <h3 className="font-bold">
                           {ad.title ||
                             "Untitled advertisement"}
@@ -1540,9 +1588,11 @@ export default function AdminPage() {
                             {ad.link_url}
                           </p>
                         )}
+
                       </div>
 
                       <div className="flex gap-2">
+
                         <button
                           onClick={() =>
                             toggleAd(ad)
@@ -1562,8 +1612,11 @@ export default function AdminPage() {
                         >
                           Delete
                         </button>
+
                       </div>
+
                     </div>
+
                   </div>
                 )
               )}
@@ -1573,7 +1626,9 @@ export default function AdminPage() {
                   No direct advertisements yet.
                 </p>
               )}
+
             </div>
+
           </section>
         )}
 
@@ -1583,6 +1638,7 @@ export default function AdminPage() {
           </span>{" "}
           News Admin
         </footer>
+
       </div>
     </main>
   );
@@ -1597,6 +1653,7 @@ function DashboardCard({
 }) {
   return (
     <div className="group rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5 shadow-xl shadow-black/10 transition hover:border-cyan-400/20">
+
       <p className="text-sm text-slate-400">
         {title}
       </p>
@@ -1606,6 +1663,7 @@ function DashboardCard({
       </p>
 
       <div className="mt-4 h-1 w-10 rounded-full bg-cyan-400/60" />
+
     </div>
   );
 }
@@ -1619,6 +1677,7 @@ function Stat({
 }) {
   return (
     <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+
       <p className="text-xs font-medium text-slate-500">
         {label}
       </p>
@@ -1626,6 +1685,7 @@ function Stat({
       <p className="mt-1 text-xl font-black text-cyan-200">
         {value}
       </p>
+
     </div>
   );
 }
@@ -1646,6 +1706,7 @@ function QuickCard({
   const content = (
     <>
       <div>
+
         <p className="text-lg font-black text-white">
           {title}
         </p>
@@ -1653,6 +1714,7 @@ function QuickCard({
         <p className="mt-2 text-sm leading-6 text-slate-400">
           {description}
         </p>
+
       </div>
 
       <span className="mt-5 inline-flex rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-4 py-2 text-sm font-bold text-cyan-200 transition group-hover:border-cyan-400/40 group-hover:bg-cyan-400/10">
