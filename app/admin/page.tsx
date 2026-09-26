@@ -76,10 +76,7 @@ const CATEGORIES = [
 ];
 
 const AD_PLACEMENTS = [
-  {
-    value: "home_top",
-    label: "Homepage Top",
-  },
+  { value: "home_top", label: "Homepage Top" },
   {
     value: "home_between",
     label: "Homepage Between Stories",
@@ -88,10 +85,7 @@ const AD_PLACEMENTS = [
     value: "home_bottom",
     label: "Homepage Bottom",
   },
-  {
-    value: "article_top",
-    label: "Article Top",
-  },
+  { value: "article_top", label: "Article Top" },
   {
     value: "article_middle",
     label: "Article Middle",
@@ -101,6 +95,18 @@ const AD_PLACEMENTS = [
     label: "Article Bottom",
   },
 ];
+
+const cyanButton =
+  "rounded-xl bg-cyan-400 px-5 py-3 font-bold text-slate-950 shadow-lg shadow-cyan-400/10 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
+
+const smallButton =
+  "rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs font-semibold text-cyan-200 transition hover:border-cyan-400/40 hover:bg-cyan-400/10";
+
+const deleteButton =
+  "rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-cyan-400/30 hover:bg-slate-700 hover:text-cyan-200";
+
+const inputClass =
+  "w-full rounded-lg border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/10";
 
 export default function AdminPage() {
   const [loading, setLoading] = useState(true);
@@ -116,18 +122,21 @@ export default function AdminPage() {
   const [error, setError] = useState("");
 
   const [importProgress, setImportProgress] = useState("");
-  const [importStats, setImportStats] = useState<ImportResult | null>(
-    null
-  );
+  const [importStats, setImportStats] =
+    useState<ImportResult | null>(null);
 
   const [sourceName, setSourceName] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
-  const [sourceCategory, setSourceCategory] = useState("News");
+  const [sourceCategory, setSourceCategory] =
+    useState("News");
 
-  const [adPlacement, setAdPlacement] = useState("home_top");
+  const [adPlacement, setAdPlacement] =
+    useState("home_top");
   const [adTitle, setAdTitle] = useState("");
-  const [adImageUrl, setAdImageUrl] = useState("");
-  const [adLinkUrl, setAdLinkUrl] = useState("");
+  const [adImageUrl, setAdImageUrl] =
+    useState("");
+  const [adLinkUrl, setAdLinkUrl] =
+    useState("");
 
   async function loadData() {
     setError("");
@@ -147,7 +156,9 @@ export default function AdminPage() {
       const role = user.app_metadata?.role;
 
       if (role !== "admin") {
-        setError("You do not have administrator access.");
+        setError(
+          "You do not have administrator access."
+        );
         setLoading(false);
         return;
       }
@@ -234,7 +245,8 @@ export default function AdminPage() {
     const {
       data,
       error: sessionError,
-    } = await supabase.auth.getSession();
+    } =
+      await supabase.auth.getSession();
 
     if (sessionError) {
       throw new Error(
@@ -297,9 +309,6 @@ export default function AdminPage() {
       const token =
         await getAccessToken();
 
-      /*
-       * First request tells us how many batches exist.
-       */
       const first =
         await importBatch(token, 0);
 
@@ -354,9 +363,6 @@ export default function AdminPage() {
         `Completed batch 1 of ${totalBatches}`
       );
 
-      /*
-       * If there is only one batch, we're finished.
-       */
       if (
         combined.aiCreditsUnavailable
       ) {
@@ -368,9 +374,6 @@ export default function AdminPage() {
         return;
       }
 
-      /*
-       * Run remaining batches.
-       */
       for (
         let batch = 1;
         batch < totalBatches;
@@ -475,7 +478,10 @@ export default function AdminPage() {
         !combined.aiCreditsUnavailable
       ) {
         setMessage(
-          `Import completed. ${combined.articlesAddedForApproval || 0} new article(s) were added for approval.`
+          `Import completed. ${
+            combined.articlesAddedForApproval ||
+            0
+          } new article(s) were added for approval.`
         );
       }
 
@@ -576,12 +582,12 @@ export default function AdminPage() {
   ) {
     const confirmed =
       window.confirm(
-        `Delete "${source.name || "this source"}"?`
+        `Delete "${
+          source.name || "this source"
+        }"?`
       );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     setError("");
     setMessage("");
@@ -599,10 +605,7 @@ export default function AdminPage() {
       return;
     }
 
-    setMessage(
-      "Source deleted."
-    );
-
+    setMessage("Source deleted.");
     await loadData();
   }
 
@@ -638,9 +641,7 @@ export default function AdminPage() {
         `Delete "${item.title}"?`
       );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     setError("");
     setMessage("");
@@ -658,10 +659,7 @@ export default function AdminPage() {
       return;
     }
 
-    setMessage(
-      "Article deleted."
-    );
-
+    setMessage("Article deleted.");
     await loadData();
   }
 
@@ -760,12 +758,13 @@ export default function AdminPage() {
   ) {
     const confirmed =
       window.confirm(
-        `Delete "${ad.title || "this advertisement"}"?`
+        `Delete "${
+          ad.title ||
+          "this advertisement"
+        }"?`
       );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     setError("");
     setMessage("");
@@ -799,7 +798,8 @@ export default function AdminPage() {
     return (
       <main className="min-h-screen bg-slate-950 px-4 py-16 text-white">
         <div className="mx-auto max-w-5xl text-center">
-          <p className="text-lg">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-cyan-400/20 border-t-cyan-400" />
+          <p className="text-lg text-slate-300">
             Loading admin dashboard...
           </p>
         </div>
@@ -810,12 +810,16 @@ export default function AdminPage() {
   if (error && !userEmail) {
     return (
       <main className="min-h-screen bg-slate-950 px-4 py-16 text-white">
-        <div className="mx-auto max-w-xl rounded-2xl border border-red-500/30 bg-red-500/10 p-6">
-          <h1 className="mb-3 text-2xl font-bold">
+        <div className="mx-auto max-w-xl rounded-2xl border border-cyan-400/20 bg-white/[0.04] p-6 shadow-2xl">
+          <div className="mb-4 text-sm font-bold text-cyan-300">
+            JNMulee News
+          </div>
+
+          <h1 className="mb-3 text-2xl font-black">
             Admin Access
           </h1>
 
-          <p className="text-red-300">
+          <p className="text-slate-300">
             {error}
           </p>
 
@@ -824,7 +828,7 @@ export default function AdminPage() {
               (window.location.href =
                 "/login")
             }
-            className="mt-5 rounded-lg bg-white px-5 py-3 font-semibold text-slate-950"
+            className={`${cyanButton} mt-5`}
           >
             Go to Login
           </button>
@@ -836,48 +840,62 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+
         {/* HEADER */}
-        <header className="mb-8 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-cyan-400">
-              JNMulee News
-            </p>
+        <header className="mb-8 overflow-hidden rounded-2xl border border-cyan-400/20 bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/30 p-5 shadow-2xl shadow-black/20">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-lg shadow-cyan-400/50" />
 
-            <h1 className="mt-1 text-3xl font-black">
-              Admin Dashboard
-            </h1>
+                <p className="text-sm font-black tracking-wide text-cyan-300">
+                  JNMulee News
+                </p>
+              </div>
 
-            <p className="mt-1 text-sm text-slate-400">
-              {userEmail}
-            </p>
+              <h1 className="mt-1 text-3xl font-black tracking-tight">
+                Admin Dashboard
+              </h1>
+
+              <p className="mt-1 text-sm text-slate-400">
+                {userEmail}
+              </p>
+            </div>
+
+            <button
+              onClick={signOut}
+              className={smallButton}
+            >
+              Sign Out
+            </button>
           </div>
-
-          <button
-            onClick={signOut}
-            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold hover:bg-white/10"
-          >
-            Sign Out
-          </button>
         </header>
 
         {/* MESSAGES */}
         {message && (
-          <div className="mb-5 rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-300">
+          <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm font-semibold text-cyan-200">
             {message}
           </div>
         )}
 
         {error && (
-          <div className="mb-5 rounded-xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-300">
+          <div className="mb-5 rounded-xl border border-cyan-400/20 bg-slate-900 p-4 text-sm text-cyan-100">
+            <span className="font-bold text-cyan-300">
+              Notice:
+            </span>{" "}
             {error}
           </div>
         )}
 
         {/* IMPORT */}
-        <section className="mb-8 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-5">
+        <section className="mb-8 rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-cyan-400/[0.07] to-white/[0.02] p-5 shadow-xl shadow-black/10">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-xl font-bold">
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
+                NEWS ENGINE
+              </div>
+
+              <h2 className="text-xl font-black">
                 News Importer
               </h2>
 
@@ -892,7 +910,7 @@ export default function AdminPage() {
             <button
               onClick={runImportAll}
               disabled={working}
-              className="rounded-xl bg-cyan-400 px-5 py-3 font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+              className={cyanButton}
             >
               {working
                 ? "Importing..."
@@ -901,7 +919,7 @@ export default function AdminPage() {
           </div>
 
           {importProgress && (
-            <div className="mt-4 rounded-lg bg-black/20 p-3 text-sm text-cyan-300">
+            <div className="mt-4 rounded-lg border border-cyan-400/10 bg-slate-950/70 p-3 text-sm text-cyan-300">
               {importProgress}
             </div>
           )}
@@ -956,7 +974,7 @@ export default function AdminPage() {
           )}
 
           {importStats?.aiCreditsUnavailable && (
-            <div className="mt-5 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-300">
+            <div className="mt-5 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-4 text-sm text-cyan-200">
               OpenAI credits/quota are unavailable.
               News cannot be AI-generated until the
               OpenAI API account has available credits.
@@ -966,8 +984,8 @@ export default function AdminPage() {
           {importStats?.diagnostics &&
             importStats.diagnostics.length >
               0 && (
-              <details className="mt-5 rounded-xl border border-white/10 bg-black/20 p-4">
-                <summary className="cursor-pointer font-semibold">
+              <details className="mt-5 rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <summary className="cursor-pointer font-semibold text-cyan-200">
                   Import diagnostics
                 </summary>
 
@@ -1020,8 +1038,8 @@ export default function AdminPage() {
         </section>
 
         {/* ADD SOURCE */}
-        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-          <h2 className="mb-4 text-xl font-bold">
+        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
+          <h2 className="mb-4 text-xl font-black">
             Add News Source
           </h2>
 
@@ -1034,7 +1052,7 @@ export default function AdminPage() {
                 )
               }
               placeholder="Source name"
-              className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-slate-500"
+              className={inputClass}
             />
 
             <input
@@ -1045,7 +1063,7 @@ export default function AdminPage() {
                 )
               }
               placeholder="RSS / Atom feed URL"
-              className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-slate-500 md:col-span-2"
+              className={`${inputClass} md:col-span-2`}
             />
 
             <select
@@ -1055,13 +1073,14 @@ export default function AdminPage() {
                   event.target.value
                 )
               }
-              className="rounded-lg border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+              className={inputClass}
             >
               {CATEGORIES.map(
                 (category) => (
                   <option
                     key={category}
                     value={category}
+                    className="bg-slate-900"
                   >
                     {category}
                   </option>
@@ -1073,20 +1092,26 @@ export default function AdminPage() {
           <button
             onClick={addSource}
             disabled={working}
-            className="mt-4 rounded-lg bg-white px-5 py-3 font-bold text-slate-950 disabled:opacity-50"
+            className={`${cyanButton} mt-4`}
           >
             Add Source
           </button>
         </section>
 
         {/* SOURCES */}
-        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-bold">
-              News Sources
-            </h2>
+            <div>
+              <p className="text-xs font-bold tracking-widest text-cyan-400">
+                RSS / ATOM
+              </p>
 
-            <span className="text-sm text-slate-400">
+              <h2 className="mt-1 text-xl font-black">
+                News Sources
+              </h2>
+            </div>
+
+            <span className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-3 py-1 text-sm text-cyan-200">
               {sources.length} total
             </span>
           </div>
@@ -1096,12 +1121,12 @@ export default function AdminPage() {
               (source) => (
                 <div
                   key={source.id}
-                  className="rounded-xl border border-white/10 bg-black/20 p-4"
+                  className="rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-cyan-400/20"
                 >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-semibold">
+                        <h3 className="font-bold">
                           {source.name ||
                             "Unnamed source"}
                         </h3>
@@ -1112,10 +1137,10 @@ export default function AdminPage() {
                         </span>
 
                         <span
-                          className={`rounded-full px-2 py-1 text-xs ${
+                          className={`rounded-full px-2 py-1 text-xs font-semibold ${
                             source.active
-                              ? "bg-emerald-400/10 text-emerald-300"
-                              : "bg-red-400/10 text-red-300"
+                              ? "bg-cyan-400/10 text-cyan-300"
+                              : "bg-slate-700 text-slate-400"
                           }`}
                         >
                           {source.active
@@ -1136,7 +1161,7 @@ export default function AdminPage() {
                             source
                           )
                         }
-                        className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold hover:bg-white/10"
+                        className={smallButton}
                       >
                         {source.active
                           ? "Disable"
@@ -1149,7 +1174,7 @@ export default function AdminPage() {
                             source
                           )
                         }
-                        className="rounded-lg border border-red-400/20 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-400/10"
+                        className={deleteButton}
                       >
                         Delete
                       </button>
@@ -1168,11 +1193,17 @@ export default function AdminPage() {
         </section>
 
         {/* ARTICLES */}
-        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-bold">
-              Latest Articles
-            </h2>
+            <div>
+              <p className="text-xs font-bold tracking-widest text-cyan-400">
+                CONTENT
+              </p>
+
+              <h2 className="mt-1 text-xl font-black">
+                Latest Articles
+              </h2>
+            </div>
 
             <span className="text-sm text-slate-400">
               Showing latest 100
@@ -1184,19 +1215,19 @@ export default function AdminPage() {
               (item) => (
                 <div
                   key={item.id}
-                  className="rounded-xl border border-white/10 bg-black/20 p-4"
+                  className="rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-cyan-400/20"
                 >
                   <div className="flex flex-col gap-4 sm:flex-row">
                     {item.image_url && (
                       <img
                         src={item.image_url}
                         alt=""
-                        className="h-24 w-full rounded-lg object-cover sm:w-36"
+                        className="h-24 w-full rounded-lg object-cover ring-1 ring-white/10 sm:w-36"
                       />
                     )}
 
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold">
+                      <h3 className="font-bold">
                         {item.title}
                       </h3>
 
@@ -1207,10 +1238,10 @@ export default function AdminPage() {
                         </span>
 
                         <span
-                          className={`rounded-full px-2 py-1 ${
+                          className={`rounded-full px-2 py-1 font-semibold ${
                             item.Published
-                              ? "bg-emerald-400/10 text-emerald-300"
-                              : "bg-amber-400/10 text-amber-300"
+                              ? "bg-cyan-400/10 text-cyan-300"
+                              : "bg-slate-700 text-slate-400"
                           }`}
                         >
                           {item.Published
@@ -1227,7 +1258,7 @@ export default function AdminPage() {
                             item
                           )
                         }
-                        className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold hover:bg-white/10"
+                        className={smallButton}
                       >
                         {item.Published
                           ? "Unpublish"
@@ -1240,7 +1271,7 @@ export default function AdminPage() {
                             item
                           )
                         }
-                        className="rounded-lg border border-red-400/20 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-400/10"
+                        className={deleteButton}
                       >
                         Delete
                       </button>
@@ -1259,10 +1290,16 @@ export default function AdminPage() {
         </section>
 
         {/* ADS */}
-        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-          <h2 className="mb-4 text-xl font-bold">
-            Direct Advertisements
-          </h2>
+        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
+          <div className="mb-4">
+            <p className="text-xs font-bold tracking-widest text-cyan-400">
+              MONETIZATION
+            </p>
+
+            <h2 className="mt-1 text-xl font-black">
+              Direct Advertisements
+            </h2>
+          </div>
 
           <div className="grid gap-3 md:grid-cols-2">
             <input
@@ -1273,7 +1310,7 @@ export default function AdminPage() {
                 )
               }
               placeholder="Ad title"
-              className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-slate-500"
+              className={inputClass}
             />
 
             <select
@@ -1283,7 +1320,7 @@ export default function AdminPage() {
                   event.target.value
                 )
               }
-              className="rounded-lg border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+              className={inputClass}
             >
               {AD_PLACEMENTS.map(
                 (placement) => (
@@ -1294,6 +1331,7 @@ export default function AdminPage() {
                     value={
                       placement.value
                     }
+                    className="bg-slate-900"
                   >
                     {placement.label}
                   </option>
@@ -1309,7 +1347,7 @@ export default function AdminPage() {
                 )
               }
               placeholder="Ad image URL"
-              className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-slate-500"
+              className={inputClass}
             />
 
             <input
@@ -1320,14 +1358,14 @@ export default function AdminPage() {
                 )
               }
               placeholder="Destination URL"
-              className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-slate-500"
+              className={inputClass}
             />
           </div>
 
           <button
             onClick={addAd}
             disabled={working}
-            className="mt-4 rounded-lg bg-white px-5 py-3 font-bold text-slate-950 disabled:opacity-50"
+            className={`${cyanButton} mt-4`}
           >
             Add Advertisement
           </button>
@@ -1337,16 +1375,16 @@ export default function AdminPage() {
               (ad) => (
                 <div
                   key={ad.id}
-                  className="rounded-xl border border-white/10 bg-black/20 p-4"
+                  className="rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-cyan-400/20"
                 >
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
-                      <h3 className="font-semibold">
+                      <h3 className="font-bold">
                         {ad.title ||
                           "Untitled advertisement"}
                       </h3>
 
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="mt-1 text-xs text-cyan-300">
                         {AD_PLACEMENTS.find(
                           (item) =>
                             item.value ===
@@ -1367,7 +1405,7 @@ export default function AdminPage() {
                         onClick={() =>
                           toggleAd(ad)
                         }
-                        className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold hover:bg-white/10"
+                        className={smallButton}
                       >
                         {ad.active
                           ? "Disable"
@@ -1378,7 +1416,7 @@ export default function AdminPage() {
                         onClick={() =>
                           deleteAd(ad)
                         }
-                        className="rounded-lg border border-red-400/20 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-400/10"
+                        className={deleteButton}
                       >
                         Delete
                       </button>
@@ -1396,8 +1434,11 @@ export default function AdminPage() {
           </div>
         </section>
 
-        <footer className="pb-10 text-center text-xs text-slate-600">
-          JNMulee News Admin
+        <footer className="border-t border-white/5 pb-10 pt-5 text-center text-xs text-slate-600">
+          <span className="text-cyan-500">
+            JNMulee
+          </span>{" "}
+          News Admin
         </footer>
       </div>
     </main>
@@ -1412,14 +1453,16 @@ function DashboardCard({
   value: number;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+    <div className="group rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5 shadow-xl shadow-black/10 transition hover:border-cyan-400/20">
       <p className="text-sm text-slate-400">
         {title}
       </p>
 
-      <p className="mt-2 text-3xl font-black">
+      <p className="mt-2 text-3xl font-black text-white transition group-hover:text-cyan-300">
         {value}
       </p>
+
+      <div className="mt-4 h-1 w-10 rounded-full bg-cyan-400/60" />
     </div>
   );
 }
@@ -1432,12 +1475,12 @@ function Stat({
   value: number;
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-      <p className="text-xs text-slate-500">
+    <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+      <p className="text-xs font-medium text-slate-500">
         {label}
       </p>
 
-      <p className="mt-1 text-xl font-bold">
+      <p className="mt-1 text-xl font-black text-cyan-200">
         {value}
       </p>
     </div>
