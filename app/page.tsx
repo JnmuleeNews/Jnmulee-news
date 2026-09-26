@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import DirectAd from "@/components/DirectAd";
@@ -13,56 +12,19 @@ const siteUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-
-  title: "JNMulee News | Latest Nigeria & World News",
-
+  title: "JNMulee News — Latest Nigerian & World News",
   description:
-    "JNMulee News brings you the latest Nigeria, world, business, technology, sports, entertainment, politics, crypto and breaking news.",
-
-  keywords: [
-    "JNMulee News",
-    "Nigeria news",
-    "latest news",
-    "breaking news",
-    "world news",
-    "politics",
-    "sports",
-    "technology",
-    "business",
-    "entertainment",
-    "crypto",
-  ],
-
+    "Latest Nigerian, African and world news covering politics, business, technology, sports, entertainment, gossip and crypto.",
   alternates: {
     canonical: siteUrl,
   },
-
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-      "max-video-preview": -1,
-    },
-  },
-
   openGraph: {
-    type: "website",
-    url: siteUrl,
-    siteName: "JNMulee News",
-    title: "JNMulee News | Latest Nigeria & World News",
-    description:
-      "Latest breaking news, Nigeria news, world news, politics, sports, technology, business and entertainment.",
-  },
-
-  twitter: {
-    card: "summary_large_image",
     title: "JNMulee News",
     description:
-      "Latest Nigeria and world news from JNMulee News.",
+      "Latest Nigerian, African and world news covering politics, business, technology, sports, entertainment, gossip and crypto.",
+    url: siteUrl,
+    siteName: "JNMulee News",
+    type: "website",
   },
 };
 
@@ -71,8 +33,18 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+type Story = {
+  id: string;
+  title: string;
+  slug: string | null;
+  content: string | null;
+  image_url: string | null;
+  category: string | null;
+  created_at: string;
+  view_count?: number | null;
+};
+
 const categories = [
-  { name: "Top Stories", slug: "news" },
   { name: "Nigeria", slug: "nigeria" },
   { name: "World", slug: "world" },
   { name: "Politics", slug: "politics" },
@@ -84,23 +56,10 @@ const categories = [
   { name: "Crypto", slug: "crypto" },
 ];
 
-type Story = {
-  id: string;
-  title: string;
-  slug: string;
-  content: string | null;
-  image_url: string | null;
-  category: string | null;
-  created_at: string | null;
-  view_count?: number | null;
-};
+function cleanText(text: string | null | undefined) {
+  if (!text) return "";
 
-function cleanText(content: string | null) {
-  if (!content) return "";
-
-  return content
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+  return text
     .replace(/<[^>]*>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
@@ -110,307 +69,217 @@ function cleanText(content: string | null) {
     .trim();
 }
 
-function excerpt(content: string | null, length = 170) {
-  const text = cleanText(content);
+function excerpt(text: string | null | undefined, length = 145) {
+  const clean = cleanText(text);
 
-  if (!text) return "";
+  if (!clean) {
+    return "Read the latest story and updates from JNMulee News.";
+  }
 
-  return text.length > length
-    ? `${text.slice(0, length).trim()}...`
-    : text;
+  if (clean.length <= length) return clean;
+
+  return clean.slice(0, length).trimEnd() + "…";
 }
 
-function timeAgo(date: string | null) {
-  if (!date) return "";
-
-  const timestamp = new Date(date).getTime();
-
-  if (Number.isNaN(timestamp)) return "";
-
-  const seconds = Math.floor(
-    (Date.now() - timestamp) / 1000
-  );
-
-  if (seconds < 60) return "Just now";
-
-  const minutes = Math.floor(seconds / 60);
-
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.floor(minutes / 60);
-
-  if (hours < 24) return `${hours}h ago`;
-
-  const days = Math.floor(hours / 24);
-
-  if (days < 7) return `${days}d ago`;
-
-  const parsed = new Date(date);
-
-  if (Number.isNaN(parsed.getTime())) return "";
-
-  return parsed.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function formatDate(date: string) {
+  try {
+    return new Intl.DateTimeFormat("en-NG", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(new Date(date));
+  } catch {
+    return "";
+  }
 }
 
-function validImage(url: string | null) {
-  if (!url) return false;
+function formatViews(value: number | null | undefined) {
+  const views = Number(value || 0);
 
-  return /^https?:\/\//i.test(url);
+  if (views >= 1_000_000) {
+    return `${(views / 1_000_000).toFixed(1)}M`;
+  }
+
+  if (views >= 1_000) {
+    return `${(views / 1_000).toFixed(1)}K`;
+  }
+
+  return views.toString();
 }
 
-function StoryCard({
+function categorySlug(category: string | null | undefined) {
+  return (category || "news")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
+function articleHref(story: Story) {
+  if (story.slug) {
+    return `/news/${story.slug}`;
+  }
+
+  return `/news/${story.id}`;
+}
+
+function normalizeCategory(category: string | null | undefined) {
+  return (category || "").toLowerCase().trim();
+}
+
+function categoryMatches(
+  story: Story,
+  category: { name: string; slug: string }
+) {
+  const current = normalizeCategory(story.category);
+
+  return current === category.slug || current === category.name.toLowerCase();
+}
+
+function StoryImage({
   story,
-  large = false,
-  showExcerpt = false,
+  className = "",
 }: {
   story: Story;
-  large?: boolean;
-  showExcerpt?: boolean;
+  className?: string;
 }) {
-  const hasImage = validImage(story.image_url);
+  if (!story.image_url) {
+    return (
+      <div
+        className={`flex h-full w-full items-center justify-center bg-slate-200 text-slate-500 ${className}`}
+      >
+        <span className="text-sm font-semibold">JNMulee News</span>
+      </div>
+    );
+  }
 
   return (
-    <article
-      className={
-        large
-          ? "jnmulee-story-card jnmulee-story-card-large"
-          : "jnmulee-story-card"
-      }
-    >
-      <Link
-        href={`/news/${story.slug}`}
-        className="jnmulee-story-link"
-      >
-        {hasImage ? (
-          <div
-            className={
-              large
-                ? "jnmulee-image-wrap jnmulee-image-wrap-large"
-                : "jnmulee-image-wrap"
-            }
-          >
-            <Image
-              src={story.image_url!}
-              alt={story.title}
-              fill
-              priority={large}
-              loading={large ? "eager" : "lazy"}
-              sizes={
-                large
-                  ? "(max-width: 900px) 100vw, 70vw"
-                  : "(max-width: 650px) 100vw, (max-width: 900px) 50vw, 33vw"
-              }
-              className="jnmulee-story-image"
-            />
-
-            {large && (
-              <div className="jnmulee-featured-overlay">
-                <span>FEATURED</span>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="jnmulee-image-placeholder">
-            <div className="jnmulee-placeholder-mark">
-              JN
-            </div>
-
-            <span>JNMulee News</span>
-          </div>
-        )}
-
-        <div
-          className={
-            large
-              ? "jnmulee-story-content jnmulee-story-content-large"
-              : "jnmulee-story-content"
-          }
-        >
-          <div className="jnmulee-story-category">
-            {story.category || "News"}
-          </div>
-
-          <h2
-            className={
-              large
-                ? "jnmulee-story-title jnmulee-story-title-large"
-                : "jnmulee-story-title"
-            }
-          >
-            {story.title}
-          </h2>
-
-          {(large || showExcerpt) && (
-            <p className="jnmulee-story-excerpt">
-              {excerpt(
-                story.content,
-                large ? 220 : 150
-              )}
-            </p>
-          )}
-
-          <div className="jnmulee-story-meta">
-            <time dateTime={story.created_at || undefined}>
-              {timeAgo(story.created_at)}
-            </time>
-
-            {story.view_count !== undefined &&
-              story.view_count !== null && (
-                <>
-                  <span className="jnmulee-meta-dot">
-                    •
-                  </span>
-
-                  <span>
-                    {Number(
-                      story.view_count
-                    ).toLocaleString()}{" "}
-                    views
-                  </span>
-                </>
-              )}
-          </div>
-        </div>
-      </Link>
-    </article>
+    <img
+      src={story.image_url}
+      alt={story.title}
+      loading="lazy"
+      className={`h-full w-full object-cover ${className}`}
+    />
   );
 }
 
-function CompactStory({
-  story,
+function SectionTitle({
+  title,
+  href,
 }: {
-  story: Story;
+  title: string;
+  href?: string;
 }) {
-  const hasImage = validImage(story.image_url);
+  return (
+    <div className="mb-5 flex items-center justify-between border-b border-slate-200 pb-3">
+      <div className="flex items-center gap-3">
+        <span className="h-7 w-1 rounded-full bg-red-600" />
+        <h2 className="text-xl font-black tracking-tight text-slate-950 sm:text-2xl">
+          {title}
+        </h2>
+      </div>
 
+      {href && (
+        <Link
+          href={href}
+          className="text-sm font-bold text-red-600 hover:text-red-700"
+        >
+          View all →
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function SmallStoryCard({ story }: { story: Story }) {
   return (
     <Link
-      href={`/news/${story.slug}`}
-      className="jnmulee-compact-story"
+      href={articleHref(story)}
+      className="group flex gap-3 border-b border-slate-200 py-3 last:border-0"
     >
-      {hasImage ? (
-        <div className="jnmulee-compact-image-wrap">
-          <Image
-            src={story.image_url!}
-            alt={story.title}
-            fill
-            loading="lazy"
-            sizes="86px"
-            className="jnmulee-compact-image"
-          />
-        </div>
-      ) : (
-        <div className="jnmulee-compact-placeholder">
-          JN
-        </div>
-      )}
+      <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-slate-200">
+        <StoryImage
+          story={story}
+          className="transition duration-300 group-hover:scale-105"
+        />
+      </div>
 
-      <div className="jnmulee-compact-body">
-        <div className="jnmulee-compact-category">
+      <div className="min-w-0">
+        <div className="mb-1 text-[10px] font-black uppercase tracking-wider text-red-600">
           {story.category || "News"}
         </div>
 
-        <div className="jnmulee-compact-title">
+        <h3 className="line-clamp-3 text-sm font-bold leading-snug text-slate-900 group-hover:text-red-600">
           {story.title}
-        </div>
+        </h3>
+      </div>
+    </Link>
+  );
+}
 
-        <div className="jnmulee-compact-date">
-          {timeAgo(story.created_at)}
+function StoryCard({ story }: { story: Story }) {
+  return (
+    <Link
+      href={articleHref(story)}
+      className="group block overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+    >
+      <div className="relative aspect-[16/10] overflow-hidden bg-slate-200">
+        <StoryImage
+          story={story}
+          className="transition duration-500 group-hover:scale-105"
+        />
+
+        <div className="absolute left-3 top-3 rounded-full bg-red-600 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white shadow">
+          {story.category || "News"}
+        </div>
+      </div>
+
+      <div className="p-4">
+        <h3 className="line-clamp-3 text-base font-extrabold leading-snug text-slate-950 group-hover:text-red-600">
+          {story.title}
+        </h3>
+
+        <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">
+          {excerpt(story.content, 120)}
+        </p>
+
+        <div className="mt-3 flex items-center justify-between text-[11px] font-medium text-slate-500">
+          <span>{formatDate(story.created_at)}</span>
+
+          {story.view_count ? (
+            <span>{formatViews(story.view_count)} views</span>
+          ) : null}
         </div>
       </div>
     </Link>
   );
 }
 
-function MostReadItem({
+function NumberedStory({
   story,
   number,
 }: {
   story: Story;
   number: number;
 }) {
-  const hasImage = validImage(story.image_url);
-
   return (
     <Link
-      href={`/news/${story.slug}`}
-      className="jnmulee-most-read-item"
+      href={articleHref(story)}
+      className="group flex gap-4 border-b border-slate-200 py-4 last:border-0"
     >
-      <strong className="jnmulee-most-read-number">
-        {String(number).padStart(2, "0")}
-      </strong>
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-sm font-black text-white">
+        {number}
+      </div>
 
-      {hasImage ? (
-        <div className="jnmulee-most-read-image-wrap">
-          <Image
-            src={story.image_url!}
-            alt={story.title}
-            fill
-            loading="lazy"
-            sizes="82px"
-            className="jnmulee-most-read-image"
-          />
-        </div>
-      ) : (
-        <div className="jnmulee-most-read-placeholder">
-          JN
-        </div>
-      )}
-
-      <div>
-        <div className="jnmulee-most-read-title">
+      <div className="min-w-0">
+        <h3 className="line-clamp-3 text-sm font-bold leading-5 text-slate-900 group-hover:text-red-600">
           {story.title}
-        </div>
+        </h3>
 
-        <div className="jnmulee-most-read-views">
-          {Number(
-            story.view_count || 0
-          ).toLocaleString()}{" "}
-          views
+        <div className="mt-1 text-[11px] text-slate-500">
+          {formatViews(story.view_count)} views
         </div>
       </div>
     </Link>
-  );
-}
-
-function SectionHeader({
-  title,
-  slug,
-  eyebrow,
-}: {
-  title: string;
-  slug?: string;
-  eyebrow?: string;
-}) {
-  return (
-    <div className="jnmulee-section-header">
-      <div>
-        {eyebrow && (
-          <div className="jnmulee-section-eyebrow">
-            <span className="jnmulee-eyebrow-line" />
-            {eyebrow}
-          </div>
-        )}
-
-        <h2 className="jnmulee-section-title">
-          {title}
-        </h2>
-      </div>
-
-      {slug && (
-        <Link
-          href={`/category/${slug}`}
-          className="jnmulee-view-all"
-        >
-          View All
-          <span>→</span>
-        </Link>
-      )}
-    </div>
   );
 }
 
@@ -418,1639 +287,383 @@ export default async function HomePage() {
   const storySelect =
     "id,title,slug,content,image_url,category,created_at,view_count";
 
-  const [latestResult, mostReadResult] =
-    await Promise.all([
-      supabase
-        .from("news")
-        .select(storySelect)
-        .eq("Published", true)
-        .order("created_at", {
-          ascending: false,
-        })
-        .limit(60),
+  const [
+    latestResult,
+    mostReadResult,
+  ] = await Promise.all([
+    supabase
+      .from("news")
+      .select(storySelect)
+      .eq("Published", true)
+      .order("created_at", { ascending: false })
+      .limit(100),
 
-      supabase
-        .from("news")
-        .select(storySelect)
-        .eq("Published", true)
-        .order("view_count", {
-          ascending: false,
-        })
-        .order("created_at", {
-          ascending: false,
-        })
-        .limit(10),
-    ]);
+    supabase
+      .from("news")
+      .select(storySelect)
+      .eq("Published", true)
+      .order("view_count", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(10),
+  ]);
 
-  const latest =
-    (latestResult.data || []) as Story[];
-
-  const mostRead =
-    (mostReadResult.data || []) as Story[];
+  const latest = (latestResult.data || []) as Story[];
+  const mostRead = (mostReadResult.data || []) as Story[];
 
   const featured = latest[0] || null;
-
-  const categoryStories: Record<
-    string,
-    Story[]
-  > = {};
-
-  for (const category of categories) {
-    if (category.slug === "news") continue;
-
-    categoryStories[category.slug] =
-      latest
-        .filter(
-          (story) =>
-            story.category === category.name
-        )
-        .slice(0, 4);
-  }
+  const secondaryStories = latest.slice(1, 5);
 
   const trending = latest
-    .filter(
-      (story) =>
-        story.id !== featured?.id
-    )
-    .slice(0, 5);
+    .filter((story) => story.id !== featured?.id)
+    .slice(0, 6);
 
-  const secondaryHeroStories =
-    latest.slice(1, 5);
+  const latestNews = latest.slice(5, 17);
 
-  const latestGrid =
-    latest.slice(5, 20);
+  const heroCategory = featured
+    ? categorySlug(featured.category)
+    : "news";
 
   return (
-    <>
-      <header className="jnmulee-main-header">
-        <div className="jnmulee-header-inner">
-          <Link
-            href="/"
-            className="jnmulee-logo"
-            aria-label="JNMulee News home"
-          >
-            <span className="jnmulee-logo-mark">
-              JN
-            </span>
+    <main className="min-h-screen bg-slate-50 text-slate-950">
+      {/* TOP NEWS BAR */}
+      <div className="border-b border-slate-200 bg-slate-950 text-white">
+        <div className="mx-auto flex max-w-7xl items-center gap-3 overflow-hidden px-4 py-2 text-xs sm:px-6 lg:px-8">
+          <span className="shrink-0 rounded bg-red-600 px-2 py-1 font-black uppercase">
+            Latest
+          </span>
 
-            <span className="jnmulee-logo-text">
-              <strong>JNMulee</strong>
-              <em>News</em>
-            </span>
-          </Link>
-
-          <div className="jnmulee-header-actions">
-            <Link
-              href="/search"
-              className="jnmulee-search-button"
-              aria-label="Search JNMulee News"
-            >
-              <span className="jnmulee-search-icon">
-                ⌕
-              </span>
-
-              <span className="jnmulee-search-text">
-                Search
-              </span>
-            </Link>
+          <div className="truncate font-medium text-slate-200">
+            JNMulee News — Latest Nigerian, African and world news
           </div>
-        </div>
-      </header>
-
-      <nav
-        className="jnmulee-category-nav"
-        aria-label="News categories"
-      >
-        <div className="jnmulee-category-nav-inner">
-          {categories.map((category) => (
-            <Link
-              key={category.slug}
-              href={`/category/${category.slug}`}
-              className="jnmulee-nav-link"
-            >
-              {category.name}
-            </Link>
-          ))}
-        </div>
-      </nav>
-
-      <div className="jnmulee-breaking-bar">
-        <div className="jnmulee-breaking-inner">
-          <span className="jnmulee-breaking-label">
-            BREAKING
-          </span>
-
-          <span className="jnmulee-breaking-live">
-            <i />
-            LIVE
-          </span>
-
-          <Link
-            href={
-              featured
-                ? `/news/${featured.slug}`
-                : "/"
-            }
-            className="jnmulee-breaking-title"
-          >
-            {featured?.title ||
-              "Latest news and updates from JNMulee News."}
-          </Link>
-
-          <span className="jnmulee-breaking-arrow">
-            →
-          </span>
         </div>
       </div>
 
-      <main className="jnmulee-home">
-        {featured && (
-          <section className="jnmulee-hero-section">
-            <div className="jnmulee-hero-grid">
-              <StoryCard
-                story={featured}
-                large
-              />
-
-              <div className="jnmulee-hero-side">
-                <div className="jnmulee-side-heading">
-                  <div>
-                    <span className="jnmulee-side-heading-label">
-                      LIVE DESK
-                    </span>
-
-                    <strong>
-                      Latest
-                    </strong>
-                  </div>
-
-                  <Link href="/category/news">
-                    More →
-                  </Link>
-                </div>
-
-                {secondaryHeroStories.map(
-                  (story) => (
-                    <CompactStory
-                      key={story.id}
-                      story={story}
-                    />
-                  )
-                )}
-              </div>
-            </div>
-          </section>
-        )}
-
-        <div className="jnmulee-ad-wrap">
-          <DirectAd placement="homepage" />
-        </div>
-
-        {trending.length > 0 && (
-          <section className="jnmulee-section">
-            <SectionHeader
-              title="Trending Now"
-              eyebrow="WHAT PEOPLE ARE READING"
-            />
-
-            <div className="jnmulee-trending-grid">
-              {trending.map(
-                (story, index) => (
-                  <Link
-                    href={`/news/${story.slug}`}
-                    key={story.id}
-                    className="jnmulee-trending-card"
-                  >
-                    <div className="jnmulee-trending-number">
-                      {String(index + 1).padStart(
-                        2,
-                        "0"
-                      )}
-                    </div>
-
-                    <div>
-                      <div className="jnmulee-trending-category">
-                        {story.category ||
-                          "News"}
-                      </div>
-
-                      <div className="jnmulee-trending-title">
-                        {story.title}
-                      </div>
-                    </div>
-                  </Link>
-                )
-              )}
-            </div>
-          </section>
-        )}
-
-        <section className="jnmulee-section">
-          <div className="jnmulee-most-read-box">
-            <SectionHeader
-              title="Most Read"
-              eyebrow="POPULAR STORIES"
-            />
-
-            <div className="jnmulee-most-read-grid">
-              {mostRead.length > 0 ? (
-                mostRead.map(
-                  (story, index) => (
-                    <MostReadItem
-                      key={story.id}
-                      story={story}
-                      number={index + 1}
-                    />
-                  )
-                )
-              ) : (
-                <p className="jnmulee-empty-message">
-                  Popular stories will appear
-                  here as readers visit the site.
-                </p>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="jnmulee-section">
-          <SectionHeader
-            title="Latest News"
-            slug="news"
-            eyebrow="JUST IN"
-          />
-
-          {latestGrid.length > 0 ? (
-            <div className="jnmulee-news-grid">
-              {latestGrid.map((story) => (
-                <StoryCard
-                  key={story.id}
-                  story={story}
-                  showExcerpt
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="jnmulee-empty">
-              No latest stories available yet.
-            </div>
-          )}
-        </section>
-
-        <div className="jnmulee-ad-wrap">
-          <DirectAd placement="home_between" />
-        </div>
-
-        {categories
-          .filter(
-            (category) =>
-              category.slug !== "news"
-          )
-          .map((category) => {
-            const stories =
-              categoryStories[
-                category.slug
-              ] || [];
-
-            if (stories.length === 0) {
-              return null;
-            }
-
-            return (
-              <section
-                key={category.slug}
-                className="jnmulee-section jnmulee-category-section"
-              >
-                <SectionHeader
-                  title={category.name}
-                  slug={category.slug}
-                />
-
-                <div className="jnmulee-category-grid">
-                  {stories.map((story) => (
-                    <StoryCard
-                      key={story.id}
-                      story={story}
-                    />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-
-        <section className="jnmulee-newsletter">
-          <div className="jnmulee-newsletter-glow" />
-
-          <div className="jnmulee-newsletter-content">
-            <div className="jnmulee-newsletter-label">
-              JNMULEE NEWS
+      {/* HEADER */}
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-4 py-5 sm:px-6 lg:px-8">
+          <Link href="/" className="shrink-0">
+            <div className="text-2xl font-black tracking-tight sm:text-3xl">
+              JNMulee<span className="text-red-600">.</span>
             </div>
 
-            <h2>
-              Stay informed.
-              <br />
-              <span>Stay ahead.</span>
-            </h2>
+            <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-slate-500">
+              News
+            </div>
+          </Link>
 
-            <p>
-              Follow JNMulee News for
-              breaking stories, Nigeria news
-              and important updates.
-            </p>
+          <div className="hidden text-center md:block">
+            <div className="text-xs font-bold uppercase tracking-widest text-slate-400">
+              Nigeria • Africa • World
+            </div>
+
+            <div className="mt-1 text-sm font-semibold text-slate-700">
+              Your daily source for the latest stories
+            </div>
           </div>
 
           <Link
-            href="/search"
-            className="jnmulee-newsletter-button"
+            href="/news"
+            className="rounded-full bg-slate-950 px-4 py-2 text-xs font-black text-white transition hover:bg-red-600"
           >
-            Explore More News
-            <span>→</span>
+            All News
           </Link>
+        </div>
+
+        {/* NAVIGATION */}
+        <nav className="border-t border-slate-100">
+          <div className="mx-auto flex max-w-7xl gap-5 overflow-x-auto px-4 py-3 scrollbar-hide sm:px-6 lg:px-8">
+            <Link
+              href="/"
+              className="shrink-0 text-sm font-black text-red-600"
+            >
+              Home
+            </Link>
+
+            {categories.map((category) => (
+              <Link
+                key={category.slug}
+                href={`/category/${category.slug}`}
+                className="shrink-0 text-sm font-semibold text-slate-600 transition hover:text-red-600"
+              >
+                {category.name}
+              </Link>
+            ))}
+          </div>
+        </nav>
+      </header>
+
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        {/* HERO */}
+        {featured ? (
+          <section className="py-6 sm:py-8">
+            <div className="grid gap-5 lg:grid-cols-12">
+              {/* MAIN STORY */}
+              <Link
+                href={articleHref(featured)}
+                className="group relative overflow-hidden rounded-2xl bg-slate-950 lg:col-span-7"
+              >
+                <div className="relative min-h-[390px] sm:min-h-[470px]">
+                  <StoryImage
+                    story={featured}
+                    className="absolute inset-0 transition duration-700 group-hover:scale-105"
+                  />
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-transparent" />
+
+                  <div className="absolute inset-x-0 bottom-0 p-5 sm:p-8">
+                    <div className="mb-3 inline-flex rounded-full bg-red-600 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white">
+                      {featured.category || "Top Story"}
+                    </div>
+
+                    <h1 className="max-w-3xl text-2xl font-black leading-tight text-white sm:text-4xl lg:text-5xl">
+                      {featured.title}
+                    </h1>
+
+                    <p className="mt-3 max-w-2xl line-clamp-2 text-sm leading-6 text-slate-200 sm:text-base">
+                      {excerpt(featured.content, 180)}
+                    </p>
+
+                    <div className="mt-4 text-xs font-semibold text-slate-300">
+                      {formatDate(featured.created_at)}
+                    </div>
+                  </div>
+                </div>
+              </Link>
+
+              {/* SECONDARY STORIES */}
+              <div className="grid gap-4 sm:grid-cols-2 lg:col-span-5 lg:grid-cols-1">
+                {secondaryStories.map((story) => (
+                  <Link
+                    key={story.id}
+                    href={articleHref(story)}
+                    className="group flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                  >
+                    <div className="relative h-32 w-36 shrink-0 overflow-hidden bg-slate-200 sm:h-36 sm:w-44 lg:h-auto lg:w-40">
+                      <StoryImage
+                        story={story}
+                        className="transition duration-500 group-hover:scale-105"
+                      />
+                    </div>
+
+                    <div className="p-3 sm:p-4">
+                      <div className="mb-1 text-[10px] font-black uppercase tracking-wider text-red-600">
+                        {story.category || "News"}
+                      </div>
+
+                      <h2 className="line-clamp-4 text-sm font-extrabold leading-5 text-slate-900 group-hover:text-red-600 sm:text-base">
+                        {story.title}
+                      </h2>
+
+                      <div className="mt-2 text-[11px] text-slate-500">
+                        {formatDate(story.created_at)}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </section>
+        ) : (
+          <div className="py-10 text-center">
+            <h1 className="text-2xl font-black">No published stories yet</h1>
+            <p className="mt-2 text-slate-500">
+              Published stories will appear here.
+            </p>
+          </div>
+        )}
+
+        {/* AD */}
+        <div className="my-4 overflow-hidden rounded-xl">
+          <DirectAd />
+        </div>
+
+        {/* TRENDING + MOST READ */}
+        <section className="grid gap-6 py-8 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <SectionTitle title="Trending Now" />
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              {trending.map((story) => (
+                <SmallStoryCard key={story.id} story={story} />
+              ))}
+            </div>
+          </div>
+
+          <aside className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <SectionTitle title="Most Read" />
+
+            {mostRead.slice(0, 7).map((story, index) => (
+              <NumberedStory
+                key={story.id}
+                story={story}
+                number={index + 1}
+              />
+            ))}
+          </aside>
         </section>
 
-        <div className="jnmulee-ad-wrap jnmulee-bottom-ad">
-          <DirectAd placement="home_bottom" />
+        {/* LATEST NEWS */}
+        <section className="py-8">
+          <SectionTitle title="Latest News" href="/news" />
+
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {latestNews.map((story) => (
+              <StoryCard key={story.id} story={story} />
+            ))}
+          </div>
+        </section>
+
+        {/* MID PAGE AD */}
+        <div className="my-8 overflow-hidden rounded-xl">
+          <DirectAd />
         </div>
-      </main>
 
-      <style>{`
-
-        :root {
-          --jn-navy: #0b1220;
-          --jn-navy-2: #111a2e;
-          --jn-blue: #2563eb;
-          --jn-blue-light: #60a5fa;
-          --jn-blue-soft: #eff6ff;
-          --jn-white: #ffffff;
-          --jn-bg: #f7f9fc;
-          --jn-card: #ffffff;
-          --jn-text: #111827;
-          --jn-text-soft: #526071;
-          --jn-muted: #7b8796;
-          --jn-border: #e4e9f0;
-          --jn-border-dark: #d6dde8;
-          --jn-shadow: 0 8px 30px rgba(15, 23, 42, .06);
-          --jn-shadow-hover: 0 16px 45px rgba(15, 23, 42, .12);
-        }
-
-        .jnmulee-main-header {
-          background:
-            linear-gradient(
-              135deg,
-              #09111f 0%,
-              #0b1220 50%,
-              #101b31 100%
-            );
-          color: #fff;
-          position: sticky;
-          top: 0;
-          z-index: 100;
-          box-shadow:
-            0 5px 25px rgba(3, 8, 20, .22);
-          border-bottom:
-            1px solid rgba(255,255,255,.08);
-        }
-
-        .jnmulee-header-inner {
-          max-width: 1240px;
-          margin: 0 auto;
-          padding: 12px 18px;
-          min-height: 70px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 20px;
-        }
-
-        .jnmulee-logo {
-          color: #fff;
-          text-decoration: none;
-          display: inline-flex;
-          align-items: center;
-          gap: 11px;
-          min-width: 0;
-        }
-
-        .jnmulee-logo-mark {
-          width: 42px;
-          height: 42px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 11px;
-          background:
-            linear-gradient(
-              135deg,
-              #2563eb,
-              #60a5fa
-            );
-          color: #fff;
-          font-size: 13px;
-          font-weight: 1000;
-          letter-spacing: -.5px;
-          box-shadow:
-            0 5px 18px rgba(37,99,235,.35);
-        }
-
-        .jnmulee-logo-text {
-          display: flex;
-          align-items: baseline;
-          gap: 5px;
-          line-height: 1;
-          white-space: nowrap;
-        }
-
-        .jnmulee-logo-text strong {
-          font-size:
-            clamp(1.45rem, 4vw, 2rem);
-          font-weight: 950;
-          letter-spacing: -1.3px;
-        }
-
-        .jnmulee-logo-text em {
-          font-style: normal;
-          color: #60a5fa;
-          font-size:
-            clamp(.95rem, 2.5vw, 1.15rem);
-          font-weight: 700;
-          letter-spacing: -.3px;
-        }
-
-        .jnmulee-header-actions {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .jnmulee-search-button {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 7px;
-          color: #fff;
-          text-decoration: none;
-          border:
-            1px solid rgba(255,255,255,.17);
-          background:
-            rgba(255,255,255,.06);
-          border-radius: 999px;
-          padding: 9px 15px;
-          font-size: 12px;
-          font-weight: 850;
-          transition:
-            background .2s ease,
-            border-color .2s ease,
-            transform .2s ease;
-        }
-
-        .jnmulee-search-button:hover {
-          background:
-            rgba(255,255,255,.12);
-          border-color:
-            rgba(255,255,255,.3);
-          transform:
-            translateY(-1px);
-        }
-
-        .jnmulee-search-icon {
-          font-size: 20px;
-          line-height: .7;
-        }
-
-        .jnmulee-category-nav {
-          background: #fff;
-          border-bottom:
-            1px solid var(--jn-border);
-          position: relative;
-          z-index: 90;
-          overflow-x: auto;
-          scrollbar-width: none;
-        }
-
-        .jnmulee-category-nav::-webkit-scrollbar {
-          display: none;
-        }
-
-        .jnmulee-category-nav-inner {
-          max-width: 1240px;
-          margin: 0 auto;
-          padding: 0 18px;
-          min-height: 47px;
-          display: flex;
-          align-items: center;
-          gap: 25px;
-          white-space: nowrap;
-        }
-
-        .jnmulee-nav-link {
-          position: relative;
-          color: #3f4a5a;
-          text-decoration: none;
-          font-size: 12px;
-          font-weight: 800;
-          padding: 16px 0;
-          transition:
-            color .2s ease;
-        }
-
-        .jnmulee-nav-link::after {
-          content: "";
-          position: absolute;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          height: 3px;
-          background:
-            var(--jn-blue);
-          transform:
-            scaleX(0);
-          transform-origin:
-            center;
-          transition:
-            transform .2s ease;
-        }
-
-        .jnmulee-nav-link:first-child,
-        .jnmulee-nav-link:hover {
-          color: var(--jn-blue);
-        }
-
-        .jnmulee-nav-link:hover::after,
-        .jnmulee-nav-link:first-child::after {
-          transform: scaleX(1);
-        }
-
-        .jnmulee-breaking-bar {
-          background:
-            var(--jn-navy);
-          color: #fff;
-          border-bottom:
-            1px solid rgba(255,255,255,.05);
-        }
-
-        .jnmulee-breaking-inner {
-          max-width: 1240px;
-          margin: 0 auto;
-          min-height: 43px;
-          padding: 6px 18px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .jnmulee-breaking-label {
-          background:
-            var(--jn-blue);
-          padding: 6px 10px;
-          border-radius: 5px;
-          font-size: 9px;
-          font-weight: 950;
-          letter-spacing: .3px;
-          white-space: nowrap;
-          box-shadow:
-            0 3px 12px rgba(37,99,235,.3);
-        }
-
-        .jnmulee-breaking-live {
-          display: inline-flex;
-          align-items: center;
-          gap: 5px;
-          color: #60a5fa;
-          font-size: 9px;
-          font-weight: 950;
-          white-space: nowrap;
-        }
-
-        .jnmulee-breaking-live i {
-          width: 6px;
-          height: 6px;
-          display: inline-block;
-          border-radius: 50%;
-          background: #60a5fa;
-          box-shadow:
-            0 0 0 4px rgba(96,165,250,.1);
-        }
-
-        .jnmulee-breaking-title {
-          flex: 1;
-          min-width: 0;
-          color: #fff;
-          text-decoration: none;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          font-size: 12px;
-          font-weight: 650;
-        }
-
-        .jnmulee-breaking-title:hover {
-          color: #93c5fd;
-        }
-
-        .jnmulee-breaking-arrow {
-          color: #60a5fa;
-          font-size: 16px;
-          font-weight: 800;
-        }
-
-        .jnmulee-home {
-          width: 100%;
-          max-width: 1240px;
-          margin: 0 auto;
-          padding: 30px 18px 75px;
-        }
-
-        .jnmulee-hero-section {
-          margin-bottom: 34px;
-        }
-
-        .jnmulee-hero-grid {
-          display: grid;
-          grid-template-columns:
-            minmax(0, 1.72fr)
-            minmax(300px, .9fr);
-          gap: 24px;
-        }
-
-        .jnmulee-story-card {
-          background: var(--jn-card);
-          border:
-            1px solid var(--jn-border);
-          border-radius: 14px;
-          overflow: hidden;
-          box-shadow:
-            var(--jn-shadow);
-          transition:
-            transform .22s ease,
-            box-shadow .22s ease,
-            border-color .22s ease;
-        }
-
-        .jnmulee-story-card:hover {
-          transform:
-            translateY(-3px);
-          box-shadow:
-            var(--jn-shadow-hover);
-          border-color:
-            #d2dae7;
-        }
-
-        .jnmulee-story-link {
-          display: block;
-          color: inherit;
-          text-decoration: none;
-        }
-
-        .jnmulee-image-wrap {
-          position: relative;
-          width: 100%;
-          aspect-ratio: 16 / 10;
-          background:
-            #edf1f6;
-          overflow: hidden;
-        }
-
-        .jnmulee-image-wrap-large {
-          aspect-ratio: 16 / 9;
-        }
-
-        .jnmulee-story-image {
-          object-fit: cover;
-          transition:
-            transform .5s ease;
-        }
-
-        .jnmulee-story-card:hover
-        .jnmulee-story-image {
-          transform:
-            scale(1.025);
-        }
-
-        .jnmulee-featured-overlay {
-          position: absolute;
-          left: 16px;
-          top: 16px;
-          z-index: 2;
-        }
-
-        .jnmulee-featured-overlay span {
-          display: inline-block;
-          padding: 6px 9px;
-          border-radius: 5px;
-          background:
-            rgba(11,18,32,.88);
-          color: #fff;
-          font-size: 8px;
-          font-weight: 950;
-          letter-spacing: .7px;
-        }
-
-        .jnmulee-image-placeholder {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-direction: column;
-          gap: 7px;
-          width: 100%;
-          aspect-ratio: 16 / 10;
-          background:
-            linear-gradient(
-              135deg,
-              #eaf0f8,
-              #f5f7fb
-            );
-          color: #8793a4;
-          font-size: 12px;
-          font-weight: 800;
-        }
-
-        .jnmulee-placeholder-mark {
-          width: 36px;
-          height: 36px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 9px;
-          background:
-            var(--jn-navy);
-          color: #60a5fa;
-          font-size: 10px;
-          font-weight: 950;
-        }
-
-        .jnmulee-story-content {
-          padding: 17px 18px 18px;
-        }
-
-        .jnmulee-story-content-large {
-          padding: 22px 24px 25px;
-        }
-
-        .jnmulee-story-category {
-          color:
-            var(--jn-blue);
-          text-transform:
-            uppercase;
-          font-size: 9px;
-          letter-spacing: .65px;
-          font-weight: 950;
-          margin-bottom: 8px;
-        }
-
-        .jnmulee-story-title {
-          margin: 0;
-          color:
-            var(--jn-text);
-          font-size: 1.06rem;
-          line-height: 1.3;
-          font-weight: 900;
-          letter-spacing:
-            -.25px;
-        }
-
-        .jnmulee-story-title-large {
-          font-size:
-            clamp(1.55rem, 3vw, 2.5rem);
-          line-height: 1.11;
-          letter-spacing:
-            -.7px;
-        }
-
-        .jnmulee-story-excerpt {
-          margin: 12px 0 0;
-          color:
-            var(--jn-text-soft);
-          font-size: 13.5px;
-          line-height: 1.65;
-        }
-
-        .jnmulee-story-meta {
-          display: flex;
-          gap: 7px;
-          align-items: center;
-          margin-top: 13px;
-          color:
-            var(--jn-muted);
-          font-size: 10px;
-          font-weight: 650;
-        }
-
-        .jnmulee-meta-dot {
-          color:
-            #a9b3c0;
-        }
-
-        .jnmulee-hero-side {
-          background:
-            var(--jn-card);
-          border:
-            1px solid var(--jn-border);
-          border-radius: 14px;
-          padding: 18px;
-          box-shadow:
-            var(--jn-shadow);
-        }
-
-        .jnmulee-side-heading {
-          display: flex;
-          justify-content:
-            space-between;
-          align-items:
-            center;
-          border-bottom:
-            2px solid var(--jn-blue);
-          padding-bottom: 11px;
-          margin-bottom: 3px;
-        }
-
-        .jnmulee-side-heading > div {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .jnmulee-side-heading-label {
-          color:
-            var(--jn-blue);
-          font-size: 8px;
-          letter-spacing: .9px;
-          font-weight: 950;
-        }
-
-        .jnmulee-side-heading strong {
-          color:
-            var(--jn-text);
-          font-size: 21px;
-          line-height: 1;
-          font-weight: 950;
-        }
-
-        .jnmulee-side-heading a {
-          color:
-            var(--jn-blue);
-          text-decoration: none;
-          font-size: 11px;
-          font-weight: 900;
-        }
-
-        .jnmulee-compact-story {
-          display: grid;
-          grid-template-columns:
-            86px minmax(0,1fr);
-          gap: 12px;
-          padding: 13px 0;
-          border-bottom:
-            1px solid #edf1f5;
-          color: inherit;
-          text-decoration: none;
-        }
-
-        .jnmulee-compact-story:last-child {
-          border-bottom: 0;
-        }
-
-        .jnmulee-compact-image-wrap {
-          position: relative;
-          width: 86px;
-          height: 65px;
-          border-radius: 8px;
-          overflow: hidden;
-          background:
-            #edf1f6;
-        }
-
-        .jnmulee-compact-image {
-          object-fit: cover;
-          transition:
-            transform .35s ease;
-        }
-
-        .jnmulee-compact-story:hover
-        .jnmulee-compact-image {
-          transform:
-            scale(1.05);
-        }
-
-        .jnmulee-compact-placeholder {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 86px;
-          height: 65px;
-          border-radius: 8px;
-          background:
-            var(--jn-navy);
-          color:
-            #60a5fa;
-          font-size: 10px;
-          font-weight: 950;
-        }
-
-        .jnmulee-compact-category {
-          color:
-            var(--jn-blue);
-          font-size: 8px;
-          text-transform:
-            uppercase;
-          letter-spacing: .5px;
-          font-weight: 950;
-          margin-bottom: 4px;
-        }
-
-        .jnmulee-compact-title {
-          color:
-            var(--jn-text);
-          font-size: 12.5px;
-          line-height: 1.34;
-          font-weight: 850;
-        }
-
-        .jnmulee-compact-story:hover
-        .jnmulee-compact-title {
-          color:
-            var(--jn-blue);
-        }
-
-        .jnmulee-compact-date {
-          color:
-            #8a95a4;
-          font-size: 9px;
-          margin-top: 5px;
-        }
-
-        .jnmulee-ad-wrap {
-          margin:
-            7px 0 38px;
-          width: 100%;
-        }
-
-        .jnmulee-section {
-          margin-bottom: 45px;
-        }
-
-        .jnmulee-section-header {
-          display: flex;
-          align-items: flex-end;
-          justify-content:
-            space-between;
-          gap: 20px;
-          border-bottom:
-            1px solid var(--jn-border);
-          padding-bottom: 10px;
-          margin-bottom: 19px;
-          position: relative;
-        }
-
-        .jnmulee-section-header::after {
-          content: "";
-          position: absolute;
-          left: 0;
-          bottom: -1px;
-          width: 58px;
-          height: 3px;
-          background:
-            var(--jn-blue);
-          border-radius:
-            3px 3px 0 0;
-        }
-
-        .jnmulee-section-eyebrow {
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          color:
-            var(--jn-blue);
-          font-size: 8px;
-          letter-spacing: .85px;
-          font-weight: 950;
-          margin-bottom: 3px;
-          text-transform:
-            uppercase;
-        }
-
-        .jnmulee-eyebrow-line {
-          width: 16px;
-          height: 2px;
-          background:
-            var(--jn-blue);
-          border-radius: 2px;
-        }
-
-        .jnmulee-section-title {
-          margin: 0;
-          color:
-            var(--jn-text);
-          font-size:
-            clamp(1.45rem, 3vw, 1.85rem);
-          line-height: 1.08;
-          font-weight: 950;
-          letter-spacing:
-            -.5px;
-        }
-
-        .jnmulee-view-all {
-          display: inline-flex;
-          align-items: center;
-          gap: 5px;
-          color:
-            var(--jn-blue);
-          text-decoration: none;
-          font-size: 11px;
-          font-weight: 900;
-          white-space: nowrap;
-        }
-
-        .jnmulee-view-all span {
-          font-size: 15px;
-          transition:
-            transform .2s ease;
-        }
-
-        .jnmulee-view-all:hover span {
-          transform:
-            translateX(3px);
-        }
-
-        .jnmulee-trending-grid {
-          display: grid;
-          grid-template-columns:
-            repeat(5,minmax(0,1fr));
-          gap: 12px;
-        }
-
-        .jnmulee-trending-card {
-          display: grid;
-          grid-template-columns:
-            31px 1fr;
-          gap: 9px;
-          min-height: 112px;
-          padding: 15px;
-          border:
-            1px solid var(--jn-border);
-          border-radius: 10px;
-          background:
-            var(--jn-card);
-          color: inherit;
-          text-decoration: none;
-          box-shadow:
-            0 2px 9px rgba(15,23,42,.025);
-          transition:
-            transform .2s ease,
-            border-color .2s ease,
-            box-shadow .2s ease;
-        }
-
-        .jnmulee-trending-card:hover {
-          transform:
-            translateY(-2px);
-          border-color:
-            #bfd1ed;
-          box-shadow:
-            0 10px 25px rgba(15,23,42,.07);
-        }
-
-        .jnmulee-trending-number {
-          color:
-            #c5cedb;
-          font-size: 21px;
-          font-weight: 950;
-          line-height: 1;
-        }
-
-        .jnmulee-trending-card:hover
-        .jnmulee-trending-number {
-          color:
-            var(--jn-blue);
-        }
-
-        .jnmulee-trending-category {
-          color:
-            var(--jn-blue);
-          font-size: 8px;
-          letter-spacing: .55px;
-          text-transform:
-            uppercase;
-          font-weight: 950;
-          margin-bottom: 5px;
-        }
-
-        .jnmulee-trending-title {
-          color:
-            var(--jn-text);
-          font-size: 12px;
-          line-height: 1.4;
-          font-weight: 850;
-        }
-
-        .jnmulee-most-read-box {
-          background:
-            var(--jn-card);
-          border:
-            1px solid var(--jn-border);
-          border-radius: 14px;
-          padding: 20px;
-          box-shadow:
-            var(--jn-shadow);
-        }
-
-        .jnmulee-most-read-grid {
-          display: grid;
-          grid-template-columns:
-            1fr 1fr;
-          column-gap: 30px;
-        }
-
-        .jnmulee-most-read-item {
-          display: grid;
-          grid-template-columns:
-            32px 82px minmax(0,1fr);
-          align-items: center;
-          gap: 10px;
-          min-width: 0;
-          padding: 12px 0;
-          border-bottom:
-            1px solid #edf1f5;
-          color: inherit;
-          text-decoration: none;
-        }
-
-        .jnmulee-most-read-number {
-          color:
-            #c4ccd8;
-          font-size: 17px;
-          text-align: center;
-        }
-
-        .jnmulee-most-read-item:hover
-        .jnmulee-most-read-number {
-          color:
-            var(--jn-blue);
-        }
-
-        .jnmulee-most-read-image-wrap {
-          position: relative;
-          width: 82px;
-          height: 61px;
-          border-radius: 7px;
-          overflow: hidden;
-          background:
-            #edf1f6;
-        }
-
-        .jnmulee-most-read-image {
-          object-fit: cover;
-          transition:
-            transform .35s ease;
-        }
-
-        .jnmulee-most-read-item:hover
-        .jnmulee-most-read-image {
-          transform:
-            scale(1.05);
-        }
-
-        .jnmulee-most-read-placeholder {
-          width: 82px;
-          height: 61px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 7px;
-          background:
-            var(--jn-navy);
-          color:
-            #60a5fa;
-          font-size: 10px;
-          font-weight: 950;
-        }
-
-        .jnmulee-most-read-title {
-          color:
-            var(--jn-text);
-          font-size: 12.5px;
-          line-height: 1.35;
-          font-weight: 850;
-        }
-
-        .jnmulee-most-read-item:hover
-        .jnmulee-most-read-title {
-          color:
-            var(--jn-blue);
-        }
-
-        .jnmulee-most-read-views {
-          color:
-            var(--jn-blue);
-          font-size: 9px;
-          font-weight: 800;
-          margin-top: 5px;
-        }
-
-        .jnmulee-empty-message {
-          color:
-            var(--jn-muted);
-          font-size: 13px;
-          padding:
-            5px 0 15px;
-        }
-
-        .jnmulee-news-grid {
-          display: grid;
-          grid-template-columns:
-            repeat(3,minmax(0,1fr));
-          gap: 20px;
-        }
-
-        .jnmulee-category-grid {
-          display: grid;
-          grid-template-columns:
-            repeat(4,minmax(0,1fr));
-          gap: 18px;
-        }
-
-        .jnmulee-empty {
-          border:
-            1px dashed #cbd4df;
-          border-radius: 12px;
-          padding: 38px;
-          text-align: center;
-          color:
-            var(--jn-muted);
-          background:
-            rgba(255,255,255,.6);
-        }
-
-        .jnmulee-newsletter {
-          position: relative;
-          overflow: hidden;
-          margin:
-            48px 0 36px;
-          padding:
-            34px 36px;
-          border-radius: 17px;
-          background:
-            linear-gradient(
-              135deg,
-              #09111f,
-              #0d1830 60%,
-              #13244a
-            );
-          color: #fff;
-          display: flex;
-          align-items: center;
-          justify-content:
-            space-between;
-          gap: 30px;
-          box-shadow:
-            0 15px 45px rgba(11,18,32,.16);
-        }
-
-        .jnmulee-newsletter::before {
-          content: "";
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 4px;
-          height: 100%;
-          background:
-            linear-gradient(
-              #2563eb,
-              #60a5fa
-            );
-        }
-
-        .jnmulee-newsletter-glow {
-          position: absolute;
-          width: 300px;
-          height: 300px;
-          right: -100px;
-          top: -140px;
-          border-radius: 50%;
-          background:
-            rgba(37,99,235,.18);
-          filter:
-            blur(8px);
-          pointer-events: none;
-        }
-
-        .jnmulee-newsletter-content {
-          position: relative;
-          z-index: 2;
-        }
-
-        .jnmulee-newsletter-label {
-          color:
-            #60a5fa;
-          font-size: 9px;
-          font-weight: 950;
-          letter-spacing: 1.1px;
-          margin-bottom: 8px;
-        }
-
-        .jnmulee-newsletter h2 {
-          margin: 0;
-          font-size:
-            clamp(1.75rem,4vw,2.5rem);
-          line-height: 1.04;
-          font-weight: 950;
-          letter-spacing:
-            -.8px;
-        }
-
-        .jnmulee-newsletter h2 span {
-          color:
-            #60a5fa;
-        }
-
-        .jnmulee-newsletter p {
-          max-width: 560px;
-          margin:
-            11px 0 0;
-          color:
-            #b9c6d9;
-          line-height: 1.6;
-          font-size: 13px;
-        }
-
-        .jnmulee-newsletter-button {
-          position: relative;
-          z-index: 2;
-          flex-shrink: 0;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          background:
-            #2563eb;
-          color: #fff;
-          text-decoration: none;
-          border:
-            1px solid rgba(255,255,255,.08);
-          border-radius: 999px;
-          padding:
-            12px 18px;
-          font-size: 11px;
-          font-weight: 900;
-          box-shadow:
-            0 8px 20px rgba(37,99,235,.25);
-          transition:
-            transform .2s ease,
-            background .2s ease;
-        }
-
-        .jnmulee-newsletter-button:hover {
-          background:
-            #1d4ed8;
-          transform:
-            translateY(-2px);
-        }
-
-        .jnmulee-newsletter-button span {
-          font-size: 15px;
-        }
-
-        .jnmulee-bottom-ad {
-          margin-top: 15px;
-        }
-
-        @media (max-width:1050px) {
-          .jnmulee-trending-grid {
-            grid-template-columns:
-              repeat(3,minmax(0,1fr));
-          }
-
-          .jnmulee-category-grid {
-            grid-template-columns:
-              repeat(3,minmax(0,1fr));
-          }
-        }
-
-        @media (max-width:900px) {
-          .jnmulee-hero-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .jnmulee-news-grid {
-            grid-template-columns:
-              repeat(2,minmax(0,1fr));
-          }
-
-          .jnmulee-category-grid {
-            grid-template-columns:
-              repeat(2,minmax(0,1fr));
-          }
-
-          .jnmulee-trending-grid {
-            grid-template-columns:
-              repeat(2,minmax(0,1fr));
-          }
-
-          .jnmulee-newsletter {
-            align-items:
-              flex-start;
-            flex-direction:
-              column;
-          }
-
-          .jnmulee-newsletter-button {
-            margin-top: 5px;
-          }
-        }
-
-        @media (max-width:650px) {
-          .jnmulee-header-inner {
-            padding:
-              11px 14px;
-            min-height: 62px;
-          }
-
-          .jnmulee-logo {
-            gap: 8px;
-          }
-
-          .jnmulee-logo-mark {
-            width: 36px;
-            height: 36px;
-            border-radius: 9px;
-            font-size: 11px;
-          }
-
-          .jnmulee-logo-text {
-            gap: 4px;
-          }
-
-          .jnmulee-logo-text strong {
-            font-size:
-              1.35rem;
-            letter-spacing:
-              -1px;
-          }
-
-          .jnmulee-logo-text em {
-            font-size:
-              .9rem;
-          }
-
-          .jnmulee-search-button {
-            width: 36px;
-            height: 36px;
-            padding: 0;
-            border-radius: 50%;
-          }
-
-          .jnmulee-search-text {
-            display: none;
-          }
-
-          .jnmulee-search-icon {
-            font-size: 21px;
-          }
-
-          .jnmulee-category-nav-inner {
-            padding:
-              0 14px;
-            gap: 19px;
-          }
-
-          .jnmulee-nav-link {
-            font-size: 11px;
-            padding:
-              14px 0;
-          }
-
-          .jnmulee-breaking-inner {
-            padding:
-              6px 14px;
-            min-height: 40px;
-          }
-
-          .jnmulee-breaking-live {
-            display: none;
-          }
-
-          .jnmulee-breaking-arrow {
-            display: none;
-          }
-
-          .jnmulee-home {
-            padding:
-              20px 14px 52px;
-          }
-
-          .jnmulee-hero-section {
-            margin-bottom: 27px;
-          }
-
-          .jnmulee-story-content-large {
-            padding:
-              18px;
-          }
-
-          .jnmulee-story-title-large {
-            font-size:
-              1.55rem;
-            line-height:
-              1.15;
-          }
-
-          .jnmulee-story-excerpt {
-            font-size:
-              13px;
-          }
-
-          .jnmulee-hero-side {
-            padding:
-              15px;
-          }
-
-          .jnmulee-most-read-grid {
-            grid-template-columns:
-              1fr;
-          }
-
-          .jnmulee-news-grid,
-          .jnmulee-category-grid {
-            grid-template-columns:
-              1fr;
-            gap: 15px;
-          }
-
-          .jnmulee-trending-grid {
-            grid-template-columns:
-              1fr;
-          }
-
-          .jnmulee-section {
-            margin-bottom:
-              35px;
-          }
-
-          .jnmulee-section-header {
-            margin-bottom:
-              15px;
-          }
-
-          .jnmulee-section-title {
-            font-size:
-              1.38rem;
-          }
-
-          .jnmulee-most-read-box {
-            padding:
-              17px;
-          }
-
-          .jnmulee-most-read-item {
-            grid-template-columns:
-              30px 76px minmax(0,1fr);
-            gap: 8px;
-          }
-
-          .jnmulee-most-read-image-wrap,
-          .jnmulee-most-read-placeholder {
-            width: 76px;
-            height: 57px;
-          }
-
-          .jnmulee-most-read-title {
-            font-size:
-              12px;
-          }
-
-          .jnmulee-newsletter {
-            padding:
-              26px 24px;
-            margin:
-              38px 0 28px;
-          }
-
-          .jnmulee-newsletter-button {
-            width: 100%;
-            justify-content:
-              center;
-            text-align: center;
-          }
-
-          .jnmulee-ad-wrap {
-            margin-bottom:
-              30px;
-          }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          *,
-          *::before,
-          *::after {
-            scroll-behavior: auto !important;
-            transition-duration:
-              .01ms !important;
-            animation-duration:
-              .01ms !important;
-            animation-iteration-count:
-              1 !important;
-          }
-        }
-
-      `}</style>
-    </>
+        {/* CATEGORY SECTIONS */}
+        {categories.map((category, categoryIndex) => {
+          const stories = latest
+            .filter((story) => categoryMatches(story, category))
+            .slice(0, 5);
+
+          if (!stories.length) return null;
+
+          return (
+            <section
+              key={category.slug}
+              className="py-8"
+              id={category.slug}
+            >
+              <SectionTitle
+                title={category.name}
+                href={`/category/${category.slug}`}
+              />
+
+              <div className="grid gap-5 lg:grid-cols-12">
+                {/* BIG CATEGORY STORY */}
+                {stories[0] && (
+                  <Link
+                    href={articleHref(stories[0])}
+                    className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 lg:col-span-6"
+                  >
+                    <div className="relative aspect-[16/9] overflow-hidden bg-slate-200">
+                      <StoryImage
+                        story={stories[0]}
+                        className="transition duration-500 group-hover:scale-105"
+                      />
+                    </div>
+
+                    <div className="p-5">
+                      <div className="text-[10px] font-black uppercase tracking-wider text-red-600">
+                        {category.name}
+                      </div>
+
+                      <h3 className="mt-2 line-clamp-3 text-xl font-black leading-tight text-slate-950 group-hover:text-red-600 sm:text-2xl">
+                        {stories[0].title}
+                      </h3>
+
+                      <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
+                        {excerpt(stories[0].content, 170)}
+                      </p>
+
+                      <div className="mt-4 text-xs text-slate-500">
+                        {formatDate(stories[0].created_at)}
+                      </div>
+                    </div>
+                  </Link>
+                )}
+
+                {/* SMALL CATEGORY STORIES */}
+                <div className="grid gap-3 sm:grid-cols-2 lg:col-span-6">
+                  {stories.slice(1).map((story) => (
+                    <SmallStoryCard key={story.id} story={story} />
+                  ))}
+                </div>
+              </div>
+
+              {categoryIndex === 2 && (
+                <div className="mt-8 overflow-hidden rounded-xl">
+                  <DirectAd />
+                </div>
+              )}
+            </section>
+          );
+        })}
+
+        {/* NEWSLETTER */}
+        <section className="my-10 overflow-hidden rounded-2xl bg-slate-950 px-6 py-10 text-white sm:px-10">
+          <div className="mx-auto max-w-3xl text-center">
+            <div className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-red-500">
+              Stay Updated
+            </div>
+
+            <h2 className="text-2xl font-black sm:text-3xl">
+              Get the latest stories from JNMulee News
+            </h2>
+
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-300">
+              Follow the latest Nigerian, African and global news across
+              politics, business, technology, sports and entertainment.
+            </p>
+          </div>
+        </section>
+      </div>
+
+      {/* FOOTER */}
+      <footer className="border-t border-slate-200 bg-white">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="grid gap-8 md:grid-cols-3">
+            <div>
+              <div className="text-2xl font-black">
+                JNMulee<span className="text-red-600">.</span>
+              </div>
+
+              <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
+                Latest news and stories from Nigeria, Africa and around the
+                world.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="font-black text-slate-950">Categories</h3>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {categories.map((category) => (
+                  <Link
+                    key={category.slug}
+                    href={`/category/${category.slug}`}
+                    className="text-sm text-slate-500 hover:text-red-600"
+                  >
+                    {category.name}
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-black text-slate-950">JNMulee News</h3>
+
+              <div className="mt-3 space-y-2 text-sm">
+                <Link
+                  href="/news"
+                  className="block text-slate-500 hover:text-red-600"
+                >
+                  Latest News
+                </Link>
+
+                <Link
+                  href="/"
+                  className="block text-slate-500 hover:text-red-600"
+                >
+                  Home
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8 border-t border-slate-200 pt-5 text-xs text-slate-500">
+            © {new Date().getFullYear()} JNMulee News. All rights reserved.
+          </div>
+        </div>
+      </footer>
+    </main>
   );
 }
