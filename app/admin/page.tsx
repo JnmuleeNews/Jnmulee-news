@@ -1,41 +1,67 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import OpenAI from "openai";
+"use client";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-export const maxDuration = 60;
+import { useEffect, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    })
-  : null;
+type NewsRow = {
+  id: string;
+  title: string;
+  slug: string;
+  category: string | null;
+  image_url: string | null;
+  Published: boolean | null;
+  created_at: string | null;
+};
 
-const AI_MODEL =
-  process.env.OPENAI_MODEL || "gpt-4o-mini";
+type SourceRow = {
+  id: string;
+  name: string | null;
+  feed_url: string;
+  category: string | null;
+  active: boolean | null;
+};
 
-/*
-|--------------------------------------------------------------------------
-| LARGE CONTENT SETTINGS
-|--------------------------------------------------------------------------
-*/
+type DirectAdRow = {
+  id: string;
+  placement: string;
+  title: string | null;
+  image_url: string | null;
+  link_url: string | null;
+  active: boolean | null;
+  starts_at: string | null;
+  ends_at: string | null;
+};
 
-const MAX_SOURCES_PER_BATCH = 5;
-const MAX_FEED_ITEMS_PER_SOURCE = 10;
+type ImportResult = {
+  success?: boolean;
+  message?: string;
+  batch?: number;
+  totalBatches?: number;
+  totalSources?: number;
+  sourcesProcessed?: number;
+  feedItemsSeen?: number;
+  articlePagesFetched?: number;
+  aiGenerated?: number;
+  articlesAddedForApproval?: number;
+  articlesSkipped?: number;
+  skippedDuplicate?: number;
+  skippedNoImage?: number;
+  skippedShortSource?: number;
+  skippedPoorQuality?: number;
+  feedFetchFailed?: number;
+  articleFetchFailed?: number;
+  aiFailed?: number;
+  aiCreditsUnavailable?: boolean;
+  diagnostics?: string[];
+  error?: string;
+};
 
-const FEED_FETCH_TIMEOUT_MS = 10000;
-const ARTICLE_FETCH_TIMEOUT_MS = 10000;
-
-const MIN_SOURCE_WORDS = 120;
-const MIN_FINAL_WORDS = 180;
-
-const ALLOWED_CATEGORIES = [
+const CATEGORIES = [
   "Top Stories",
   "News",
   "Nigeria",
@@ -47,1859 +73,1373 @@ const ALLOWED_CATEGORIES = [
   "Entertainment",
   "Politics",
   "Crypto",
-] as const;
+];
 
-type Category =
-  (typeof ALLOWED_CATEGORIES)[number];
+const AD_PLACEMENTS = [
+  {
+    value: "home_top",
+    label: "Homepage Top",
+  },
+  {
+    value: "home_between",
+    label: "Homepage Between Stories",
+  },
+  {
+    value: "home_bottom",
+    label: "Homepage Bottom",
+  },
+  {
+    value: "article_top",
+    label: "Article Top",
+  },
+  {
+    value: "article_middle",
+    label: "Article Middle",
+  },
+  {
+    value: "article_bottom",
+    label: "Article Bottom",
+  },
+];
 
-type SourceRow = {
-  id: string;
-  name: string | null;
-  feed_url: string;
-  category?: string | null;
-  active: boolean | null;
-};
+export default function AdminPage() {
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
 
-type FeedItem = {
-  title: string;
-  link: string;
-  description: string;
-  content: string;
-  pubDate: string | null;
-  imageUrl: string | null;
-};
+  const [userEmail, setUserEmail] = useState("");
 
-type Material = {
-  title: string;
-  url: string;
-  publishedAt: string | null;
-  imageUrl: string | null;
-  text: string;
-};
+  const [news, setNews] = useState<NewsRow[]>([]);
+  const [sources, setSources] = useState<SourceRow[]>([]);
+  const [ads, setAds] = useState<DirectAdRow[]>([]);
 
-type ErrorLike = {
-  message?: string;
-  code?: string;
-  status?: number;
-  details?: string;
-  hint?: string;
-};
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-/*
-|--------------------------------------------------------------------------
-| HELPERS
-|--------------------------------------------------------------------------
-*/
-
-function errorMessage(value: unknown): string {
-  if (value instanceof Error) {
-    return value.message;
-  }
-
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    "message" in value
-  ) {
-    return String(
-      (value as ErrorLike).message || value
-    );
-  }
-
-  return String(value);
-}
-
-function errorCode(value: unknown): string {
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    "code" in value
-  ) {
-    return String(
-      (value as ErrorLike).code || ""
-    );
-  }
-
-  return "";
-}
-
-function getStatus(value: unknown): number | undefined {
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    "status" in value
-  ) {
-    const status = Number(
-      (value as ErrorLike).status
-    );
-
-    return Number.isFinite(status)
-      ? status
-      : undefined;
-  }
-
-  return undefined;
-}
-
-function normalizeWhitespace(value: string): string {
-  return value
-    .replace(/\r/g, "")
-    .replace(/\t/g, " ")
-    .replace(/[ \u00a0]+/g, " ")
-    .replace(/\n[ \t]+/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function decodeHtml(value: string): string {
-  return value
-    .replace(
-      /<!\[CDATA\[([\s\S]*?)\]\]>/gi,
-      "$1"
-    )
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&apos;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(
-      /&#(\d+);/g,
-      (_, n) =>
-        String.fromCharCode(Number(n))
-    )
-    .replace(
-      /&#x([0-9a-f]+);/gi,
-      (_, n) =>
-        String.fromCharCode(
-          parseInt(n, 16)
-        )
-    );
-}
-
-function wordCount(value: string): number {
-  return normalizeWhitespace(
-    value.replace(/<[^>]*>/g, " ")
-  )
-    .split(/\s+/)
-    .filter(Boolean).length;
-}
-
-function slugify(value: string): string {
-  return normalizeWhitespace(value)
-    .toLowerCase()
-    .replace(/['’]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 100);
-}
-
-function textToHtml(value: string): string {
-  return value
-    .split(/\n{2,}/)
-    .map((paragraph) =>
-      paragraph.trim()
-        ? `<p>${paragraph.trim()}</p>`
-        : ""
-    )
-    .filter(Boolean)
-    .join("\n");
-}
-
-function cleanText(value: string): string {
-  let text = value || "";
-
-  text = text.replace(
-    /<script[\s\S]*?<\/script>/gi,
-    " "
-  );
-
-  text = text.replace(
-    /<style[\s\S]*?<\/style>/gi,
-    " "
-  );
-
-  text = text.replace(
-    /<noscript[\s\S]*?<\/noscript>/gi,
-    " "
-  );
-
-  text = text.replace(
-    /<(iframe|svg|canvas|form|nav|footer|header|aside)[^>]*>[\s\S]*?<\/\1>/gi,
-    " "
-  );
-
-  text = text.replace(
-    /<br\s*\/?>/gi,
-    "\n"
-  );
-
-  text = text.replace(
-    /<\/(p|div|article|section|li|h1|h2|h3|h4|h5|h6)>/gi,
-    "\n\n"
-  );
-
-  text = text.replace(
-    /<[^>]+>/g,
-    " "
-  );
-
-  text = decodeHtml(text);
-
-  text = normalizeWhitespace(text);
-
-  const badPatterns = [
-    /originally published[\s\S]{0,500}/gi,
-    /this story was originally published[\s\S]{0,500}/gi,
-    /this story continues[\s\S]{0,500}/gi,
-    /continue reading[\s\S]{0,300}/gi,
-    /read more[\s\S]{0,300}/gi,
-    /follow us[\s\S]{0,300}/gi,
-    /subscribe to our newsletter[\s\S]{0,500}/gi,
-    /sign up for our newsletter[\s\S]{0,500}/gi,
-    /related stories[\s\S]{0,1000}/gi,
-    /related articles[\s\S]{0,1000}/gi,
-    /recommended stories[\s\S]{0,1000}/gi,
-    /advertisement[\s\S]{0,500}/gi,
-    /sponsored content[\s\S]{0,500}/gi,
-    /download our app[\s\S]{0,500}/gi,
-    /cookie policy[\s\S]{0,500}/gi,
-    /privacy policy[\s\S]{0,500}/gi,
-  ];
-
-  for (const pattern of badPatterns) {
-    text = text.replace(pattern, "");
-  }
-
-  const paragraphs = text
-    .split(/\n{2,}/)
-    .map((p) => normalizeWhitespace(p))
-    .filter(Boolean);
-
-  const seen = new Set<string>();
-  const output: string[] = [];
-
-  for (const paragraph of paragraphs) {
-    const key = paragraph
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim();
-
-    if (!key || seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    output.push(paragraph);
-  }
-
-  return normalizeWhitespace(
-    output.join("\n\n")
-  );
-}
-
-function isSafeUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-
-    return (
-      url.protocol === "http:" ||
-      url.protocol === "https:"
-    );
-  } catch {
-    return false;
-  }
-}
-
-function extractTag(
-  xml: string,
-  names: string[]
-): string {
-  for (const name of names) {
-    const escaped = name.replace(
-      /[-/\\^$*+?.()|[\]{}]/g,
-      "\\$&"
-    );
-
-    const match = xml.match(
-      new RegExp(
-        `<${escaped}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escaped}>`,
-        "i"
-      )
-    );
-
-    if (match?.[1]) {
-      return decodeHtml(match[1]);
-    }
-  }
-
-  return "";
-}
-
-function extractAttribute(
-  tag: string,
-  attribute: string
-): string {
-  const match = tag.match(
-    new RegExp(
-      `${attribute}\\s*=\\s*["']([^"']+)["']`,
-      "i"
-    )
-  );
-
-  return match?.[1] || "";
-}
-
-function extractImage(value: string): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const image =
-    value.match(
-      /https?:\/\/[^\s"'<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s"'<>]*)?/i
-    )?.[0] || null;
-
-  if (image) {
-    return image.replace(/&amp;/g, "&");
-  }
-
-  return (
-    value.match(
-      /https?:\/\/[^\s"'<>]+/i
-    )?.[0]
-      ?.replace(/&amp;/g, "&")
-      .replace(/[)"'<>]+$/, "") ||
+  const [importProgress, setImportProgress] = useState("");
+  const [importStats, setImportStats] = useState<ImportResult | null>(
     null
   );
-}
 
-/*
-|--------------------------------------------------------------------------
-| RSS / ATOM PARSER
-|--------------------------------------------------------------------------
-*/
+  const [sourceName, setSourceName] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [sourceCategory, setSourceCategory] = useState("News");
 
-function parseFeed(xml: string): FeedItem[] {
-  const rss =
-    xml.match(
-      /<item\b[\s\S]*?<\/item>/gi
-    ) || [];
+  const [adPlacement, setAdPlacement] = useState("home_top");
+  const [adTitle, setAdTitle] = useState("");
+  const [adImageUrl, setAdImageUrl] = useState("");
+  const [adLinkUrl, setAdLinkUrl] = useState("");
 
-  const atom =
-    xml.match(
-      /<entry\b[\s\S]*?<\/entry>/gi
-    ) || [];
+  async function loadData() {
+    setError("");
 
-  const blocks =
-    rss.length > 0 ? rss : atom;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-  const results: FeedItem[] = [];
+      if (!user) {
+        window.location.href = "/login";
+        return;
+      }
 
-  for (const block of blocks) {
-    const title = normalizeWhitespace(
-      extractTag(block, ["title"])
-    );
+      setUserEmail(user.email || "");
 
-    let link = extractTag(
-      block,
-      ["link"]
-    );
+      const role = user.app_metadata?.role;
 
-    if (!link) {
-      const linkTag =
-        block.match(
-          /<link\b[^>]*>/i
-        )?.[0] || "";
+      if (role !== "admin") {
+        setError("You do not have administrator access.");
+        setLoading(false);
+        return;
+      }
 
-      link = extractAttribute(
-        linkTag,
-        "href"
-      );
-    }
+      const [
+        newsResult,
+        sourcesResult,
+        adsResult,
+      ] = await Promise.all([
+        supabase
+          .from("news")
+          .select(
+            "id,title,slug,category,image_url,Published,created_at"
+          )
+          .order("created_at", {
+            ascending: false,
+          })
+          .limit(100),
 
-    const description =
-      extractTag(block, [
-        "content:encoded",
-        "description",
-        "summary",
-        "content",
+        supabase
+          .from("sources")
+          .select(
+            "id,name,feed_url,category,active"
+          )
+          .order("name", {
+            ascending: true,
+          }),
+
+        supabase
+          .from("direct_ads")
+          .select(
+            "id,placement,title,image_url,link_url,active,starts_at,ends_at"
+          )
+          .order("placement", {
+            ascending: true,
+          }),
       ]);
 
-    const content =
-      extractTag(block, [
-        "content:encoded",
-        "content",
-        "description",
-      ]);
+      if (newsResult.error) {
+        throw new Error(
+          `News: ${newsResult.error.message}`
+        );
+      }
 
-    const pubDate =
-      normalizeWhitespace(
-        extractTag(block, [
-          "pubDate",
-          "published",
-          "updated",
-          "dc:date",
-        ])
-      ) || null;
+      if (sourcesResult.error) {
+        throw new Error(
+          `Sources: ${sourcesResult.error.message}`
+        );
+      }
 
-    let imageUrl: string | null =
-      null;
+      if (adsResult.error) {
+        throw new Error(
+          `Ads: ${adsResult.error.message}`
+        );
+      }
 
-    const mediaTags =
-      block.match(
-        /<media:content\b[^>]*>/gi
-      ) || [];
-
-    for (const tag of mediaTags) {
-      const url = extractAttribute(
-        tag,
-        "url"
+      setNews(
+        (newsResult.data || []) as NewsRow[]
       );
 
-      if (url) {
-        imageUrl = url;
-        break;
-      }
-    }
+      setSources(
+        (sourcesResult.data || []) as SourceRow[]
+      );
 
-    if (!imageUrl) {
-      const thumbnailTags =
-        block.match(
-          /<media:thumbnail\b[^>]*>/gi
-        ) || [];
-
-      for (const tag of thumbnailTags) {
-        const url = extractAttribute(
-          tag,
-          "url"
-        );
-
-        if (url) {
-          imageUrl = url;
-          break;
-        }
-      }
-    }
-
-    if (!imageUrl) {
-      const enclosureTags =
-        block.match(
-          /<enclosure\b[^>]*>/gi
-        ) || [];
-
-      for (const tag of enclosureTags) {
-        const url = extractAttribute(
-          tag,
-          "url"
-        );
-
-        const type = extractAttribute(
-          tag,
-          "type"
-        );
-
-        if (
-          url &&
-          (!type ||
-            type.startsWith("image/"))
-        ) {
-          imageUrl = url;
-          break;
-        }
-      }
-    }
-
-    if (!imageUrl) {
-      imageUrl =
-        extractImage(content);
-    }
-
-    if (!imageUrl) {
-      imageUrl =
-        extractImage(description);
-    }
-
-    if (
-      title &&
-      link &&
-      isSafeUrl(link)
-    ) {
-      results.push({
-        title,
-        link: link.trim(),
-        description:
-          cleanText(description),
-        content:
-          cleanText(content),
-        pubDate,
-        imageUrl,
-      });
+      setAds(
+        (adsResult.data || []) as DirectAdRow[]
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load admin data."
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
-  return results;
-}
+  useEffect(() => {
+    loadData();
+  }, []);
 
-/*
-|--------------------------------------------------------------------------
-| FETCH
-|--------------------------------------------------------------------------
-*/
+  async function getAccessToken() {
+    const {
+      data,
+      error: sessionError,
+    } = await supabase.auth.getSession();
 
-async function fetchExternal(
-  url: string,
-  timeoutMs: number
-): Promise<{
-  ok: boolean;
-  status: number;
-  text: string;
-}> {
-  const controller =
-    new AbortController();
+    if (sessionError) {
+      throw new Error(
+        sessionError.message
+      );
+    }
 
-  const timeout = setTimeout(
-    () => controller.abort(),
-    timeoutMs
-  );
+    const token =
+      data.session?.access_token;
 
-  try {
-    const response =
-      await fetch(url, {
-        signal: controller.signal,
+    if (!token) {
+      throw new Error(
+        "Your admin session has expired. Please sign in again."
+      );
+    }
+
+    return token;
+  }
+
+  async function importBatch(
+    token: string,
+    batch: number
+  ): Promise<ImportResult> {
+    const response = await fetch(
+      `/api/fetch-news?manual=true&batch=${batch}`,
+      {
+        method: "GET",
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (compatible; JNMuleeNewsBot/1.0)",
-          Accept:
-            "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
         },
         cache: "no-store",
-      });
-
-    const text =
-      await response.text();
-
-    return {
-      ok: response.ok,
-      status: response.status,
-      text,
-    };
-  } catch {
-    return {
-      ok: false,
-      status: 0,
-      text: "",
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-/*
-|--------------------------------------------------------------------------
-| ARTICLE EXTRACTION
-|--------------------------------------------------------------------------
-*/
-
-async function fetchArticlePage(
-  url: string
-): Promise<{
-  text: string;
-  imageUrl: string | null;
-}> {
-  const response =
-    await fetchExternal(
-      url,
-      ARTICLE_FETCH_TIMEOUT_MS
-    );
-
-  if (!response.ok || !response.text) {
-    return {
-      text: "",
-      imageUrl: null,
-    };
-  }
-
-  const html = response.text;
-
-  let imageUrl: string | null =
-    null;
-
-  const imagePatterns = [
-    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
-    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
-  ];
-
-  for (const pattern of imagePatterns) {
-    const match =
-      html.match(pattern);
-
-    if (match?.[1]) {
-      imageUrl = match[1];
-      break;
-    }
-  }
-
-  if (!imageUrl) {
-    const imageMatch =
-      html.match(
-        /<img[^>]+(?:src|data-src)=["']([^"']+)["']/i
-      );
-
-    if (imageMatch?.[1]) {
-      imageUrl =
-        imageMatch[1];
-    }
-  }
-
-  const candidates: string[] =
-    [];
-
-  const article =
-    html.match(
-      /<article\b[^>]*>([\s\S]*?)<\/article>/i
-    );
-
-  if (article?.[1]) {
-    candidates.push(article[1]);
-  }
-
-  const main =
-    html.match(
-      /<main\b[^>]*>([\s\S]*?)<\/main>/i
-    );
-
-  if (main?.[1]) {
-    candidates.push(main[1]);
-  }
-
-  const containers = [
-    /<div[^>]+class=["'][^"']*(?:article-body|article-content|post-content|entry-content|story-body|story-content)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-
-    /<div[^>]+id=["'][^"']*(?:article-body|article-content|post-content|entry-content|story-body|story-content)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-  ];
-
-  for (const pattern of containers) {
-    const match =
-      html.match(pattern);
-
-    if (match?.[1]) {
-      candidates.push(match[1]);
-    }
-  }
-
-  const cleaned =
-    candidates
-      .map(cleanText)
-      .filter(
-        (text) =>
-          wordCount(text) >=
-          MIN_SOURCE_WORDS
-      )
-      .sort(
-        (a, b) =>
-          wordCount(b) -
-          wordCount(a)
-      );
-
-  return {
-    text: cleaned[0] || "",
-    imageUrl:
-      imageUrl &&
-      isSafeUrl(imageUrl)
-        ? imageUrl
-        : null,
-  };
-}
-
-/*
-|--------------------------------------------------------------------------
-| MATERIAL
-|--------------------------------------------------------------------------
-*/
-
-function buildMaterial(
-  item: FeedItem,
-  articleText: string,
-  articleImage: string | null
-): Material {
-  const feedText = cleanText(
-    [
-      item.description,
-      item.content,
-    ]
-      .filter(Boolean)
-      .join("\n\n")
-  );
-
-  const text =
-    articleText &&
-    wordCount(articleText) >=
-      MIN_SOURCE_WORDS
-      ? articleText
-      : feedText;
-
-  return {
-    title: item.title,
-    url: item.link,
-    publishedAt: item.pubDate,
-    imageUrl:
-      articleImage ||
-      item.imageUrl ||
-      null,
-    text: cleanText(text),
-  };
-}
-
-/*
-|--------------------------------------------------------------------------
-| CATEGORY
-|--------------------------------------------------------------------------
-*/
-
-function classifyCategory(
-  title: string,
-  text: string,
-  sourceCategory?: string | null
-): Category {
-  const supplied =
-    sourceCategory?.trim();
-
-  if (
-    supplied &&
-    (
-      ALLOWED_CATEGORIES as readonly string[]
-    ).includes(supplied)
-  ) {
-    return supplied as Category;
-  }
-
-  const value =
-    `${title} ${text}`.toLowerCase();
-
-  if (
-    /bitcoin|ethereum|crypto|cryptocurrency|blockchain|coinbase|binance|token/i.test(
-      value
-    )
-  ) {
-    return "Crypto";
-  }
-
-  if (
-    /premier league|football|soccer|champions league|fifa|uefa|arsenal|chelsea|liverpool|manchester|barcelona|real madrid|sports|nba|tennis/i.test(
-      value
-    )
-  ) {
-    return "Sports";
-  }
-
-  if (
-    /iphone|android|google|microsoft|apple|openai|artificial intelligence|ai |technology|tech company|software|chip/i.test(
-      value
-    )
-  ) {
-    return "Technology";
-  }
-
-  if (
-    /business|economy|stock market|shares|bank|investment|company|market|finance|ceo/i.test(
-      value
-    )
-  ) {
-    return "Business";
-  }
-
-  if (
-    /celebrity|actor|actress|movie|film|music|singer|album|hollywood|nollywood/i.test(
-      value
-    )
-  ) {
-    return "Entertainment";
-  }
-
-  if (
-    /gossip|relationship|dating|girlfriend|boyfriend|rumour|rumor/i.test(
-      value
-    )
-  ) {
-    return "Gossip";
-  }
-
-  if (
-    /nigeria|lagos|abuja|naira|president|governor|senate|house of representatives/i.test(
-      value
-    )
-  ) {
-    return "Nigeria";
-  }
-
-  if (
-    /politics|election|government|minister|party|politician/i.test(
-      value
-    )
-  ) {
-    return "Politics";
-  }
-
-  return "World";
-}
-
-/*
-|--------------------------------------------------------------------------
-| AI
-|--------------------------------------------------------------------------
-*/
-
-async function generateArticle(
-  material: Material
-): Promise<{
-  article: string | null;
-  creditsUnavailable: boolean;
-  error: string | null;
-}> {
-  if (!openai) {
-    return {
-      article: null,
-      creditsUnavailable: false,
-      error:
-        "OPENAI_API_KEY is missing",
-    };
-  }
-
-  const prompt = `
-Create an original JNMulee News article using ONLY the verified material below.
-
-TITLE:
-${material.title}
-
-DATE:
-${material.publishedAt || "Unknown"}
-
-VERIFIED MATERIAL:
-${material.text}
-
-Rules:
-
-- Write completely original wording.
-- Do not copy source sentences.
-- Do not mention the source publication.
-- Do not mention the source website.
-- Do not mention that the article was imported.
-- Do not mention AI.
-- Do not include URLs.
-- Do not include source bylines.
-- Do not include advertisements.
-- Do not invent facts.
-- Do not invent quotes.
-- Do not invent statistics.
-- Do not invent people or events.
-- Preserve uncertainty when the supplied material is uncertain.
-- Use a professional news style.
-- Start with the most important verified development.
-- Use clear paragraphs.
-- Aim for 500–900 words when the supplied material supports it.
-- Minimum 180 words.
-
-If the supplied material genuinely does not contain enough information for a useful article, return exactly:
-
-INSUFFICIENT_SOURCE_MATERIAL
-
-Return only the finished article.
-`;
-
-  try {
-    const completion =
-      await openai.chat.completions.create(
-        {
-          model: AI_MODEL,
-          temperature: 0.3,
-          max_tokens: 2200,
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a senior professional news editor for JNMulee News. Accuracy is more important than length. Never invent facts.",
-            },
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
-        }
-      );
-
-    const result =
-      completion.choices[0]
-        ?.message?.content
-        ?.trim();
-
-    if (!result) {
-      return {
-        article: null,
-        creditsUnavailable: false,
-        error:
-          "OpenAI returned an empty response",
-      };
-    }
-
-    if (
-      result
-        .toUpperCase()
-        .trim() ===
-      "INSUFFICIENT_SOURCE_MATERIAL"
-    ) {
-      return {
-        article: null,
-        creditsUnavailable: false,
-        error:
-          "AI reported insufficient source material",
-      };
-    }
-
-    return {
-      article: result,
-      creditsUnavailable: false,
-      error: null,
-    };
-  } catch (error) {
-    const message =
-      errorMessage(error);
-
-    const status =
-      getStatus(error);
-
-    if (
-      status === 429 ||
-      /insufficient_quota|quota|credit_balance_exhausted|no credits|credits remaining|billing/i.test(
-        message
-      )
-    ) {
-      return {
-        article: null,
-        creditsUnavailable: true,
-        error:
-          "OpenAI API credits/quota unavailable",
-      };
-    }
-
-    return {
-      article: null,
-      creditsUnavailable: false,
-      error:
-        `OpenAI error: ${message}`,
-    };
-  }
-}
-
-/*
-|--------------------------------------------------------------------------
-| QUALITY
-|--------------------------------------------------------------------------
-*/
-
-function containsForbiddenContent(
-  article: string
-): boolean {
-  return /originally published|source:|via:|read more at|continue reading at|according to .* website/i.test(
-    article
-  );
-}
-
-function qualityScore(
-  article: string
-): number {
-  let score = 100;
-
-  const words =
-    wordCount(article);
-
-  if (words < 180) {
-    score -= 40;
-  }
-
-  if (words < 250) {
-    score -= 10;
-  }
-
-  if (
-    containsForbiddenContent(
-      article
-    )
-  ) {
-    score -= 40;
-  }
-
-  if (
-    article.length < 700
-  ) {
-    score -= 10;
-  }
-
-  return score;
-}
-
-/*
-|--------------------------------------------------------------------------
-| INSERT
-|--------------------------------------------------------------------------
-*/
-
-async function insertArticle(
-  material: Material,
-  category: Category,
-  article: string,
-  source: SourceRow
-): Promise<{
-  inserted: boolean;
-  duplicate: boolean;
-  error: string | null;
-}> {
-  if (
-    !material.imageUrl ||
-    !isSafeUrl(material.imageUrl)
-  ) {
-    return {
-      inserted: false,
-      duplicate: false,
-      error:
-        "IMAGE_REQUIRED",
-    };
-  }
-
-  const title =
-    normalizeWhitespace(
-      material.title
-    );
-
-  let slug =
-    slugify(title) ||
-    `jnmulee-${Date.now()}`;
-
-  const existingSlug =
-    await supabase
-      .from("news")
-      .select("id")
-      .eq("slug", slug)
-      .limit(1);
-
-  if (existingSlug.error) {
-    return {
-      inserted: false,
-      duplicate: false,
-      error:
-        `Slug check failed: ${existingSlug.error.message}`,
-    };
-  }
-
-  if (
-    existingSlug.data &&
-    existingSlug.data.length > 0
-  ) {
-    slug =
-      `${slug}-${Date.now()}`;
-  }
-
-  /*
-   * Final duplicate check.
-   */
-  const existingSource =
-    await supabase
-      .from("news")
-      .select("id")
-      .eq(
-        "source_url",
-        material.url
-      )
-      .limit(1);
-
-  if (existingSource.error) {
-    return {
-      inserted: false,
-      duplicate: false,
-      error:
-        `Source duplicate check failed: ${existingSource.error.message}`,
-    };
-  }
-
-  if (
-    existingSource.data &&
-    existingSource.data.length > 0
-  ) {
-    return {
-      inserted: false,
-      duplicate: true,
-      error: null,
-    };
-  }
-
-  const payload = {
-    title,
-    slug,
-    content:
-      textToHtml(article),
-    image_url:
-      material.imageUrl,
-    Published: false,
-    source_url:
-      material.url,
-    category,
-    content_type:
-      "syndicated",
-    source_name:
-      source.name ||
-      "Unknown Source",
-    canonical_url:
-      material.url,
-    attribution_text:
-      "Published by JNMulee News",
-  };
-
-  const result =
-    await supabase
-      .from("news")
-      .insert(payload);
-
-  if (result.error) {
-    if (
-      result.error.code ===
-      "23505"
-    ) {
-      return {
-        inserted: false,
-        duplicate: true,
-        error: null,
-      };
-    }
-
-    return {
-      inserted: false,
-      duplicate: false,
-      error:
-        result.error.message,
-    };
-  }
-
-  return {
-    inserted: true,
-    duplicate: false,
-    error: null,
-  };
-}
-
-/*
-|--------------------------------------------------------------------------
-| AUTH
-|--------------------------------------------------------------------------
-*/
-
-async function authorizeRequest(
-  request: Request
-): Promise<boolean> {
-  const cronSecret =
-    process.env.CRON_SECRET;
-
-  const authorization =
-    request.headers.get(
-      "authorization"
-    );
-
-  if (
-    cronSecret &&
-    authorization ===
-      `Bearer ${cronSecret}`
-  ) {
-    return true;
-  }
-
-  if (
-    !authorization?.startsWith(
-      "Bearer "
-    )
-  ) {
-    return false;
-  }
-
-  const token =
-    authorization
-      .slice(7)
-      .trim();
-
-  if (!token) {
-    return false;
-  }
-
-  const authClient =
-    createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
       }
     );
 
-  const {
-    data,
-    error,
-  } =
-    await authClient.auth.getUser(
-      token
+    const data =
+      (await response.json()) as ImportResult;
+
+    if (!response.ok) {
+      throw new Error(
+        data.message ||
+          data.error ||
+          `Importer returned HTTP ${response.status}`
+      );
+    }
+
+    return data;
+  }
+
+  async function runImportAll() {
+    setWorking(true);
+    setError("");
+    setMessage("");
+    setImportStats(null);
+    setImportProgress(
+      "Starting news import..."
     );
 
-  if (error || !data.user) {
-    return false;
+    try {
+      const token =
+        await getAccessToken();
+
+      /*
+       * First request tells us how many batches exist.
+       */
+      const first =
+        await importBatch(token, 0);
+
+      const totalBatches =
+        Math.max(
+          1,
+          first.totalBatches || 1
+        );
+
+      const combined: ImportResult = {
+        success: true,
+        totalBatches,
+        totalSources:
+          first.totalSources || 0,
+        sourcesProcessed:
+          first.sourcesProcessed || 0,
+        feedItemsSeen:
+          first.feedItemsSeen || 0,
+        articlePagesFetched:
+          first.articlePagesFetched || 0,
+        aiGenerated:
+          first.aiGenerated || 0,
+        articlesAddedForApproval:
+          first.articlesAddedForApproval || 0,
+        articlesSkipped:
+          first.articlesSkipped || 0,
+        skippedDuplicate:
+          first.skippedDuplicate || 0,
+        skippedNoImage:
+          first.skippedNoImage || 0,
+        skippedShortSource:
+          first.skippedShortSource || 0,
+        skippedPoorQuality:
+          first.skippedPoorQuality || 0,
+        feedFetchFailed:
+          first.feedFetchFailed || 0,
+        articleFetchFailed:
+          first.articleFetchFailed || 0,
+        aiFailed:
+          first.aiFailed || 0,
+        aiCreditsUnavailable:
+          first.aiCreditsUnavailable || false,
+        diagnostics:
+          first.diagnostics || [],
+      };
+
+      setImportStats({
+        ...combined,
+      });
+
+      setImportProgress(
+        `Completed batch 1 of ${totalBatches}`
+      );
+
+      /*
+       * If there is only one batch, we're finished.
+       */
+      if (
+        combined.aiCreditsUnavailable
+      ) {
+        setMessage(
+          "Import stopped because OpenAI credits/quota are unavailable."
+        );
+
+        await loadData();
+        return;
+      }
+
+      /*
+       * Run remaining batches.
+       */
+      for (
+        let batch = 1;
+        batch < totalBatches;
+        batch++
+      ) {
+        setImportProgress(
+          `Importing batch ${
+            batch + 1
+          } of ${totalBatches}...`
+        );
+
+        const result =
+          await importBatch(
+            token,
+            batch
+          );
+
+        combined.sourcesProcessed =
+          (combined.sourcesProcessed || 0) +
+          (result.sourcesProcessed || 0);
+
+        combined.feedItemsSeen =
+          (combined.feedItemsSeen || 0) +
+          (result.feedItemsSeen || 0);
+
+        combined.articlePagesFetched =
+          (combined.articlePagesFetched || 0) +
+          (result.articlePagesFetched || 0);
+
+        combined.aiGenerated =
+          (combined.aiGenerated || 0) +
+          (result.aiGenerated || 0);
+
+        combined.articlesAddedForApproval =
+          (combined.articlesAddedForApproval || 0) +
+          (result.articlesAddedForApproval || 0);
+
+        combined.articlesSkipped =
+          (combined.articlesSkipped || 0) +
+          (result.articlesSkipped || 0);
+
+        combined.skippedDuplicate =
+          (combined.skippedDuplicate || 0) +
+          (result.skippedDuplicate || 0);
+
+        combined.skippedNoImage =
+          (combined.skippedNoImage || 0) +
+          (result.skippedNoImage || 0);
+
+        combined.skippedShortSource =
+          (combined.skippedShortSource || 0) +
+          (result.skippedShortSource || 0);
+
+        combined.skippedPoorQuality =
+          (combined.skippedPoorQuality || 0) +
+          (result.skippedPoorQuality || 0);
+
+        combined.feedFetchFailed =
+          (combined.feedFetchFailed || 0) +
+          (result.feedFetchFailed || 0);
+
+        combined.articleFetchFailed =
+          (combined.articleFetchFailed || 0) +
+          (result.articleFetchFailed || 0);
+
+        combined.aiFailed =
+          (combined.aiFailed || 0) +
+          (result.aiFailed || 0);
+
+        combined.aiCreditsUnavailable =
+          Boolean(
+            combined.aiCreditsUnavailable ||
+              result.aiCreditsUnavailable
+          );
+
+        combined.diagnostics = [
+          ...(combined.diagnostics || []),
+          ...(result.diagnostics || []),
+        ];
+
+        setImportStats({
+          ...combined,
+        });
+
+        if (
+          result.aiCreditsUnavailable
+        ) {
+          setMessage(
+            "Import stopped because OpenAI credits/quota are unavailable."
+          );
+          break;
+        }
+
+        setImportProgress(
+          `Completed batch ${
+            batch + 1
+          } of ${totalBatches}`
+        );
+      }
+
+      if (
+        !combined.aiCreditsUnavailable
+      ) {
+        setMessage(
+          `Import completed. ${combined.articlesAddedForApproval || 0} new article(s) were added for approval.`
+        );
+      }
+
+      await loadData();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "News import failed."
+      );
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function addSource() {
+    if (!sourceName.trim()) {
+      setError(
+        "Enter a source name."
+      );
+      return;
+    }
+
+    if (!sourceUrl.trim()) {
+      setError(
+        "Enter the RSS/Atom feed URL."
+      );
+      return;
+    }
+
+    setWorking(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const { error: insertError } =
+        await supabase
+          .from("sources")
+          .insert({
+            name: sourceName.trim(),
+            feed_url: sourceUrl.trim(),
+            category: sourceCategory,
+            active: true,
+          });
+
+      if (insertError) {
+        throw new Error(
+          insertError.message
+        );
+      }
+
+      setSourceName("");
+      setSourceUrl("");
+      setSourceCategory("News");
+
+      setMessage(
+        "News source added successfully."
+      );
+
+      await loadData();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to add source."
+      );
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function toggleSource(
+    source: SourceRow
+  ) {
+    setError("");
+    setMessage("");
+
+    const { error: updateError } =
+      await supabase
+        .from("sources")
+        .update({
+          active: !source.active,
+        })
+        .eq("id", source.id);
+
+    if (updateError) {
+      setError(
+        updateError.message
+      );
+      return;
+    }
+
+    await loadData();
+  }
+
+  async function deleteSource(
+    source: SourceRow
+  ) {
+    const confirmed =
+      window.confirm(
+        `Delete "${source.name || "this source"}"?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    setMessage("");
+
+    const { error: deleteError } =
+      await supabase
+        .from("sources")
+        .delete()
+        .eq("id", source.id);
+
+    if (deleteError) {
+      setError(
+        deleteError.message
+      );
+      return;
+    }
+
+    setMessage(
+      "Source deleted."
+    );
+
+    await loadData();
+  }
+
+  async function togglePublished(
+    item: NewsRow
+  ) {
+    setError("");
+    setMessage("");
+
+    const { error: updateError } =
+      await supabase
+        .from("news")
+        .update({
+          Published: !item.Published,
+        })
+        .eq("id", item.id);
+
+    if (updateError) {
+      setError(
+        updateError.message
+      );
+      return;
+    }
+
+    await loadData();
+  }
+
+  async function deleteNews(
+    item: NewsRow
+  ) {
+    const confirmed =
+      window.confirm(
+        `Delete "${item.title}"?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    setMessage("");
+
+    const { error: deleteError } =
+      await supabase
+        .from("news")
+        .delete()
+        .eq("id", item.id);
+
+    if (deleteError) {
+      setError(
+        deleteError.message
+      );
+      return;
+    }
+
+    setMessage(
+      "Article deleted."
+    );
+
+    await loadData();
+  }
+
+  async function addAd() {
+    if (!adTitle.trim()) {
+      setError(
+        "Enter an ad title."
+      );
+      return;
+    }
+
+    if (!adImageUrl.trim()) {
+      setError(
+        "Enter the ad image URL."
+      );
+      return;
+    }
+
+    if (!adLinkUrl.trim()) {
+      setError(
+        "Enter the ad destination URL."
+      );
+      return;
+    }
+
+    setWorking(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const { error: insertError } =
+        await supabase
+          .from("direct_ads")
+          .insert({
+            placement: adPlacement,
+            title: adTitle.trim(),
+            image_url:
+              adImageUrl.trim(),
+            link_url:
+              adLinkUrl.trim(),
+            active: true,
+          });
+
+      if (insertError) {
+        throw new Error(
+          insertError.message
+        );
+      }
+
+      setAdTitle("");
+      setAdImageUrl("");
+      setAdLinkUrl("");
+
+      setMessage(
+        "Direct advertisement added."
+      );
+
+      await loadData();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to add advertisement."
+      );
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function toggleAd(
+    ad: DirectAdRow
+  ) {
+    setError("");
+    setMessage("");
+
+    const { error: updateError } =
+      await supabase
+        .from("direct_ads")
+        .update({
+          active: !ad.active,
+        })
+        .eq("id", ad.id);
+
+    if (updateError) {
+      setError(
+        updateError.message
+      );
+      return;
+    }
+
+    await loadData();
+  }
+
+  async function deleteAd(
+    ad: DirectAdRow
+  ) {
+    const confirmed =
+      window.confirm(
+        `Delete "${ad.title || "this advertisement"}"?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    setMessage("");
+
+    const { error: deleteError } =
+      await supabase
+        .from("direct_ads")
+        .delete()
+        .eq("id", ad.id);
+
+    if (deleteError) {
+      setError(
+        deleteError.message
+      );
+      return;
+    }
+
+    setMessage(
+      "Advertisement deleted."
+    );
+
+    await loadData();
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-slate-950 px-4 py-16 text-white">
+        <div className="mx-auto max-w-5xl text-center">
+          <p className="text-lg">
+            Loading admin dashboard...
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (error && !userEmail) {
+    return (
+      <main className="min-h-screen bg-slate-950 px-4 py-16 text-white">
+        <div className="mx-auto max-w-xl rounded-2xl border border-red-500/30 bg-red-500/10 p-6">
+          <h1 className="mb-3 text-2xl font-bold">
+            Admin Access
+          </h1>
+
+          <p className="text-red-300">
+            {error}
+          </p>
+
+          <button
+            onClick={() =>
+              (window.location.href =
+                "/login")
+            }
+            className="mt-5 rounded-lg bg-white px-5 py-3 font-semibold text-slate-950"
+          >
+            Go to Login
+          </button>
+        </div>
+      </main>
+    );
   }
 
   return (
-    data.user.app_metadata
-      ?.role === "admin"
+    <main className="min-h-screen bg-slate-950 text-white">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        {/* HEADER */}
+        <header className="mb-8 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-cyan-400">
+              JNMulee News
+            </p>
+
+            <h1 className="mt-1 text-3xl font-black">
+              Admin Dashboard
+            </h1>
+
+            <p className="mt-1 text-sm text-slate-400">
+              {userEmail}
+            </p>
+          </div>
+
+          <button
+            onClick={signOut}
+            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold hover:bg-white/10"
+          >
+            Sign Out
+          </button>
+        </header>
+
+        {/* MESSAGES */}
+        {message && (
+          <div className="mb-5 rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-300">
+            {message}
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-5 rounded-xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        {/* IMPORT */}
+        <section className="mb-8 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-xl font-bold">
+                News Importer
+              </h2>
+
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">
+                Fetch RSS/Atom feeds, extract article
+                content, require an image, generate the
+                rewritten article, and save it as
+                unpublished for approval.
+              </p>
+            </div>
+
+            <button
+              onClick={runImportAll}
+              disabled={working}
+              className="rounded-xl bg-cyan-400 px-5 py-3 font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {working
+                ? "Importing..."
+                : "Import All News Now"}
+            </button>
+          </div>
+
+          {importProgress && (
+            <div className="mt-4 rounded-lg bg-black/20 p-3 text-sm text-cyan-300">
+              {importProgress}
+            </div>
+          )}
+
+          {importStats && (
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <Stat
+                label="Feed Items"
+                value={
+                  importStats.feedItemsSeen || 0
+                }
+              />
+
+              <Stat
+                label="AI Generated"
+                value={
+                  importStats.aiGenerated || 0
+                }
+              />
+
+              <Stat
+                label="Added"
+                value={
+                  importStats.articlesAddedForApproval ||
+                  0
+                }
+              />
+
+              <Stat
+                label="Duplicates"
+                value={
+                  importStats.skippedDuplicate ||
+                  0
+                }
+              />
+
+              <Stat
+                label="No Image"
+                value={
+                  importStats.skippedNoImage ||
+                  0
+                }
+              />
+
+              <Stat
+                label="AI Failed"
+                value={
+                  importStats.aiFailed || 0
+                }
+              />
+            </div>
+          )}
+
+          {importStats?.aiCreditsUnavailable && (
+            <div className="mt-5 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-300">
+              OpenAI credits/quota are unavailable.
+              News cannot be AI-generated until the
+              OpenAI API account has available credits.
+            </div>
+          )}
+
+          {importStats?.diagnostics &&
+            importStats.diagnostics.length >
+              0 && (
+              <details className="mt-5 rounded-xl border border-white/10 bg-black/20 p-4">
+                <summary className="cursor-pointer font-semibold">
+                  Import diagnostics
+                </summary>
+
+                <div className="mt-4 max-h-96 overflow-auto rounded-lg bg-black/30 p-3">
+                  {importStats.diagnostics.map(
+                    (line, index) => (
+                      <div
+                        key={`${index}-${line}`}
+                        className="border-b border-white/5 py-1 text-xs text-slate-300 last:border-0"
+                      >
+                        {line}
+                      </div>
+                    )
+                  )}
+                </div>
+              </details>
+            )}
+        </section>
+
+        {/* DASHBOARD COUNTS */}
+        <section className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
+          <DashboardCard
+            title="Articles Loaded"
+            value={news.length}
+          />
+
+          <DashboardCard
+            title="Sources"
+            value={sources.length}
+          />
+
+          <DashboardCard
+            title="Active Sources"
+            value={
+              sources.filter(
+                (source) =>
+                  source.active
+              ).length
+            }
+          />
+
+          <DashboardCard
+            title="Active Ads"
+            value={
+              ads.filter(
+                (ad) => ad.active
+              ).length
+            }
+          />
+        </section>
+
+        {/* ADD SOURCE */}
+        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <h2 className="mb-4 text-xl font-bold">
+            Add News Source
+          </h2>
+
+          <div className="grid gap-3 md:grid-cols-4">
+            <input
+              value={sourceName}
+              onChange={(event) =>
+                setSourceName(
+                  event.target.value
+                )
+              }
+              placeholder="Source name"
+              className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-slate-500"
+            />
+
+            <input
+              value={sourceUrl}
+              onChange={(event) =>
+                setSourceUrl(
+                  event.target.value
+                )
+              }
+              placeholder="RSS / Atom feed URL"
+              className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-slate-500 md:col-span-2"
+            />
+
+            <select
+              value={sourceCategory}
+              onChange={(event) =>
+                setSourceCategory(
+                  event.target.value
+                )
+              }
+              className="rounded-lg border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+            >
+              {CATEGORIES.map(
+                (category) => (
+                  <option
+                    key={category}
+                    value={category}
+                  >
+                    {category}
+                  </option>
+                )
+              )}
+            </select>
+          </div>
+
+          <button
+            onClick={addSource}
+            disabled={working}
+            className="mt-4 rounded-lg bg-white px-5 py-3 font-bold text-slate-950 disabled:opacity-50"
+          >
+            Add Source
+          </button>
+        </section>
+
+        {/* SOURCES */}
+        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-bold">
+              News Sources
+            </h2>
+
+            <span className="text-sm text-slate-400">
+              {sources.length} total
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {sources.map(
+              (source) => (
+                <div
+                  key={source.id}
+                  className="rounded-xl border border-white/10 bg-black/20 p-4"
+                >
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-semibold">
+                          {source.name ||
+                            "Unnamed source"}
+                        </h3>
+
+                        <span className="rounded-full bg-white/10 px-2 py-1 text-xs text-slate-300">
+                          {source.category ||
+                            "News"}
+                        </span>
+
+                        <span
+                          className={`rounded-full px-2 py-1 text-xs ${
+                            source.active
+                              ? "bg-emerald-400/10 text-emerald-300"
+                              : "bg-red-400/10 text-red-300"
+                          }`}
+                        >
+                          {source.active
+                            ? "Active"
+                            : "Inactive"}
+                        </span>
+                      </div>
+
+                      <p className="mt-2 break-all text-xs text-slate-500">
+                        {source.feed_url}
+                      </p>
+                    </div>
+
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        onClick={() =>
+                          toggleSource(
+                            source
+                          )
+                        }
+                        className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold hover:bg-white/10"
+                      >
+                        {source.active
+                          ? "Disable"
+                          : "Enable"}
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          deleteSource(
+                            source
+                          )
+                        }
+                        className="rounded-lg border border-red-400/20 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-400/10"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            )}
+
+            {sources.length === 0 && (
+              <p className="py-8 text-center text-slate-500">
+                No news sources found.
+              </p>
+            )}
+          </div>
+        </section>
+
+        {/* ARTICLES */}
+        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-bold">
+              Latest Articles
+            </h2>
+
+            <span className="text-sm text-slate-400">
+              Showing latest 100
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {news.map(
+              (item) => (
+                <div
+                  key={item.id}
+                  className="rounded-xl border border-white/10 bg-black/20 p-4"
+                >
+                  <div className="flex flex-col gap-4 sm:flex-row">
+                    {item.image_url && (
+                      <img
+                        src={item.image_url}
+                        alt=""
+                        className="h-24 w-full rounded-lg object-cover sm:w-36"
+                      />
+                    )}
+
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold">
+                        {item.title}
+                      </h3>
+
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                        <span className="rounded-full bg-white/10 px-2 py-1 text-slate-300">
+                          {item.category ||
+                            "News"}
+                        </span>
+
+                        <span
+                          className={`rounded-full px-2 py-1 ${
+                            item.Published
+                              ? "bg-emerald-400/10 text-emerald-300"
+                              : "bg-amber-400/10 text-amber-300"
+                          }`}
+                        >
+                          {item.Published
+                            ? "Published"
+                            : "Pending"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 gap-2 sm:flex-col">
+                      <button
+                        onClick={() =>
+                          togglePublished(
+                            item
+                          )
+                        }
+                        className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold hover:bg-white/10"
+                      >
+                        {item.Published
+                          ? "Unpublish"
+                          : "Publish"}
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          deleteNews(
+                            item
+                          )
+                        }
+                        className="rounded-lg border border-red-400/20 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-400/10"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            )}
+
+            {news.length === 0 && (
+              <p className="py-8 text-center text-slate-500">
+                No articles found.
+              </p>
+            )}
+          </div>
+        </section>
+
+        {/* ADS */}
+        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <h2 className="mb-4 text-xl font-bold">
+            Direct Advertisements
+          </h2>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <input
+              value={adTitle}
+              onChange={(event) =>
+                setAdTitle(
+                  event.target.value
+                )
+              }
+              placeholder="Ad title"
+              className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-slate-500"
+            />
+
+            <select
+              value={adPlacement}
+              onChange={(event) =>
+                setAdPlacement(
+                  event.target.value
+                )
+              }
+              className="rounded-lg border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+            >
+              {AD_PLACEMENTS.map(
+                (placement) => (
+                  <option
+                    key={
+                      placement.value
+                    }
+                    value={
+                      placement.value
+                    }
+                  >
+                    {placement.label}
+                  </option>
+                )
+              )}
+            </select>
+
+            <input
+              value={adImageUrl}
+              onChange={(event) =>
+                setAdImageUrl(
+                  event.target.value
+                )
+              }
+              placeholder="Ad image URL"
+              className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-slate-500"
+            />
+
+            <input
+              value={adLinkUrl}
+              onChange={(event) =>
+                setAdLinkUrl(
+                  event.target.value
+                )
+              }
+              placeholder="Destination URL"
+              className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-slate-500"
+            />
+          </div>
+
+          <button
+            onClick={addAd}
+            disabled={working}
+            className="mt-4 rounded-lg bg-white px-5 py-3 font-bold text-slate-950 disabled:opacity-50"
+          >
+            Add Advertisement
+          </button>
+
+          <div className="mt-6 space-y-3">
+            {ads.map(
+              (ad) => (
+                <div
+                  key={ad.id}
+                  className="rounded-xl border border-white/10 bg-black/20 p-4"
+                >
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold">
+                        {ad.title ||
+                          "Untitled advertisement"}
+                      </h3>
+
+                      <p className="mt-1 text-xs text-slate-400">
+                        {AD_PLACEMENTS.find(
+                          (item) =>
+                            item.value ===
+                            ad.placement
+                        )?.label ||
+                          ad.placement}
+                      </p>
+
+                      {ad.link_url && (
+                        <p className="mt-1 break-all text-xs text-slate-500">
+                          {ad.link_url}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() =>
+                          toggleAd(ad)
+                        }
+                        className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold hover:bg-white/10"
+                      >
+                        {ad.active
+                          ? "Disable"
+                          : "Enable"}
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          deleteAd(ad)
+                        }
+                        className="rounded-lg border border-red-400/20 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-400/10"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            )}
+
+            {ads.length === 0 && (
+              <p className="py-6 text-center text-slate-500">
+                No direct advertisements yet.
+              </p>
+            )}
+          </div>
+        </section>
+
+        <footer className="pb-10 text-center text-xs text-slate-600">
+          JNMulee News Admin
+        </footer>
+      </div>
+    </main>
   );
 }
 
-/*
-|--------------------------------------------------------------------------
-| GET
-|--------------------------------------------------------------------------
-*/
-
-export async function GET(
-  request: Request
-) {
-  const authorized =
-    await authorizeRequest(
-      request
-    );
-
-  if (!authorized) {
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          "Unauthorized",
-      },
-      {
-        status: 401,
-      }
-    );
-  }
-
-  const startedAt =
-    Date.now();
-
-  const url =
-    new URL(request.url);
-
-  const batchParam =
-    url.searchParams.get(
-      "batch"
-    );
-
-  const manual =
-    url.searchParams.get(
-      "manual"
-    ) === "true";
-
-  let requestedBatch =
-    batchParam &&
-    /^\d+$/.test(batchParam)
-      ? Number(batchParam)
-      : 0;
-
-  if (
-    !Number.isFinite(
-      requestedBatch
-    ) ||
-    requestedBatch < 0
-  ) {
-    requestedBatch = 0;
-  }
-
-  const stats = {
-    sourcesProcessed: 0,
-    feedItemsSeen: 0,
-    articlePagesFetched: 0,
-    aiGenerated: 0,
-    articlesAddedForApproval: 0,
-    articlesSkipped: 0,
-    skippedDuplicate: 0,
-    skippedNoImage: 0,
-    skippedShortSource: 0,
-    skippedPoorQuality: 0,
-    feedFetchFailed: 0,
-    articleFetchFailed: 0,
-    aiFailed: 0,
-  };
-
-  const diagnostics: string[] =
-    [];
-
-  let aiCreditsUnavailable =
-    false;
-
-  try {
-    /*
-     * Load active sources.
-     */
-    const {
-      data: sources,
-      error: sourcesError,
-    } =
-      await supabase
-        .from("sources")
-        .select(
-          "id,name,feed_url,category,active"
-        )
-        .eq(
-          "active",
-          true
-        )
-        .order("id", {
-          ascending: true,
-        });
-
-    if (sourcesError) {
-      throw new Error(
-        `Unable to load sources: ${sourcesError.message}`
-      );
-    }
-
-    const allSources =
-      (sources || []) as SourceRow[];
-
-    const totalBatches =
-      Math.max(
-        1,
-        Math.ceil(
-          allSources.length /
-            MAX_SOURCES_PER_BATCH
-        )
-      );
-
-    /*
-     * Manual batch selection.
-     */
-    const batch =
-      requestedBatch %
-      totalBatches;
-
-    const start =
-      batch *
-      MAX_SOURCES_PER_BATCH;
-
-    const batchSources =
-      allSources.slice(
-        start,
-        start +
-          MAX_SOURCES_PER_BATCH
-      );
-
-    diagnostics.push(
-      `Active sources: ${allSources.length}`
-    );
-
-    diagnostics.push(
-      `Batch: ${batch}/${totalBatches - 1}`
-    );
-
-    diagnostics.push(
-      `Sources in this batch: ${batchSources.length}`
-    );
-
-    diagnostics.push(
-      `Feed limit per source: ${MAX_FEED_ITEMS_PER_SOURCE}`
-    );
-
-    diagnostics.push(
-      `OpenAI configured: ${openai ? "YES" : "NO"}`
-    );
-
-    diagnostics.push(
-      `AI model: ${AI_MODEL}`
-    );
-
-    if (
-      batchSources.length ===
-      0
-    ) {
-      return NextResponse.json({
-        success: true,
-        message:
-          `Batch ${batch} contains no sources.`,
-        batch,
-        totalSources:
-          allSources.length,
-        totalBatches,
-        ...stats,
-        diagnostics,
-        durationMs:
-          Date.now() -
-          startedAt,
-      });
-    }
-
-    /*
-     * Process each source.
-     */
-    for (const source of batchSources) {
-      if (
-        aiCreditsUnavailable
-      ) {
-        break;
-      }
-
-      stats.sourcesProcessed++;
-
-      const sourceName =
-        source.name ||
-        source.id;
-
-      if (
-        !source.feed_url ||
-        !isSafeUrl(
-          source.feed_url
-        )
-      ) {
-        diagnostics.push(
-          `${sourceName}: INVALID FEED URL`
-        );
-
-        stats.feedFetchFailed++;
-
-        continue;
-      }
-
-      /*
-       * Fetch RSS.
-       */
-      const feed =
-        await fetchExternal(
-          source.feed_url,
-          FEED_FETCH_TIMEOUT_MS
-        );
-
-      if (
-        !feed.ok ||
-        !feed.text
-      ) {
-        diagnostics.push(
-          `${sourceName}: FEED FAILED HTTP ${feed.status || "timeout"}`
-        );
-
-        stats.feedFetchFailed++;
-
-        continue;
-      }
-
-      const items =
-        parseFeed(feed.text).slice(
-          0,
-          MAX_FEED_ITEMS_PER_SOURCE
-        );
-
-      stats.feedItemsSeen +=
-        items.length;
-
-      diagnostics.push(
-        `${sourceName}: ${items.length} feed items found`
-      );
-
-      if (
-        items.length === 0
-      ) {
-        diagnostics.push(
-          `${sourceName}: RSS returned no readable items`
-        );
-
-        continue;
-      }
-
-      /*
-       * Process feed items.
-       */
-      for (const item of items) {
-        if (
-          aiCreditsUnavailable
-        ) {
-          break;
-        }
-
-        /*
-         * Duplicate check BEFORE expensive article fetching.
-         */
-        const existing =
-          await supabase
-            .from("news")
-            .select("id")
-            .eq(
-              "source_url",
-              item.link
-            )
-            .limit(1);
-
-        if (existing.error) {
-          diagnostics.push(
-            `${sourceName}: duplicate check failed: ${existing.error.message}`
-          );
-
-          stats.articlesSkipped++;
-
-          continue;
-        }
-
-        if (
-          existing.data &&
-          existing.data.length > 0
-        ) {
-          stats.skippedDuplicate++;
-          stats.articlesSkipped++;
-
-          diagnostics.push(
-            `${sourceName}: DUPLICATE — ${item.title}`
-          );
-
-          continue;
-        }
-
-        /*
-         * Fetch full article.
-         */
-        const articlePage =
-          await fetchArticlePage(
-            item.link
-          );
-
-        if (
-          articlePage.text
-        ) {
-          stats.articlePagesFetched++;
-        } else {
-          stats.articleFetchFailed++;
-
-          diagnostics.push(
-            `${sourceName}: ARTICLE EXTRACTION FAILED — ${item.title}`
-          );
-        }
-
-        const material =
-          buildMaterial(
-            item,
-            articlePage.text,
-            articlePage.imageUrl
-          );
-
-        /*
-         * Image requirement.
-         */
-        if (
-          !material.imageUrl ||
-          !isSafeUrl(
-            material.imageUrl
-          )
-        ) {
-          stats.skippedNoImage++;
-          stats.articlesSkipped++;
-
-          diagnostics.push(
-            `${sourceName}: NO IMAGE — ${item.title}`
-          );
-
-          continue;
-        }
-
-        /*
-         * Minimum source material.
-         */
-        const sourceWords =
-          wordCount(
-            material.text
-          );
-
-        if (
-          sourceWords <
-          MIN_SOURCE_WORDS
-        ) {
-          stats.skippedShortSource++;
-          stats.articlesSkipped++;
-
-          diagnostics.push(
-            `${sourceName}: TOO SHORT (${sourceWords} words) — ${item.title}`
-          );
-
-          continue;
-        }
-
-        /*
-         * Generate AI article.
-         */
-        const ai =
-          await generateArticle(
-            material
-          );
-
-        if (
-          ai.creditsUnavailable
-        ) {
-          aiCreditsUnavailable =
-            true;
-
-          diagnostics.push(
-            `${sourceName}: OPENAI CREDITS/QUOTA UNAVAILABLE`
-          );
-
-          break;
-        }
-
-        if (!ai.article) {
-          stats.aiFailed++;
-          stats.articlesSkipped++;
-
-          diagnostics.push(
-            `${sourceName}: AI FAILED — ${ai.error || "unknown AI error"} — ${item.title}`
-          );
-
-          continue;
-        }
-
-        stats.aiGenerated++;
-
-        /*
-         * Final quality check.
-         */
-        const finalWords =
-          wordCount(
-            ai.article
-          );
-
-        if (
-          finalWords <
-          MIN_FINAL_WORDS
-        ) {
-          stats.skippedPoorQuality++;
-          stats.articlesSkipped++;
-
-          diagnostics.push(
-            `${sourceName}: AI ARTICLE TOO SHORT (${finalWords} words) — ${item.title}`
-          );
-
-          continue;
-        }
-
-        if (
-          containsForbiddenContent(
-            ai.article
-          )
-        ) {
-          stats.skippedPoorQuality++;
-          stats.articlesSkipped++;
-
-          diagnostics.push(
-            `${sourceName}: AI ARTICLE FAILED CONTENT CHECK — ${item.title}`
-          );
-
-          continue;
-        }
-
-        const score =
-          qualityScore(
-            ai.article
-          );
-
-        if (score < 70) {
-          stats.skippedPoorQuality++;
-          stats.articlesSkipped++;
-
-          diagnostics.push(
-            `${sourceName}: QUALITY SCORE ${score} — ${item.title}`
-          );
-
-          continue;
-        }
-
-        const category =
-          classifyCategory(
-            material.title,
-            material.text,
-            source.category
-          );
-
-        /*
-         * Insert.
-         */
-        const inserted =
-          await insertArticle(
-            material,
-            category,
-            ai.article,
-            source
-          );
-
-        if (
-          inserted.duplicate
-        ) {
-          stats.skippedDuplicate++;
-          stats.articlesSkipped++;
-
-          diagnostics.push(
-            `${sourceName}: DUPLICATE AT INSERT — ${item.title}`
-          );
-
-          continue;
-        }
-
-        if (
-          inserted.error
-        ) {
-          if (
-            inserted.error ===
-            "IMAGE_REQUIRED"
-          ) {
-            stats.skippedNoImage++;
-          }
-
-          stats.articlesSkipped++;
-
-          diagnostics.push(
-            `${sourceName}: INSERT FAILED — ${inserted.error} — ${item.title}`
-          );
-
-          continue;
-        }
-
-        if (
-          inserted.inserted
-        ) {
-          stats.articlesAddedForApproval++;
-
-          diagnostics.push(
-            `${sourceName}: ADDED FOR APPROVAL — ${item.title}`
-          );
-        }
-      }
-    }
-
-    /*
-     * Final diagnostic summary.
-     */
-    diagnostics.push(
-      "------------------------------"
-    );
-
-    diagnostics.push(
-      `SUMMARY: ${stats.feedItemsSeen} feed items found`
-    );
-
-    diagnostics.push(
-      `SUMMARY: ${stats.aiGenerated} AI articles generated`
-    );
-
-    diagnostics.push(
-      `SUMMARY: ${stats.articlesAddedForApproval} articles added for approval`
-    );
-
-    diagnostics.push(
-      `SUMMARY: ${stats.skippedDuplicate} duplicates`
-    );
-
-    diagnostics.push(
-      `SUMMARY: ${stats.skippedNoImage} missing images`
-    );
-
-    diagnostics.push(
-      `SUMMARY: ${stats.skippedShortSource} insufficient source material`
-    );
-
-    diagnostics.push(
-      `SUMMARY: ${stats.skippedPoorQuality} poor-quality articles`
-    );
-
-    diagnostics.push(
-      `SUMMARY: ${stats.feedFetchFailed} feed failures`
-    );
-
-    diagnostics.push(
-      `SUMMARY: ${stats.articleFetchFailed} article extraction failures`
-    );
-
-    diagnostics.push(
-      `SUMMARY: ${stats.aiFailed} other AI failures`
-    );
-
-    diagnostics.push(
-      `SUMMARY: OpenAI credits unavailable = ${
-        aiCreditsUnavailable
-          ? "YES"
-          : "NO"
-      }`
-    );
-
-    return NextResponse.json(
-      {
-        success: true,
-
-        message:
-          `Batch ${batch} completed: ${stats.articlesAddedForApproval} new AI-generated article(s) added for approval.`,
-
-        batch,
-
-        totalSources:
-          allSources.length,
-
-        totalBatches,
-
-        batchSources:
-          batchSources.map(
-            (source) =>
-              source.name ||
-              source.id
-          ),
-
-        ...stats,
-
-        aiCreditsUnavailable,
-
-        diagnostics,
-
-        durationMs:
-          Date.now() -
-          startedAt,
-      },
-      {
-        status: 200,
-        headers: {
-          "Cache-Control":
-            "no-store",
-        },
-      }
-    );
-  } catch (error) {
-    const message =
-      errorMessage(error);
-
-    diagnostics.push(
-      `FATAL ERROR: ${message}`
-    );
-
-    return NextResponse.json(
-      {
-        success: false,
-        message,
-        ...stats,
-        aiCreditsUnavailable,
-        diagnostics,
-        durationMs:
-          Date.now() -
-          startedAt,
-      },
-      {
-        status: 500,
-        headers: {
-          "Cache-Control":
-            "no-store",
-        },
-      }
-    );
-  }
+function DashboardCard({
+  title,
+  value,
+}: {
+  title: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+      <p className="text-sm text-slate-400">
+        {title}
+      </p>
+
+      <p className="mt-2 text-3xl font-black">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+      <p className="text-xs text-slate-500">
+        {label}
+      </p>
+
+      <p className="mt-1 text-xl font-bold">
+        {value}
+      </p>
+    </div>
+  );
 }
