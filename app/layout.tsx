@@ -1,54 +1,51 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import "./globals.css";
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ||
-  "https://jnmulee-news-jnnation.vercel.app";
+  "https://jnmulee-news.vercel.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-
   title: {
     default: "JNMulee News",
     template: "%s | JNMulee News",
   },
-
   description:
-    "JNMulee News brings you the latest news, breaking stories, sports, business, technology, entertainment and more from Nigeria and around the world.",
-
-  alternates: {
-    canonical: "/",
-  },
-
-  openGraph: {
-    title: "JNMulee News",
-    description:
-      "Latest news and breaking stories from Nigeria and around the world.",
-    url: siteUrl,
-    siteName: "JNMulee News",
-    type: "website",
-  },
-
-  twitter: {
-    card: "summary_large_image",
-    title: "JNMulee News",
-    description:
-      "Latest news and breaking stories from Nigeria and around the world.",
-  },
-
+    "JNMulee News brings you the latest breaking news, Nigeria news, world news, business, technology, sports, entertainment, gossip and crypto.",
+  keywords: [
+    "JNMulee News",
+    "Nigeria News",
+    "Breaking News",
+    "World News",
+    "Sports News",
+    "Business News",
+    "Technology News",
+    "Entertainment News",
+    "Gossip",
+    "Crypto News",
+  ],
+  authors: [{ name: "JNMulee News" }],
+  creator: "JNMulee News",
+  publisher: "JNMulee News",
   robots: {
     index: true,
     follow: true,
   },
-};
-
-const footerLinkStyle: React.CSSProperties = {
-  color: "#b8c2d1",
-  textDecoration: "none",
-  fontSize: "14px",
-  lineHeight: 1.5,
-  transition: "color 0.2s ease",
+  openGraph: {
+    type: "website",
+    siteName: "JNMulee News",
+    title: "JNMulee News",
+    description:
+      "Latest breaking news, Nigeria news, world news, business, technology, sports, entertainment and more.",
+    url: siteUrl,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "JNMulee News",
+    description:
+      "Latest breaking news, Nigeria news, world news, business, technology, sports and entertainment.",
+  },
 };
 
 export default function RootLayout({
@@ -61,9 +58,6 @@ export default function RootLayout({
       <body
         style={{
           margin: 0,
-          minHeight: "100vh",
-          display: "flex",
-          flexDirection: "column",
           background: "#f7f9fc",
           color: "#111827",
           fontFamily:
@@ -72,427 +66,463 @@ export default function RootLayout({
       >
         <div
           style={{
-            flex: "1 0 auto",
-            width: "100%",
+            minHeight: "100vh",
+            display: "flex",
+            flexDirection: "column",
           }}
         >
-          {children}
-        </div>
+          <div style={{ flex: 1 }}>
+            {children}
+          </div>
 
-        {/* GLOBAL FOOTER */}
-        <footer
-          style={{
-            flexShrink: 0,
-            background:
-              "linear-gradient(180deg, #0b1220 0%, #080e19 100%)",
-            color: "#ffffff",
-            borderTop: "3px solid #2563eb",
-            marginTop: "56px",
-          }}
-        >
-          <div
+          <footer
             style={{
-              maxWidth: "1200px",
-              margin: "0 auto",
-              padding: "52px 20px 24px",
+              marginTop: "60px",
+              background:
+                "linear-gradient(180deg, #020617 0%, #080e19 100%)",
+              color: "#ffffff",
+              borderTop:
+                "3px solid #22d3ee",
             }}
           >
-            {/* FOOTER TOP */}
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns:
-                  "minmax(260px, 1.5fr) repeat(2, minmax(180px, 1fr))",
-                gap: "48px",
+                maxWidth: "1200px",
+                margin: "0 auto",
+                padding:
+                  "48px 20px 24px",
               }}
             >
-              {/* BRAND */}
-              <div>
-                <Link
-                  href="/"
-                  aria-label="JNMulee News home"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "11px",
-                    color: "#ffffff",
-                    textDecoration: "none",
-                  }}
-                >
-                  <span
-                    style={{
-                      width: "42px",
-                      height: "42px",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: "11px",
-                      background:
-                        "linear-gradient(135deg, #2563eb, #1d4ed8)",
-                      color: "#ffffff",
-                      fontSize: "15px",
-                      fontWeight: 900,
-                      letterSpacing: "-0.5px",
-                      boxShadow:
-                        "0 8px 24px rgba(37, 99, 235, 0.28)",
-                    }}
-                  >
-                    JN
-                  </span>
-
-                  <span
-                    style={{
-                      display: "flex",
-                      alignItems: "baseline",
-                      gap: "5px",
-                      fontSize: "25px",
-                      fontWeight: 800,
-                      letterSpacing: "-0.8px",
-                    }}
-                  >
-                    <span>JNMulee</span>
-
-                    <span
-                      style={{
-                        color: "#60a5fa",
-                        fontWeight: 700,
-                      }}
-                    >
-                      News
-                    </span>
-                  </span>
-                </Link>
-
-                <p
-                  style={{
-                    maxWidth: "410px",
-                    color: "#aeb9c9",
-                    lineHeight: 1.75,
-                    marginTop: "18px",
-                    marginBottom: 0,
-                    fontSize: "14px",
-                  }}
-                >
-                  JNMulee News brings you the latest news,
-                  stories and information from Nigeria and
-                  around the world.
-                </p>
-
-                <div
-                  style={{
-                    marginTop: "22px",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "8px 12px",
-                    borderRadius: "999px",
-                    background: "rgba(37, 99, 235, 0.10)",
-                    border:
-                      "1px solid rgba(96, 165, 250, 0.18)",
-                    color: "#93c5fd",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                  }}
-                >
-                  <span
-                    style={{
-                      width: "7px",
-                      height: "7px",
-                      borderRadius: "50%",
-                      background: "#60a5fa",
-                      display: "inline-block",
-                    }}
-                  />
-                  News from Nigeria & the world
-                </div>
-              </div>
-
-              {/* EXPLORE */}
-              <div>
-                <h3
-                  style={{
-                    margin: 0,
-                    marginBottom: "18px",
-                    color: "#ffffff",
-                    fontSize: "14px",
-                    fontWeight: 800,
-                    letterSpacing: "0.4px",
-                  }}
-                >
-                  EXPLORE
-                </h3>
-
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "11px",
-                  }}
-                >
-                  <Link href="/" style={footerLinkStyle}>
-                    Home
-                  </Link>
-
-                  <Link
-                    href="/category/nigeria"
-                    style={footerLinkStyle}
-                  >
-                    Nigeria
-                  </Link>
-
-                  <Link
-                    href="/category/world"
-                    style={footerLinkStyle}
-                  >
-                    World
-                  </Link>
-
-                  <Link
-                    href="/category/business"
-                    style={footerLinkStyle}
-                  >
-                    Business
-                  </Link>
-
-                  <Link
-                    href="/category/technology"
-                    style={footerLinkStyle}
-                  >
-                    Technology
-                  </Link>
-
-                  <Link
-                    href="/category/sports"
-                    style={footerLinkStyle}
-                  >
-                    Sports
-                  </Link>
-                </div>
-              </div>
-
-              {/* INFORMATION */}
-              <div>
-                <h3
-                  style={{
-                    margin: 0,
-                    marginBottom: "18px",
-                    color: "#ffffff",
-                    fontSize: "14px",
-                    fontWeight: 800,
-                    letterSpacing: "0.4px",
-                  }}
-                >
-                  INFORMATION
-                </h3>
-
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "11px",
-                  }}
-                >
-                  <Link
-                    href="/about"
-                    style={footerLinkStyle}
-                  >
-                    About
-                  </Link>
-
-                  <Link
-                    href="/contact"
-                    style={footerLinkStyle}
-                  >
-                    Contact
-                  </Link>
-
-                  <Link
-                    href="/privacy"
-                    style={footerLinkStyle}
-                  >
-                    Privacy Policy
-                  </Link>
-
-                  <Link
-                    href="/terms"
-                    style={footerLinkStyle}
-                  >
-                    Terms of Use
-                  </Link>
-
-                  <Link
-                    href="/search"
-                    style={footerLinkStyle}
-                  >
-                    Search
-                  </Link>
-
-                  <a
-                    href="/sitemap.xml"
-                    style={footerLinkStyle}
-                  >
-                    Sitemap
-                  </a>
-                </div>
-              </div>
-            </div>
-
-            {/* FOOTER DIVIDER */}
-            <div
-              style={{
-                marginTop: "44px",
-                paddingTop: "22px",
-                borderTop:
-                  "1px solid rgba(255,255,255,0.10)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "20px",
-                flexWrap: "wrap",
-              }}
-            >
+              {/* FOOTER BRAND */}
               <div
                 style={{
-                  color: "#7f8da1",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  justifyContent:
+                    "space-between",
+                  gap: "40px",
+                }}
+              >
+                <div
+                  style={{
+                    maxWidth: "420px",
+                  }}
+                >
+                  <a
+                    href="/"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      textDecoration:
+                        "none",
+                      color: "#ffffff",
+                      fontSize: "25px",
+                      fontWeight: 900,
+                      letterSpacing:
+                        "-0.5px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: "42px",
+                        height: "42px",
+                        borderRadius: "12px",
+                        display: "inline-flex",
+                        alignItems:
+                          "center",
+                        justifyContent:
+                          "center",
+                        background:
+                          "linear-gradient(135deg, #22d3ee, #06b6d4)",
+                        color: "#020617",
+                        fontWeight: 900,
+                        boxShadow:
+                          "0 8px 24px rgba(34,211,238,0.25)",
+                      }}
+                    >
+                      JN
+                    </span>
+
+                    <span>
+                      JNMulee{" "}
+                      <span
+                        style={{
+                          color: "#67e8f9",
+                        }}
+                      >
+                        News
+                      </span>
+                    </span>
+                  </a>
+
+                  <p
+                    style={{
+                      marginTop: "18px",
+                      marginBottom: "18px",
+                      color: "#94a3b8",
+                      fontSize: "15px",
+                      lineHeight: 1.7,
+                    }}
+                  >
+                    JNMulee News brings you
+                    the latest news and
+                    stories from Nigeria,
+                    Africa and around the
+                    world.
+                  </p>
+
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding:
+                        "8px 12px",
+                      borderRadius: "999px",
+                      background:
+                        "rgba(34,211,238,0.10)",
+                      border:
+                        "1px solid rgba(103,232,249,0.18)",
+                      color: "#a5f3fc",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: "7px",
+                        height: "7px",
+                        borderRadius:
+                          "50%",
+                        background:
+                          "#67e8f9",
+                        display:
+                          "inline-block",
+                      }}
+                    />
+                    Independent News
+                  </div>
+                </div>
+
+                {/* EXPLORE */}
+                <div
+                  style={{
+                    minWidth: "150px",
+                  }}
+                >
+                  <h3
+                    style={{
+                      margin: "0 0 16px",
+                      color: "#ffffff",
+                      fontSize: "14px",
+                      fontWeight: 800,
+                      letterSpacing:
+                        "0.08em",
+                    }}
+                  >
+                    EXPLORE
+                  </h3>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "11px",
+                    }}
+                  >
+                    <a
+                      href="/"
+                      style={{
+                        color: "#b8c2d1",
+                        textDecoration:
+                          "none",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Home
+                    </a>
+
+                    <a
+                      href="/category/nigeria"
+                      style={{
+                        color: "#b8c2d1",
+                        textDecoration:
+                          "none",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Nigeria
+                    </a>
+
+                    <a
+                      href="/category/world"
+                      style={{
+                        color: "#b8c2d1",
+                        textDecoration:
+                          "none",
+                        fontSize: "14px",
+                      }}
+                    >
+                      World
+                    </a>
+
+                    <a
+                      href="/category/business"
+                      style={{
+                        color: "#b8c2d1",
+                        textDecoration:
+                          "none",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Business
+                    </a>
+
+                    <a
+                      href="/category/technology"
+                      style={{
+                        color: "#b8c2d1",
+                        textDecoration:
+                          "none",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Technology
+                    </a>
+
+                    <a
+                      href="/category/sports"
+                      style={{
+                        color: "#b8c2d1",
+                        textDecoration:
+                          "none",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Sports
+                    </a>
+                  </div>
+                </div>
+
+                {/* INFORMATION */}
+                <div
+                  style={{
+                    minWidth: "170px",
+                  }}
+                >
+                  <h3
+                    style={{
+                      margin: "0 0 16px",
+                      color: "#ffffff",
+                      fontSize: "14px",
+                      fontWeight: 800,
+                      letterSpacing:
+                        "0.08em",
+                    }}
+                  >
+                    INFORMATION
+                  </h3>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "11px",
+                    }}
+                  >
+                    <a
+                      href="/about"
+                      style={{
+                        color: "#b8c2d1",
+                        textDecoration:
+                          "none",
+                        fontSize: "14px",
+                      }}
+                    >
+                      About
+                    </a>
+
+                    <a
+                      href="/contact"
+                      style={{
+                        color: "#b8c2d1",
+                        textDecoration:
+                          "none",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Contact
+                    </a>
+
+                    <a
+                      href="/privacy"
+                      style={{
+                        color: "#b8c2d1",
+                        textDecoration:
+                          "none",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Privacy Policy
+                    </a>
+
+                    <a
+                      href="/terms"
+                      style={{
+                        color: "#b8c2d1",
+                        textDecoration:
+                          "none",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Terms of Use
+                    </a>
+
+                    <a
+                      href="/search"
+                      style={{
+                        color: "#b8c2d1",
+                        textDecoration:
+                          "none",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Search
+                    </a>
+
+                    <a
+                      href="/sitemap.xml"
+                      style={{
+                        color: "#b8c2d1",
+                        textDecoration:
+                          "none",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Sitemap
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* DIVIDER */}
+              <div
+                style={{
+                  height: "1px",
+                  background:
+                    "rgba(148,163,184,0.15)",
+                  margin:
+                    "38px 0 20px",
+                }}
+              />
+
+              {/* COPYRIGHT */}
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent:
+                    "space-between",
+                  gap: "12px",
+                  color: "#64748b",
                   fontSize: "13px",
                 }}
               >
-                © {new Date().getFullYear()} JNMulee News.
-                All rights reserved.
-              </div>
+                <span>
+                  © {new Date().getFullYear()}{" "}
+                  JNMulee News. All rights
+                  reserved.
+                </span>
 
-              <div
-                style={{
-                  color: "#6f7d91",
-                  fontSize: "12px",
-                }}
-              >
-                Independent news & information
+                <span>
+                  News • Nigeria • World •
+                  Business • Sports •
+                  Technology
+                </span>
               </div>
             </div>
-          </div>
 
-          {/* MOBILE FOOTER ADJUSTMENTS */}
-          <style
-            dangerouslySetInnerHTML={{
-              __html: `
-                @media (max-width: 760px) {
-                  footer > div {
-                    padding-left: 16px !important;
-                    padding-right: 16px !important;
+            <style
+              dangerouslySetInnerHTML={{
+                __html: `
+                  @media (max-width: 700px) {
+                    footer {
+                      margin-top: 40px !important;
+                    }
+
+                    footer > div {
+                      padding-left: 16px !important;
+                      padding-right: 16px !important;
+                    }
+
+                    footer a {
+                      word-break: normal;
+                    }
                   }
 
-                  footer > div > div:first-child {
-                    grid-template-columns: 1fr !important;
-                    gap: 34px !important;
+                  footer a:hover {
+                    color: #67e8f9 !important;
                   }
-                }
+                `,
+              }}
+            />
+          </footer>
+        </div>
 
-                @media (max-width: 480px) {
-                  footer {
-                    margin-top: 40px !important;
-                  }
-
-                  footer > div {
-                    padding-top: 40px !important;
-                  }
-                }
-              `,
-            }}
-          />
-        </footer>
-
-        {/* BASIC COPY / CONTEXT PROTECTION */}
+        {/* Basic copy/context protection */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              (function () {
-                document.addEventListener(
-                  "contextmenu",
-                  function (e) {
-                    e.preventDefault();
-                  },
-                  true
-                );
+              document.addEventListener("contextmenu", function(e) {
+                e.preventDefault();
+              });
 
-                document.addEventListener(
-                  "copy",
-                  function (e) {
-                    e.preventDefault();
-                  },
-                  true
-                );
+              document.addEventListener("copy", function(e) {
+                e.preventDefault();
+              });
 
-                document.addEventListener(
-                  "cut",
-                  function (e) {
-                    e.preventDefault();
-                  },
-                  true
-                );
+              document.addEventListener("cut", function(e) {
+                e.preventDefault();
+              });
 
-                document.addEventListener(
-                  "dragstart",
-                  function (e) {
-                    e.preventDefault();
-                  },
-                  true
-                );
+              document.addEventListener("dragstart", function(e) {
+                e.preventDefault();
+              });
 
-                document.addEventListener(
-                  "selectstart",
-                  function (e) {
-                    e.preventDefault();
-                  },
-                  true
-                );
+              document.addEventListener("selectstart", function(e) {
+                if (
+                  e.target &&
+                  e.target.tagName !== "INPUT" &&
+                  e.target.tagName !== "TEXTAREA"
+                ) {
+                  e.preventDefault();
+                }
+              });
 
-                document.addEventListener(
-                  "keydown",
-                  function (e) {
-                    var key = (
-                      e.key || ""
-                    ).toLowerCase();
+              document.addEventListener("keydown", function(e) {
+                if (
+                  (e.ctrlKey || e.metaKey) &&
+                  ["u", "s", "c"].includes(
+                    String(e.key).toLowerCase()
+                  )
+                ) {
+                  e.preventDefault();
+                }
 
-                    var blockedCopy =
-                      (e.ctrlKey || e.metaKey) &&
-                      (
-                        key === "c" ||
-                        key === "x" ||
-                        key === "u" ||
-                        key === "s" ||
-                        key === "a" ||
-                        key === "p"
-                      );
+                if (
+                  e.ctrlKey &&
+                  e.shiftKey &&
+                  ["i", "j", "c"].includes(
+                    String(e.key).toLowerCase()
+                  )
+                ) {
+                  e.preventDefault();
+                }
 
-                    var blockedDeveloperTools =
-                      e.key === "F12" ||
-                      (
-                        e.ctrlKey &&
-                        e.shiftKey &&
-                        (
-                          key === "i" ||
-                          key === "j" ||
-                          key === "c"
-                        )
-                      ) ||
-                      (
-                        e.metaKey &&
-                        e.altKey &&
-                        key === "i"
-                      );
-
-                    if (
-                      blockedCopy ||
-                      blockedDeveloperTools
-                    ) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }
-                  },
-                  true
-                );
-              })();
+                if (e.key === "F12") {
+                  e.preventDefault();
+                }
+              });
             `,
           }}
         />
