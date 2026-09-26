@@ -27,35 +27,43 @@ export default function AdminCommentsPage() {
   async function loadComments() {
     setError("");
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    if (!user) {
-      window.location.href = "/login";
-      return;
-    }
+      if (!user) {
+        window.location.href = "/admin/login";
+        return;
+      }
 
-    if (user.app_metadata?.role !== "admin") {
-      setError("You do not have administrator access.");
+      if (user.app_metadata?.role !== "admin") {
+        setError("You do not have administrator access.");
+        setLoading(false);
+        return;
+      }
+
+      const { data, error: commentsError } = await supabase
+        .from("comments")
+        .select(
+          "id,news_id,name,comment,approved,created_at"
+        )
+        .order("created_at", { ascending: false });
+
+      if (commentsError) {
+        setError(commentsError.message);
+      } else {
+        setComments((data || []) as CommentRow[]);
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load comments."
+      );
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const { data, error: commentsError } = await supabase
-      .from("comments")
-      .select(
-        "id,news_id,name,comment,approved,created_at"
-      )
-      .order("created_at", { ascending: false });
-
-    if (commentsError) {
-      setError(commentsError.message);
-    } else {
-      setComments((data || []) as CommentRow[]);
-    }
-
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -119,6 +127,7 @@ export default function AdminCommentsPage() {
         <div className="flex min-h-screen items-center justify-center">
           <div className="text-center">
             <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-cyan-400" />
+
             <p className="text-slate-400">
               Loading comments...
             </p>
