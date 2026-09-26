@@ -2,6 +2,13 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+
+  // Never protect the login page itself.
+  if (pathname === "/admin/login") {
+    return NextResponse.next();
+  }
+
   let response = NextResponse.next({
     request,
   });
@@ -14,7 +21,6 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value);
@@ -36,14 +42,7 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
-
-  // Allow the login page without authentication.
-  if (pathname === "/admin/login") {
-    return response;
-  }
-
-  // Protect every other /admin route.
+  // Protect /admin and everything underneath it.
   if (pathname.startsWith("/admin")) {
     if (!user) {
       const url = request.nextUrl.clone();
@@ -53,7 +52,6 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // Only accounts with the admin role can enter.
     if (user.app_metadata?.role !== "admin") {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";
@@ -67,7 +65,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/admin/:path*",
-  ],
+  matcher: ["/admin/:path*"],
 };
