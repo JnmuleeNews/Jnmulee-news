@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   --jn-navy: #0b1220;
   --jn-navy-2: #111a2e;
