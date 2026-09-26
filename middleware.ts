@@ -5,8 +5,11 @@ export async function middleware(request: Request) {
   const url = new URL(request.url);
   const pathname = url.pathname;
 
-  // Always allow the login page itself.
-  if (pathname === "/admin/login") {
+  // The admin login page must always be accessible.
+  if (
+    pathname === "/admin/login" ||
+    pathname.startsWith("/admin/login/")
+  ) {
     return NextResponse.next();
   }
 
