@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -85,7 +85,10 @@ const AD_PLACEMENTS = [
     value: "home_bottom",
     label: "Homepage Bottom",
   },
-  { value: "article_top", label: "Article Top" },
+  {
+    value: "article_top",
+    label: "Article Top",
+  },
   {
     value: "article_middle",
     label: "Article Middle",
@@ -100,10 +103,10 @@ const cyanButton =
   "rounded-xl bg-cyan-400 px-5 py-3 font-bold text-slate-950 shadow-lg shadow-cyan-400/10 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
 
 const smallButton =
-  "rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs font-semibold text-cyan-200 transition hover:border-cyan-400/40 hover:bg-cyan-400/10";
+  "rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs font-semibold text-cyan-200 transition hover:border-cyan-400/40 hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50";
 
 const deleteButton =
-  "rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-cyan-400/30 hover:bg-slate-700 hover:text-cyan-200";
+  "rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-cyan-400/30 hover:bg-slate-700 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-50";
 
 const inputClass =
   "w-full rounded-lg border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/10";
@@ -133,21 +136,32 @@ export default function AdminPage() {
   const [adPlacement, setAdPlacement] =
     useState("home_top");
   const [adTitle, setAdTitle] = useState("");
-  const [adImageUrl, setAdImageUrl] =
-    useState("");
-  const [adLinkUrl, setAdLinkUrl] =
-    useState("");
+  const [adImageUrl, setAdImageUrl] = useState("");
+  const [adLinkUrl, setAdLinkUrl] = useState("");
 
-  async function loadData() {
+  const [activeSection, setActiveSection] =
+    useState("dashboard");
+
+  const clearNotice = () => {
+    setMessage("");
+    setError("");
+  };
+
+  const loadData = useCallback(async () => {
     setError("");
 
     try {
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
 
+      if (userError) {
+        throw new Error(userError.message);
+      }
+
       if (!user) {
-        window.location.href = "/admin/login";
+        window.location.replace("/admin/login");
         return;
       }
 
@@ -235,23 +249,20 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   async function getAccessToken() {
     const {
       data,
       error: sessionError,
-    } =
-      await supabase.auth.getSession();
+    } = await supabase.auth.getSession();
 
     if (sessionError) {
-      throw new Error(
-        sessionError.message
-      );
+      throw new Error(sessionError.message);
     }
 
     const token =
@@ -282,8 +293,16 @@ export default function AdminPage() {
       }
     );
 
-    const data =
-      (await response.json()) as ImportResult;
+    let data: ImportResult = {};
+
+    try {
+      data =
+        (await response.json()) as ImportResult;
+    } catch {
+      throw new Error(
+        `Importer returned HTTP ${response.status}.`
+      );
+    }
 
     if (!response.ok) {
       throw new Error(
@@ -297,9 +316,10 @@ export default function AdminPage() {
   }
 
   async function runImportAll() {
+    if (working) return;
+
     setWorking(true);
-    setError("");
-    setMessage("");
+    clearNotice();
     setImportStats(null);
     setImportProgress(
       "Starting news import..."
@@ -513,8 +533,7 @@ export default function AdminPage() {
     }
 
     setWorking(true);
-    setError("");
-    setMessage("");
+    clearNotice();
 
     try {
       const { error: insertError } =
@@ -556,8 +575,7 @@ export default function AdminPage() {
   async function toggleSource(
     source: SourceRow
   ) {
-    setError("");
-    setMessage("");
+    clearNotice();
 
     const { error: updateError } =
       await supabase
@@ -574,6 +592,12 @@ export default function AdminPage() {
       return;
     }
 
+    setMessage(
+      source.active
+        ? "Source disabled."
+        : "Source enabled."
+    );
+
     await loadData();
   }
 
@@ -589,8 +613,7 @@ export default function AdminPage() {
 
     if (!confirmed) return;
 
-    setError("");
-    setMessage("");
+    clearNotice();
 
     const { error: deleteError } =
       await supabase
@@ -612,8 +635,17 @@ export default function AdminPage() {
   async function togglePublished(
     item: NewsRow
   ) {
-    setError("");
-    setMessage("");
+    clearNotice();
+
+    if (
+      !item.Published &&
+      !item.image_url
+    ) {
+      setError(
+        "This article cannot be published because it does not have an image."
+      );
+      return;
+    }
 
     const { error: updateError } =
       await supabase
@@ -630,6 +662,12 @@ export default function AdminPage() {
       return;
     }
 
+    setMessage(
+      item.Published
+        ? "Article unpublished."
+        : "Article published."
+    );
+
     await loadData();
   }
 
@@ -643,8 +681,7 @@ export default function AdminPage() {
 
     if (!confirmed) return;
 
-    setError("");
-    setMessage("");
+    clearNotice();
 
     const { error: deleteError } =
       await supabase
@@ -686,8 +723,7 @@ export default function AdminPage() {
     }
 
     setWorking(true);
-    setError("");
-    setMessage("");
+    clearNotice();
 
     try {
       const { error: insertError } =
@@ -732,8 +768,7 @@ export default function AdminPage() {
   async function toggleAd(
     ad: DirectAdRow
   ) {
-    setError("");
-    setMessage("");
+    clearNotice();
 
     const { error: updateError } =
       await supabase
@@ -749,6 +784,12 @@ export default function AdminPage() {
       );
       return;
     }
+
+    setMessage(
+      ad.active
+        ? "Advertisement disabled."
+        : "Advertisement enabled."
+    );
 
     await loadData();
   }
@@ -766,8 +807,7 @@ export default function AdminPage() {
 
     if (!confirmed) return;
 
-    setError("");
-    setMessage("");
+    clearNotice();
 
     const { error: deleteError } =
       await supabase
@@ -791,7 +831,9 @@ export default function AdminPage() {
 
   async function signOut() {
     await supabase.auth.signOut();
-    window.location.href = "/admin/login";
+    window.location.replace(
+      "/admin/login"
+    );
   }
 
   if (loading) {
@@ -826,8 +868,9 @@ export default function AdminPage() {
 
           <button
             onClick={() =>
-              (window.location.href =
-                "/admin/login")
+              window.location.replace(
+                "/admin/login"
+              )
             }
             className={`${cyanButton} mt-5`}
           >
@@ -838,12 +881,32 @@ export default function AdminPage() {
     );
   }
 
+  const publishedCount = news.filter(
+    (item) =>
+      item.Published === true
+  ).length;
+
+  const pendingCount = news.filter(
+    (item) =>
+      item.Published !== true
+  ).length;
+
+  const activeSources = sources.filter(
+    (item) => item.active === true
+  ).length;
+
+  const activeAds = ads.filter(
+    (item) => item.active === true
+  ).length;
+
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
 
-        <header className="mb-8 overflow-hidden rounded-2xl border border-cyan-400/20 bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/30 p-5 shadow-2xl shadow-black/20">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* HEADER */}
+        <header className="mb-6 overflow-hidden rounded-2xl border border-cyan-400/20 bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/30 p-5 shadow-2xl shadow-black/20">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+
             <div>
               <div className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-lg shadow-cyan-400/50" />
@@ -862,14 +925,66 @@ export default function AdminPage() {
               </p>
             </div>
 
-            <button
-              onClick={signOut}
-              className={smallButton}
-            >
-              Sign Out
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href="/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={smallButton}
+              >
+                View Website
+              </a>
+
+              <a
+                href="/admin/workers"
+                className={smallButton}
+              >
+                Workers
+              </a>
+
+              <button
+                onClick={signOut}
+                className={smallButton}
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </header>
+
+        {/* ADMIN NAV */}
+        <nav className="mb-8 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.035] p-2">
+          <div className="flex min-w-max gap-2">
+            {[
+              ["dashboard", "Dashboard"],
+              ["import", "News Import"],
+              ["sources", "Sources"],
+              ["articles", "Articles"],
+              ["ads", "Advertisements"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() =>
+                  setActiveSection(value)
+                }
+                className={`rounded-xl px-4 py-2.5 text-sm font-bold transition ${
+                  activeSection === value
+                    ? "bg-cyan-400 text-slate-950"
+                    : "text-slate-300 hover:bg-cyan-400/10 hover:text-cyan-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+
+            <a
+              href="/admin/workers"
+              className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-200"
+            >
+              Workers
+            </a>
+          </div>
+        </nav>
 
         {message && (
           <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm font-semibold text-cyan-200">
@@ -886,504 +1001,581 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* DASHBOARD */}
+        {activeSection === "dashboard" && (
+          <>
+            <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <DashboardCard
+                title="Published Stories"
+                value={publishedCount}
+              />
+
+              <DashboardCard
+                title="Pending Stories"
+                value={pendingCount}
+              />
+
+              <DashboardCard
+                title="Active Sources"
+                value={activeSources}
+              />
+
+              <DashboardCard
+                title="Active Ads"
+                value={activeAds}
+              />
+            </section>
+
+            <section className="mb-8 grid gap-5 lg:grid-cols-2">
+              <QuickCard
+                title="News Import"
+                description="Fetch active feeds and process available articles."
+                button="Open Import"
+                onClick={() =>
+                  setActiveSection("import")
+                }
+              />
+
+              <QuickCard
+                title="Workers"
+                description="Create staff accounts so trusted workers can manage news while you are offline."
+                button="Manage Workers"
+                href="/admin/workers"
+              />
+
+              <QuickCard
+                title="Sources"
+                description="Add, enable, disable and remove your RSS/Atom feeds."
+                button="Manage Sources"
+                onClick={() =>
+                  setActiveSection("sources")
+                }
+              />
+
+              <QuickCard
+                title="Advertisements"
+                description="Manage your direct advertisements and placements."
+                button="Manage Ads"
+                onClick={() =>
+                  setActiveSection("ads")
+                }
+              />
+            </section>
+          </>
+        )}
+
         {/* IMPORT */}
-        <section className="mb-8 rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-cyan-400/[0.07] to-white/[0.02] p-5 shadow-xl shadow-black/10">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+        {activeSection === "import" && (
+          <section className="mb-8 rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-cyan-400/[0.07] to-white/[0.02] p-5 shadow-xl shadow-black/10">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-bold tracking-widest text-cyan-400">
+                  NEWS IMPORT
+                </p>
+
+                <h2 className="mt-1 text-xl font-black">
+                  Import Latest News
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-400">
+                  Fetch active feeds and process available articles.
+                </p>
+              </div>
+
+              <button
+                onClick={runImportAll}
+                disabled={working}
+                className={cyanButton}
+              >
+                {working
+                  ? "Importing..."
+                  : "Import News"}
+              </button>
+            </div>
+
+            {importProgress && (
+              <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm text-cyan-200">
+                {importProgress}
+              </div>
+            )}
+
+            {importStats && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Stat
+                  label="Sources"
+                  value={
+                    importStats.sourcesProcessed ||
+                    0
+                  }
+                />
+
+                <Stat
+                  label="Feed Items"
+                  value={
+                    importStats.feedItemsSeen ||
+                    0
+                  }
+                />
+
+                <Stat
+                  label="Articles Added"
+                  value={
+                    importStats.articlesAddedForApproval ||
+                    0
+                  }
+                />
+
+                <Stat
+                  label="Skipped"
+                  value={
+                    importStats.articlesSkipped ||
+                    0
+                  }
+                />
+              </div>
+            )}
+
+            {importStats?.aiCreditsUnavailable && (
+              <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-4 text-sm text-cyan-200">
+                OpenAI credits/quota are currently unavailable. Feed fetching can still be checked, but AI processing will stop until the quota is available.
+              </div>
+            )}
+
+            {importStats?.diagnostics &&
+              importStats.diagnostics.length > 0 && (
+                <details className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                  <summary className="cursor-pointer text-sm font-bold text-cyan-300">
+                    Import diagnostics
+                  </summary>
+
+                  <div className="mt-3 space-y-2">
+                    {importStats.diagnostics
+                      .slice(0, 30)
+                      .map(
+                        (item, index) => (
+                          <p
+                            key={`${index}-${item}`}
+                            className="text-xs text-slate-400"
+                          >
+                            {item}
+                          </p>
+                        )
+                      )}
+                  </div>
+                </details>
+              )}
+          </section>
+        )}
+
+        {/* SOURCES */}
+        {activeSection === "sources" && (
+          <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
+            <div className="mb-5">
               <p className="text-xs font-bold tracking-widest text-cyan-400">
-                NEWS IMPORT
+                SOURCES
               </p>
 
               <h2 className="mt-1 text-xl font-black">
-                Import Latest News
+                News Sources
               </h2>
+            </div>
 
-              <p className="mt-1 text-sm text-slate-400">
-                Fetch active feeds and process
-                available articles.
-              </p>
+            <div className="grid gap-3 md:grid-cols-3">
+              <input
+                value={sourceName}
+                onChange={(event) =>
+                  setSourceName(
+                    event.target.value
+                  )
+                }
+                placeholder="Source name"
+                className={inputClass}
+              />
+
+              <input
+                value={sourceUrl}
+                onChange={(event) =>
+                  setSourceUrl(
+                    event.target.value
+                  )
+                }
+                placeholder="RSS/Atom feed URL"
+                className={inputClass}
+              />
+
+              <select
+                value={sourceCategory}
+                onChange={(event) =>
+                  setSourceCategory(
+                    event.target.value
+                  )
+                }
+                className={inputClass}
+              >
+                {CATEGORIES.map(
+                  (category) => (
+                    <option
+                      key={category}
+                      value={category}
+                      className="bg-slate-900"
+                    >
+                      {category}
+                    </option>
+                  )
+                )}
+              </select>
             </div>
 
             <button
-              onClick={runImportAll}
+              onClick={addSource}
               disabled={working}
-              className={cyanButton}
+              className={`${cyanButton} mt-4`}
             >
-              {working
-                ? "Importing..."
-                : "Import News"}
+              Add Source
             </button>
-          </div>
 
-          {importProgress && (
-            <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm text-cyan-200">
-              {importProgress}
-            </div>
-          )}
-
-          {importStats && (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Stat
-                label="Sources"
-                value={
-                  importStats.sourcesProcessed ||
-                  0
-                }
-              />
-
-              <Stat
-                label="Feed Items"
-                value={
-                  importStats.feedItemsSeen ||
-                  0
-                }
-              />
-
-              <Stat
-                label="Articles Added"
-                value={
-                  importStats.articlesAddedForApproval ||
-                  0
-                }
-              />
-
-              <Stat
-                label="Skipped"
-                value={
-                  importStats.articlesSkipped ||
-                  0
-                }
-              />
-            </div>
-          )}
-        </section>
-
-        {/* STATS */}
-        <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <DashboardCard
-            title="Published Stories"
-            value={
-              news.filter(
-                (item) =>
-                  item.Published === true
-              ).length
-            }
-          />
-
-          <DashboardCard
-            title="Pending Stories"
-            value={
-              news.filter(
-                (item) =>
-                  item.Published !== true
-              ).length
-            }
-          />
-
-          <DashboardCard
-            title="Active Sources"
-            value={
-              sources.filter(
-                (item) =>
-                  item.active === true
-              ).length
-            }
-          />
-
-          <DashboardCard
-            title="Active Ads"
-            value={
-              ads.filter(
-                (item) =>
-                  item.active === true
-              ).length
-            }
-          />
-        </section>
-
-        {/* SOURCES */}
-        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
-          <div className="mb-5">
-            <p className="text-xs font-bold tracking-widest text-cyan-400">
-              SOURCES
-            </p>
-
-            <h2 className="mt-1 text-xl font-black">
-              News Sources
-            </h2>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            <input
-              value={sourceName}
-              onChange={(event) =>
-                setSourceName(
-                  event.target.value
-                )
-              }
-              placeholder="Source name"
-              className={inputClass}
-            />
-
-            <input
-              value={sourceUrl}
-              onChange={(event) =>
-                setSourceUrl(
-                  event.target.value
-                )
-              }
-              placeholder="RSS/Atom feed URL"
-              className={inputClass}
-            />
-
-            <select
-              value={sourceCategory}
-              onChange={(event) =>
-                setSourceCategory(
-                  event.target.value
-                )
-              }
-              className={inputClass}
-            >
-              {CATEGORIES.map(
-                (category) => (
-                  <option
-                    key={category}
-                    value={category}
-                    className="bg-slate-900"
+            <div className="mt-6 space-y-3">
+              {sources.map(
+                (source) => (
+                  <div
+                    key={source.id}
+                    className="rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-cyan-400/20"
                   >
-                    {category}
-                  </option>
-                )
-              )}
-            </select>
-          </div>
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-bold">
+                            {source.name ||
+                              "Unnamed source"}
+                          </h3>
 
-          <button
-            onClick={addSource}
-            disabled={working}
-            className={`${cyanButton} mt-4`}
-          >
-            Add Source
-          </button>
+                          <span className="rounded-full bg-white/10 px-2 py-1 text-xs text-slate-300">
+                            {source.category ||
+                              "News"}
+                          </span>
 
-          <div className="mt-6 space-y-3">
-            {sources.map(
-              (source) => (
-                <div
-                  key={source.id}
-                  className="rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-cyan-400/20"
-                >
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-bold">
-                          {source.name ||
-                            "Unnamed source"}
-                        </h3>
+                          <span
+                            className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                              source.active
+                                ? "bg-cyan-400/10 text-cyan-300"
+                                : "bg-slate-700 text-slate-400"
+                            }`}
+                          >
+                            {source.active
+                              ? "Active"
+                              : "Inactive"}
+                          </span>
+                        </div>
 
-                        <span className="rounded-full bg-white/10 px-2 py-1 text-xs text-slate-300">
-                          {source.category ||
-                            "News"}
-                        </span>
-
-                        <span
-                          className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                            source.active
-                              ? "bg-cyan-400/10 text-cyan-300"
-                              : "bg-slate-700 text-slate-400"
-                          }`}
-                        >
-                          {source.active
-                            ? "Active"
-                            : "Inactive"}
-                        </span>
+                        <p className="mt-2 break-all text-xs text-slate-500">
+                          {source.feed_url}
+                        </p>
                       </div>
 
-                      <p className="mt-2 break-all text-xs text-slate-500">
-                        {source.feed_url}
-                      </p>
-                    </div>
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          onClick={() =>
+                            toggleSource(
+                              source
+                            )
+                          }
+                          className={smallButton}
+                        >
+                          {source.active
+                            ? "Disable"
+                            : "Enable"}
+                        </button>
 
-                    <div className="flex shrink-0 gap-2">
-                      <button
-                        onClick={() =>
-                          toggleSource(
-                            source
-                          )
-                        }
-                        className={smallButton}
-                      >
-                        {source.active
-                          ? "Disable"
-                          : "Enable"}
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          deleteSource(
-                            source
-                          )
-                        }
-                        className={deleteButton}
-                      >
-                        Delete
-                      </button>
+                        <button
+                          onClick={() =>
+                            deleteSource(
+                              source
+                            )
+                          }
+                          className={deleteButton}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )
-            )}
+                )
+              )}
 
-            {sources.length === 0 && (
-              <p className="py-8 text-center text-slate-500">
-                No news sources found.
-              </p>
-            )}
-          </div>
-        </section>
+              {sources.length === 0 && (
+                <p className="py-8 text-center text-slate-500">
+                  No news sources found.
+                </p>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* ARTICLES */}
-        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
+        {activeSection === "articles" && (
+          <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-bold tracking-widest text-cyan-400">
+                  CONTENT
+                </p>
+
+                <h2 className="mt-1 text-xl font-black">
+                  Latest Articles
+                </h2>
+              </div>
+
+              <span className="text-sm text-slate-400">
+                Showing latest 100
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {news.map(
+                (item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-cyan-400/20"
+                  >
+                    <div className="flex flex-col gap-4 sm:flex-row">
+                      {item.image_url && (
+                        <img
+                          src={item.image_url}
+                          alt=""
+                          className="h-24 w-full rounded-lg object-cover ring-1 ring-white/10 sm:w-36"
+                        />
+                      )}
+
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-bold">
+                          {item.title}
+                        </h3>
+
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                          <span className="rounded-full bg-white/10 px-2 py-1 text-slate-300">
+                            {item.category ||
+                              "News"}
+                          </span>
+
+                          <span
+                            className={`rounded-full px-2 py-1 font-semibold ${
+                              item.Published
+                                ? "bg-cyan-400/10 text-cyan-300"
+                                : "bg-slate-700 text-slate-400"
+                            }`}
+                          >
+                            {item.Published
+                              ? "Published"
+                              : "Pending"}
+                          </span>
+
+                          {!item.image_url && (
+                            <span className="rounded-full bg-slate-800 px-2 py-1 text-slate-400">
+                              No image
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 gap-2 sm:flex-col">
+                        <button
+                          onClick={() =>
+                            togglePublished(
+                              item
+                            )
+                          }
+                          disabled={
+                            !item.Published &&
+                            !item.image_url
+                          }
+                          className={smallButton}
+                          title={
+                            !item.Published &&
+                            !item.image_url
+                              ? "An image is required before publishing."
+                              : ""
+                          }
+                        >
+                          {item.Published
+                            ? "Unpublish"
+                            : "Publish"}
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            deleteNews(
+                              item
+                            )
+                          }
+                          className={deleteButton}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              )}
+
+              {news.length === 0 && (
+                <p className="py-8 text-center text-slate-500">
+                  No articles found.
+                </p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* ADS */}
+        {activeSection === "ads" && (
+          <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
+            <div className="mb-4">
               <p className="text-xs font-bold tracking-widest text-cyan-400">
-                CONTENT
+                MONETIZATION
               </p>
 
               <h2 className="mt-1 text-xl font-black">
-                Latest Articles
+                Direct Advertisements
               </h2>
+
+              <p className="mt-1 text-sm text-slate-400">
+                Manage your own advertising placements.
+              </p>
             </div>
 
-            <span className="text-sm text-slate-400">
-              Showing latest 100
-            </span>
-          </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <input
+                value={adTitle}
+                onChange={(event) =>
+                  setAdTitle(
+                    event.target.value
+                  )
+                }
+                placeholder="Ad title"
+                className={inputClass}
+              />
 
-          <div className="space-y-3">
-            {news.map(
-              (item) => (
-                <div
-                  key={item.id}
-                  className="rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-cyan-400/20"
-                >
-                  <div className="flex flex-col gap-4 sm:flex-row">
-                    {item.image_url && (
-                      <img
-                        src={item.image_url}
-                        alt=""
-                        className="h-24 w-full rounded-lg object-cover ring-1 ring-white/10 sm:w-36"
-                      />
-                    )}
+              <select
+                value={adPlacement}
+                onChange={(event) =>
+                  setAdPlacement(
+                    event.target.value
+                  )
+                }
+                className={inputClass}
+              >
+                {AD_PLACEMENTS.map(
+                  (placement) => (
+                    <option
+                      key={
+                        placement.value
+                      }
+                      value={
+                        placement.value
+                      }
+                      className="bg-slate-900"
+                    >
+                      {placement.label}
+                    </option>
+                  )
+                )}
+              </select>
 
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-bold">
-                        {item.title}
-                      </h3>
+              <input
+                value={adImageUrl}
+                onChange={(event) =>
+                  setAdImageUrl(
+                    event.target.value
+                  )
+                }
+                placeholder="Ad image URL"
+                className={inputClass}
+              />
 
-                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                        <span className="rounded-full bg-white/10 px-2 py-1 text-slate-300">
-                          {item.category ||
-                            "News"}
-                        </span>
+              <input
+                value={adLinkUrl}
+                onChange={(event) =>
+                  setAdLinkUrl(
+                    event.target.value
+                  )
+                }
+                placeholder="Destination URL"
+                className={inputClass}
+              />
+            </div>
 
-                        <span
-                          className={`rounded-full px-2 py-1 font-semibold ${
-                            item.Published
-                              ? "bg-cyan-400/10 text-cyan-300"
-                              : "bg-slate-700 text-slate-400"
-                          }`}
+            <button
+              onClick={addAd}
+              disabled={working}
+              className={`${cyanButton} mt-4`}
+            >
+              Add Advertisement
+            </button>
+
+            <div className="mt-6 space-y-3">
+              {ads.map(
+                (ad) => (
+                  <div
+                    key={ad.id}
+                    className="rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-cyan-400/20"
+                  >
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <h3 className="font-bold">
+                          {ad.title ||
+                            "Untitled advertisement"}
+                        </h3>
+
+                        <p className="mt-1 text-xs text-cyan-300">
+                          {AD_PLACEMENTS.find(
+                            (item) =>
+                              item.value ===
+                              ad.placement
+                          )?.label ||
+                            ad.placement}
+                        </p>
+
+                        {ad.link_url && (
+                          <p className="mt-1 break-all text-xs text-slate-500">
+                            {ad.link_url}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() =>
+                            toggleAd(ad)
+                          }
+                          className={smallButton}
                         >
-                          {item.Published
-                            ? "Published"
-                            : "Pending"}
-                        </span>
+                          {ad.active
+                            ? "Disable"
+                            : "Enable"}
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            deleteAd(ad)
+                          }
+                          className={deleteButton}
+                        >
+                          Delete
+                        </button>
                       </div>
                     </div>
-
-                    <div className="flex shrink-0 gap-2 sm:flex-col">
-                      <button
-                        onClick={() =>
-                          togglePublished(
-                            item
-                          )
-                        }
-                        className={smallButton}
-                      >
-                        {item.Published
-                          ? "Unpublish"
-                          : "Publish"}
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          deleteNews(
-                            item
-                          )
-                        }
-                        className={deleteButton}
-                      >
-                        Delete
-                      </button>
-                    </div>
                   </div>
-                </div>
-              )
-            )}
-
-            {news.length === 0 && (
-              <p className="py-8 text-center text-slate-500">
-                No articles found.
-              </p>
-            )}
-          </div>
-        </section>
-
-        {/* ADS */}
-        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10">
-          <div className="mb-4">
-            <p className="text-xs font-bold tracking-widest text-cyan-400">
-              MONETIZATION
-            </p>
-
-            <h2 className="mt-1 text-xl font-black">
-              Direct Advertisements
-            </h2>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <input
-              value={adTitle}
-              onChange={(event) =>
-                setAdTitle(
-                  event.target.value
-                )
-              }
-              placeholder="Ad title"
-              className={inputClass}
-            />
-
-            <select
-              value={adPlacement}
-              onChange={(event) =>
-                setAdPlacement(
-                  event.target.value
-                )
-              }
-              className={inputClass}
-            >
-              {AD_PLACEMENTS.map(
-                (placement) => (
-                  <option
-                    key={
-                      placement.value
-                    }
-                    value={
-                      placement.value
-                    }
-                    className="bg-slate-900"
-                  >
-                    {placement.label}
-                  </option>
                 )
               )}
-            </select>
 
-            <input
-              value={adImageUrl}
-              onChange={(event) =>
-                setAdImageUrl(
-                  event.target.value
-                )
-              }
-              placeholder="Ad image URL"
-              className={inputClass}
-            />
-
-            <input
-              value={adLinkUrl}
-              onChange={(event) =>
-                setAdLinkUrl(
-                  event.target.value
-                )
-              }
-              placeholder="Destination URL"
-              className={inputClass}
-            />
-          </div>
-
-          <button
-            onClick={addAd}
-            disabled={working}
-            className={`${cyanButton} mt-4`}
-          >
-            Add Advertisement
-          </button>
-
-          <div className="mt-6 space-y-3">
-            {ads.map(
-              (ad) => (
-                <div
-                  key={ad.id}
-                  className="rounded-xl border border-white/10 bg-slate-950/60 p-4 transition hover:border-cyan-400/20"
-                >
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <h3 className="font-bold">
-                        {ad.title ||
-                          "Untitled advertisement"}
-                      </h3>
-
-                      <p className="mt-1 text-xs text-cyan-300">
-                        {AD_PLACEMENTS.find(
-                          (item) =>
-                            item.value ===
-                            ad.placement
-                        )?.label ||
-                          ad.placement}
-                      </p>
-
-                      {ad.link_url && (
-                        <p className="mt-1 break-all text-xs text-slate-500">
-                          {ad.link_url}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() =>
-                          toggleAd(ad)
-                        }
-                        className={smallButton}
-                      >
-                        {ad.active
-                          ? "Disable"
-                          : "Enable"}
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          deleteAd(ad)
-                        }
-                        className={deleteButton}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )
-            )}
-
-            {ads.length === 0 && (
-              <p className="py-6 text-center text-slate-500">
-                No direct advertisements yet.
-              </p>
-            )}
-          </div>
-        </section>
+              {ads.length === 0 && (
+                <p className="py-6 text-center text-slate-500">
+                  No direct advertisements yet.
+                </p>
+              )}
+            </div>
+          </section>
+        )}
 
         <footer className="border-t border-white/5 pb-10 pt-5 text-center text-xs text-slate-600">
           <span className="text-cyan-500">
@@ -1435,5 +1627,58 @@ function Stat({
         {value}
       </p>
     </div>
+  );
+}
+
+function QuickCard({
+  title,
+  description,
+  button,
+  onClick,
+  href,
+}: {
+  title: string;
+  description: string;
+  button: string;
+  onClick?: () => void;
+  href?: string;
+}) {
+  const content = (
+    <>
+      <div>
+        <p className="text-lg font-black text-white">
+          {title}
+        </p>
+
+        <p className="mt-2 text-sm leading-6 text-slate-400">
+          {description}
+        </p>
+      </div>
+
+      <span className="mt-5 inline-flex rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-4 py-2 text-sm font-bold text-cyan-200 transition group-hover:border-cyan-400/40 group-hover:bg-cyan-400/10">
+        {button}
+      </span>
+    </>
+  );
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        className="group rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10 transition hover:border-cyan-400/30 hover:bg-cyan-400/[0.03]"
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group text-left rounded-2xl border border-white/10 bg-white/[0.035] p-5 shadow-xl shadow-black/10 transition hover:border-cyan-400/30 hover:bg-cyan-400/[0.03]"
+    >
+      {content}
+    </button>
   );
 }
