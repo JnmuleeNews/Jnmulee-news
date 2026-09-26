@@ -74,6 +74,13 @@ type DatabaseErrorLike = {
   hint?: string | null;
 };
 
+type WorkerPermissions = {
+  can_import?: boolean;
+  can_write?: boolean;
+  can_publish?: boolean;
+  can_manage_comments?: boolean;
+};
+
 function isDatabaseError(
   value: unknown
 ): value is DatabaseErrorLike {
@@ -1733,9 +1740,32 @@ async function insertArticle(
   return error;
 }
 
+/**
+ * Authorization rules:
+ *
+ * 1. CRON_SECRET = automatic system import.
+ *    No user login required.
+ *
+ * 2. Admin = allowed.
+ *
+ * 3. Worker = allowed only when:
+ *      - app_metadata.role === "worker"
+ *      - worker_profiles.active === true
+ *      - permissions.can_import === true
+ *
+ * 4. Everyone else = denied.
+ */
 async function authorizeRequest(
   request: Request
-): Promise<boolean> {
+): Promise<{
+  authorized: boolean;
+  reason:
+    | "cron"
+    | "admin"
+    | "worker"
+    | "unauthorized"
+    | "forbidden";
+}> {
   const cronSecret =
     process.env.CRON_SECRET;
 
@@ -1744,12 +1774,16 @@ async function authorizeRequest(
       "authorization"
     );
 
+  // Automatic Vercel/cron importer.
   if (
     cronSecret &&
     authorization ===
       `Bearer ${cronSecret}`
   ) {
-    return true;
+    return {
+      authorized: true,
+      reason: "cron",
+    };
   }
 
   if (
@@ -1757,7 +1791,10 @@ async function authorizeRequest(
       "Bearer "
     )
   ) {
-    return false;
+    return {
+      authorized: false,
+      reason: "unauthorized",
+    };
   }
 
   const accessToken =
@@ -1766,7 +1803,10 @@ async function authorizeRequest(
       .trim();
 
   if (!accessToken) {
-    return false;
+    return {
+      authorized: false,
+      reason: "unauthorized",
+    };
   }
 
   const authClient =
@@ -1795,32 +1835,124 @@ async function authorizeRequest(
     error ||
     !user
   ) {
-    return false;
+    return {
+      authorized: false,
+      reason: "unauthorized",
+    };
   }
 
-  return (
+  // Admin has full importer access.
+  if (
     user.app_metadata
       ?.role === "admin"
-  );
+  ) {
+    return {
+      authorized: true,
+      reason: "admin",
+    };
+  }
+
+  // Worker access must be checked server-side.
+  if (
+    user.app_metadata
+      ?.role === "worker"
+  ) {
+    const {
+      data: worker,
+      error: workerError,
+    } =
+      await supabase
+        .from("worker_profiles")
+        .select(
+          "user_id,active,permissions"
+        )
+        .eq(
+          "user_id",
+          user.id
+        )
+        .maybeSingle();
+
+    if (workerError) {
+      console.error(
+        "Worker authorization lookup failed:",
+        workerError
+      );
+
+      return {
+        authorized: false,
+        reason: "forbidden",
+      };
+    }
+
+    if (!worker) {
+      return {
+        authorized: false,
+        reason: "forbidden",
+      };
+    }
+
+    if (
+      worker.active !== true
+    ) {
+      return {
+        authorized: false,
+        reason: "forbidden",
+      };
+    }
+
+    const permissions =
+      (worker.permissions ||
+        {}) as WorkerPermissions;
+
+    if (
+      permissions.can_import !==
+      true
+    ) {
+      return {
+        authorized: false,
+        reason: "forbidden",
+      };
+    }
+
+    return {
+      authorized: true,
+      reason: "worker",
+    };
+  }
+
+  return {
+    authorized: false,
+    reason: "forbidden",
+  };
 }
 
 export async function GET(
   request: Request
 ) {
-  const authorized =
+  const authorization =
     await authorizeRequest(
       request
     );
 
-  if (!authorized) {
+  if (
+    !authorization.authorized
+  ) {
+    const status =
+      authorization.reason ===
+      "unauthorized"
+        ? 401
+        : 403;
+
     return NextResponse.json(
       {
         success: false,
         error:
-          "Unauthorized",
+          status === 401
+            ? "Unauthorized"
+            : "You do not have permission to import news.",
       },
       {
-        status: 401,
+        status,
         headers: {
           "Cache-Control":
             "no-store",
@@ -1845,14 +1977,14 @@ export async function GET(
   const cronSecret =
     process.env.CRON_SECRET;
 
-  const authorization =
+  const requestAuthorization =
     request.headers.get(
       "authorization"
     );
 
   const isCronRequest =
     !!cronSecret &&
-    authorization ===
+    requestAuthorization ===
       `Bearer ${cronSecret}`;
 
   const isManualImport =
@@ -1938,17 +2070,6 @@ export async function GET(
             MAX_SOURCES_PER_BATCH
         )
       );
-
-    /*
-     * Manual imports respect:
-     *
-     * ?manual=true&batch=0
-     * ?manual=true&batch=1
-     * ?manual=true&batch=2
-     *
-     * instead of always being
-     * forced onto batch 0.
-     */
 
     if (
       !isManualImport &&
