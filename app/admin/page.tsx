@@ -356,8 +356,19 @@ export default function AdminDashboard() {
         return;
       }
 
+      /*
+       * IMPORTANT:
+       *
+       * manual=true tells the API route that
+       * this import was explicitly started by
+       * the administrator.
+       *
+       * Automatic/scheduled imports do not send
+       * this parameter and continue using the
+       * normal OpenAI and quality rules.
+       */
       const response = await fetch(
-        "/api/fetch-news",
+        "/api/fetch-news?manual=true",
         {
           method: "GET",
           cache: "no-store",
