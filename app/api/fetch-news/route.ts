@@ -12,21 +12,15 @@ const supabase = createClient(
 );
 
 /*
- * Refresh all public news pages after publishing.
+ * Refresh public pages after an article is published.
  */
 function refreshPublishedPages() {
   try {
-    // Homepage
     revalidatePath("/", "page");
-
-    // News listing
     revalidatePath("/news", "page");
-
-    // Category pages
     revalidatePath("/category/[category]", "page");
-
-    // Individual article pages
     revalidatePath("/news/[slug]", "page");
+    revalidatePath("/sitemap.xml", "page");
   } catch (error) {
     console.error(
       "Unable to refresh published pages:",
@@ -35,65 +29,96 @@ function refreshPublishedPages() {
   }
 }
 
+/*
+ * AUTHORIZE REQUEST
+ *
+ * Accepted:
+ * 1. Vercel Cron using CRON_SECRET
+ * 2. Logged-in Supabase admin using access token
+ */
 async function authorizeRequest(
   request: Request
 ): Promise<boolean> {
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret =
+    process.env.CRON_SECRET;
+
   const authorization =
     request.headers.get("authorization");
 
   if (
     cronSecret &&
-    authorization === `Bearer ${cronSecret}`
+    authorization ===
+      `Bearer ${cronSecret}`
   ) {
     return true;
   }
 
-  if (!authorization?.startsWith("Bearer ")) {
+  if (
+    !authorization?.startsWith(
+      "Bearer "
+    )
+  ) {
     return false;
   }
 
   const accessToken =
-    authorization.slice(7).trim();
+    authorization
+      .slice(7)
+      .trim();
 
   if (!accessToken) {
     return false;
   }
 
-  const authClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  );
+  const authClient =
+    createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
 
   const {
     data: { user },
     error,
-  } = await authClient.auth.getUser(
-    accessToken
-  );
+  } =
+    await authClient.auth.getUser(
+      accessToken
+    );
 
   if (error || !user) {
     return false;
   }
 
-  return user.app_metadata?.role === "admin";
+  return (
+    user.app_metadata?.role ===
+    "admin"
+  );
 }
 
-const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    })
-  : null;
+const openai =
+  process.env.OPENAI_API_KEY
+    ? new OpenAI({
+        apiKey:
+          process.env.OPENAI_API_KEY,
+      })
+    : null;
 
 const AI_MODEL =
-  process.env.OPENAI_MODEL || "gpt-4o-mini";
+  process.env.OPENAI_MODEL ||
+  "gpt-4o-mini";
 
+/*
+ * Keep each invocation reasonably small.
+ *
+ * Your current Vercel setup should process
+ * multiple batches rather than attempting
+ * hundreds of articles in one function.
+ */
 const MAX_SOURCES_PER_BATCH = 5;
 const MAX_FEED_ITEMS_PER_SOURCE = 3;
 
@@ -144,26 +169,55 @@ type Material = {
   text: string;
 };
 
-function decodeHtml(value: string): string {
+function decodeHtml(
+  value: string
+): string {
   return value
     .replace(
       /<!\[CDATA\[([\s\S]*?)\]\]>/gi,
       "$1"
     )
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&apos;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&#(\d+);/g, (_, n) =>
-      String.fromCharCode(Number(n))
+    .replace(
+      /&nbsp;/gi,
+      " "
     )
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) =>
-      String.fromCharCode(
-        parseInt(n, 16)
-      )
+    .replace(
+      /&amp;/gi,
+      "&"
+    )
+    .replace(
+      /&quot;/gi,
+      '"'
+    )
+    .replace(
+      /&#39;/gi,
+      "'"
+    )
+    .replace(
+      /&apos;/gi,
+      "'"
+    )
+    .replace(
+      /&lt;/gi,
+      "<"
+    )
+    .replace(
+      /&gt;/gi,
+      ">"
+    )
+    .replace(
+      /&#(\d+);/g,
+      (_, n) =>
+        String.fromCharCode(
+          Number(n)
+        )
+    )
+    .replace(
+      /&#x([0-9a-f]+);/gi,
+      (_, n) =>
+        String.fromCharCode(
+          parseInt(n, 16)
+        )
     );
 }
 
@@ -173,62 +227,123 @@ function normalizeWhitespace(
   return decodeHtml(value)
     .replace(/\r/g, "")
     .replace(/\t/g, " ")
-    .replace(/[ \u00a0]+/g, " ")
-    .replace(/\n[ \t]+/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
+    .replace(
+      /[ \u00a0]+/g,
+      " "
+    )
+    .replace(
+      /\n[ \t]+/g,
+      "\n"
+    )
+    .replace(
+      /\n{3,}/g,
+      "\n\n"
+    )
     .trim();
 }
 
-function wordCount(value: string): number {
+function wordCount(
+  value: string
+): number {
   return normalizeWhitespace(
-    value.replace(/<[^>]*>/g, " ")
+    value.replace(
+      /<[^>]*>/g,
+      " "
+    )
   )
     .split(/\s+/)
-    .filter(Boolean).length;
+    .filter(Boolean)
+    .length;
 }
 
-function slugify(value: string): string {
-  return normalizeWhitespace(value)
+function slugify(
+  value: string
+): string {
+  return normalizeWhitespace(
+    value
+  )
     .toLowerCase()
-    .replace(/['’]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
+    .replace(
+      /['’]/g,
+      ""
+    )
+    .replace(
+      /[^a-z0-9]+/g,
+      "-"
+    )
+    .replace(
+      /^-+|-+$/g,
+      ""
+    )
     .slice(0, 100);
 }
 
-function escapeHtml(value: string): string {
+function escapeHtml(
+  value: string
+): string {
   return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&#39;"
+    );
 }
 
 function dedupeParagraphs(
   value: string
 ): string {
-  const paragraphs = value
-    .split(/\n{2,}/)
-    .map((p) => normalizeWhitespace(p))
-    .filter(Boolean);
+  const paragraphs =
+    value
+      .split(/\n{2,}/)
+      .map((p) =>
+        normalizeWhitespace(p)
+      )
+      .filter(Boolean);
 
-  const seen = new Set<string>();
+  const seen =
+    new Set<string>();
+
   const output: string[] = [];
 
   for (const paragraph of paragraphs) {
-    const key = paragraph
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim();
+    const key =
+      paragraph
+        .toLowerCase()
+        .replace(
+          /[^a-z0-9]+/g,
+          " "
+        )
+        .trim();
 
-    if (!key || seen.has(key)) continue;
+    if (
+      !key ||
+      seen.has(key)
+    ) {
+      continue;
+    }
 
     seen.add(key);
     output.push(paragraph);
   }
 
-  return output.join("\n\n");
+  return output.join(
+    "\n\n"
+  );
 }
 
 function removeSourceBoilerplate(
@@ -261,7 +376,11 @@ function removeSourceBoilerplate(
   ];
 
   for (const pattern of patterns) {
-    text = text.replace(pattern, "");
+    text =
+      text.replace(
+        pattern,
+        ""
+      );
   }
 
   return text;
@@ -270,39 +389,67 @@ function removeSourceBoilerplate(
 function removeAuthorBiography(
   value: string
 ): string {
-  const paragraphs = value
-    .split(/\n{2,}/)
-    .map((p) => normalizeWhitespace(p))
-    .filter(Boolean);
+  const paragraphs =
+    value
+      .split(/\n{2,}/)
+      .map((p) =>
+        normalizeWhitespace(p)
+      )
+      .filter(Boolean);
 
   const output: string[] = [];
 
   for (const paragraph of paragraphs) {
-    const lower = paragraph.toLowerCase();
+    const lower =
+      paragraph.toLowerCase();
 
     const isBiography =
       (
-        lower.includes("about the author") ||
-        lower.includes("author bio") ||
-        lower.includes("author biography") ||
-        lower.includes("meet the author") ||
-        lower.includes("about our author")
+        lower.includes(
+          "about the author"
+        ) ||
+        lower.includes(
+          "author bio"
+        ) ||
+        lower.includes(
+          "author biography"
+        ) ||
+        lower.includes(
+          "meet the author"
+        ) ||
+        lower.includes(
+          "about our author"
+        )
       ) &&
-      paragraph.length < 1500;
+      paragraph.length <
+        1500;
 
     const isByline =
       /^by\s+[a-z][a-z .,'’-]{2,100}$/i.test(
         paragraph
       ) ||
-      /^written by\s+/i.test(paragraph) ||
-      /^reporting by\s+/i.test(paragraph);
+      /^written by\s+/i.test(
+        paragraph
+      ) ||
+      /^reporting by\s+/i.test(
+        paragraph
+      );
 
-    if (isBiography || isByline) continue;
+    if (
+      isBiography ||
+      isByline
+    ) {
+      continue;
+    }
 
-    output.push(paragraph);
+    output.push(
+      paragraph
+    );
   }
 
-  return output.join("\n\n");
+  return output.join(
+    "\n\n"
+  );
 }
 
 function removeAdvertising(
@@ -310,71 +457,124 @@ function removeAdvertising(
 ): string {
   return value
     .split(/\n{2,}/)
-    .map((p) => normalizeWhitespace(p))
+    .map((p) =>
+      normalizeWhitespace(p)
+    )
     .filter(Boolean)
-    .filter((paragraph) => {
-      const lower = paragraph.toLowerCase();
+    .filter(
+      (paragraph) => {
+        const lower =
+          paragraph.toLowerCase();
 
-      return !(
-        lower.includes("buy now") ||
-        lower.includes("shop now") ||
-        lower.includes("limited time offer") ||
-        lower.includes("special offer") ||
-        lower.includes("sponsored by") ||
-        lower.includes("affiliate link") ||
-        lower.includes("promo code") ||
-        lower.includes("use code ") ||
-        lower.includes("advertisement")
-      );
-    })
+        return !(
+          lower.includes(
+            "buy now"
+          ) ||
+          lower.includes(
+            "shop now"
+          ) ||
+          lower.includes(
+            "limited time offer"
+          ) ||
+          lower.includes(
+            "special offer"
+          ) ||
+          lower.includes(
+            "sponsored by"
+          ) ||
+          lower.includes(
+            "affiliate link"
+          ) ||
+          lower.includes(
+            "promo code"
+          ) ||
+          lower.includes(
+            "use code "
+          ) ||
+          lower.includes(
+            "advertisement"
+          )
+        );
+      }
+    )
     .join("\n\n");
 }
 
-function cleanText(value: string): string {
+function cleanText(
+  value: string
+): string {
   let text = value;
 
-  text = text.replace(
-    /<script[\s\S]*?<\/script>/gi,
-    " "
+  text =
+    text.replace(
+      /<script[\s\S]*?<\/script>/gi,
+      " "
+    );
+
+  text =
+    text.replace(
+      /<style[\s\S]*?<\/style>/gi,
+      " "
+    );
+
+  text =
+    text.replace(
+      /<noscript[\s\S]*?<\/noscript>/gi,
+      " "
+    );
+
+  text =
+    text.replace(
+      /<(iframe|svg|canvas|form|nav|footer|header|aside)[^>]*>[\s\S]*?<\/\1>/gi,
+      " "
+    );
+
+  text =
+    text.replace(
+      /<br\s*\/?>/gi,
+      "\n"
+    );
+
+  text =
+    text.replace(
+      /<\/(p|div|article|section|li|h1|h2|h3|h4|h5|h6)>/gi,
+      "\n\n"
+    );
+
+  text =
+    text.replace(
+      /<[^>]+>/g,
+      " "
+    );
+
+  text =
+    normalizeWhitespace(
+      text
+    );
+
+  text =
+    removeSourceBoilerplate(
+      text
+    );
+
+  text =
+    removeAuthorBiography(
+      text
+    );
+
+  text =
+    removeAdvertising(
+      text
+    );
+
+  text =
+    dedupeParagraphs(
+      text
+    );
+
+  return normalizeWhitespace(
+    text
   );
-
-  text = text.replace(
-    /<style[\s\S]*?<\/style>/gi,
-    " "
-  );
-
-  text = text.replace(
-    /<noscript[\s\S]*?<\/noscript>/gi,
-    " "
-  );
-
-  text = text.replace(
-    /<(iframe|svg|canvas|form|nav|footer|header|aside)[^>]*>[\s\S]*?<\/\1>/gi,
-    " "
-  );
-
-  text = text.replace(
-    /<br\s*\/?>/gi,
-    "\n"
-  );
-
-  text = text.replace(
-    /<\/(p|div|article|section|li|h1|h2|h3|h4|h5|h6)>/gi,
-    "\n\n"
-  );
-
-  text = text.replace(
-    /<[^>]+>/g,
-    " "
-  );
-
-  text = normalizeWhitespace(text);
-  text = removeSourceBoilerplate(text);
-  text = removeAuthorBiography(text);
-  text = removeAdvertising(text);
-  text = dedupeParagraphs(text);
-
-  return normalizeWhitespace(text);
 }
 
 function extractTag(
@@ -382,20 +582,24 @@ function extractTag(
   tagNames: string[]
 ): string {
   for (const tag of tagNames) {
-    const escaped = tag.replace(
-      /[-/\\^$*+?.()|[\]{}]/g,
-      "\\$&"
-    );
+    const escaped =
+      tag.replace(
+        /[-/\\^$*+?.()|[\]{}]/g,
+        "\\$&"
+      );
 
-    const match = xml.match(
-      new RegExp(
-        `<${escaped}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escaped}>`,
-        "i"
-      )
-    );
+    const match =
+      xml.match(
+        new RegExp(
+          `<${escaped}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escaped}>`,
+          "i"
+        )
+      );
 
     if (match?.[1]) {
-      return decodeHtml(match[1]);
+      return decodeHtml(
+        match[1]
+      );
     }
   }
 
@@ -406,27 +610,34 @@ function extractAttribute(
   tag: string,
   attribute: string
 ): string {
-  const match = tag.match(
-    new RegExp(
-      `${attribute}\\s*=\\s*["']([^"']+)["']`,
-      "i"
-    )
-  );
+  const match =
+    tag.match(
+      new RegExp(
+        `${attribute}\\s*=\\s*["']([^"']+)["']`,
+        "i"
+      )
+    );
 
-  return match?.[1] || "";
+  return (
+    match?.[1] || ""
+  );
 }
 
 function extractImage(
   value: string
 ): string | null {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
   const direct =
     value.match(
       /https?:\/\/[^\s"'<>]+?\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s"'<>]*)?/i
     )?.[0] || null;
 
-  if (direct) return direct;
+  if (direct) {
+    return direct;
+  }
 
   const contentUrl =
     value.match(
@@ -435,8 +646,14 @@ function extractImage(
 
   if (contentUrl) {
     return contentUrl
-      .replace(/&amp;/g, "&")
-      .replace(/[)"'<>]+$/g, "");
+      .replace(
+        /&amp;/g,
+        "&"
+      )
+      .replace(
+        /[)"'<>]+$/,
+        ""
+      );
   }
 
   return null;
@@ -463,32 +680,39 @@ function parseFeed(
       : atomEntries;
 
   for (const block of blocks) {
-    const title = normalizeWhitespace(
-      extractTag(block, ["title"])
-    );
+    const title =
+      normalizeWhitespace(
+        extractTag(
+          block,
+          ["title"]
+        )
+      );
 
-    const description = extractTag(
-      block,
-      [
-        "content:encoded",
-        "content",
-        "description",
-        "summary",
-      ]
-    );
+    const description =
+      extractTag(
+        block,
+        [
+          "content:encoded",
+          "content",
+          "description",
+          "summary",
+        ]
+      );
 
-    const content = extractTag(
-      block,
-      [
-        "content:encoded",
-        "content",
-      ]
-    );
+    const content =
+      extractTag(
+        block,
+        [
+          "content:encoded",
+          "content",
+        ]
+      );
 
-    let link = extractTag(
-      block,
-      ["link"]
-    );
+    let link =
+      extractTag(
+        block,
+        ["link"]
+      );
 
     if (!link) {
       const linkTag =
@@ -496,10 +720,11 @@ function parseFeed(
           /<link\b[^>]*>/i
         )?.[0] || "";
 
-      link = extractAttribute(
-        linkTag,
-        "href"
-      );
+      link =
+        extractAttribute(
+          linkTag,
+          "href"
+        );
     }
 
     const pubDate =
@@ -515,7 +740,9 @@ function parseFeed(
         )
       ) || null;
 
-    let imageUrl: string | null = null;
+    let imageUrl:
+      | string
+      | null = null;
 
     const mediaContent =
       block.match(
@@ -541,7 +768,10 @@ function parseFeed(
           /<media:thumbnail\b[^>]*>/gi
         ) || [];
 
-      for (const tag of mediaThumbnail) {
+      for (
+        const tag of
+        mediaThumbnail
+      ) {
         const url =
           extractAttribute(
             tag,
@@ -561,7 +791,10 @@ function parseFeed(
           /<enclosure\b[^>]*>/gi
         ) || [];
 
-      for (const tag of enclosure) {
+      for (
+        const tag of
+        enclosure
+      ) {
         const type =
           extractAttribute(
             tag,
@@ -596,7 +829,9 @@ function parseFeed(
 
     if (!imageUrl) {
       imageUrl =
-        extractImage(content);
+        extractImage(
+          content
+        );
     }
 
     if (
@@ -710,11 +945,14 @@ function isSafeUrl(
   value: string
 ): boolean {
   try {
-    const url = new URL(value);
+    const url =
+      new URL(value);
 
     return (
-      url.protocol === "http:" ||
-      url.protocol === "https:"
+      url.protocol ===
+        "http:" ||
+      url.protocol ===
+        "https:"
     );
   } catch {
     return false;
@@ -729,32 +967,42 @@ async function fetchExternalText(
   const controller =
     new AbortController();
 
-  const timeout = setTimeout(
-    () => controller.abort(),
-    timeoutMs
-  );
+  const timeout =
+    setTimeout(
+      () =>
+        controller.abort(),
+      timeoutMs
+    );
 
   try {
     const response =
-      await fetch(url, {
-        signal:
-          controller.signal,
-        headers: {
-          "User-Agent":
-            "JNMuleeNewsBot/1.0 (+https://jnmulee-news-jnnation.vercel.app)",
-          Accept:
-            "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
-        },
-        cache: "no-store",
-      });
+      await fetch(
+        url,
+        {
+          signal:
+            controller.signal,
+          headers: {
+            "User-Agent":
+              "JNMuleeNewsBot/1.0 (+https://jnmulee-news-jnnation.vercel.app)",
+            Accept:
+              "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
+          },
+          cache:
+            "no-store",
+        }
+      );
 
-    if (!response.ok) return "";
+    if (!response.ok) {
+      return "";
+    }
 
     return await response.text();
   } catch {
     return "";
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(
+      timeout
+    );
   }
 }
 
@@ -762,7 +1010,9 @@ async function fetchArticlePage(
   url: string
 ): Promise<{
   text: string;
-  imageUrl: string | null;
+  imageUrl:
+    | string
+    | null;
 }> {
   const html =
     await fetchExternalText(
@@ -786,8 +1036,9 @@ async function fetchArticlePage(
       /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
     )?.[1] || null;
 
-  if (ogImage)
+  if (ogImage) {
     imageUrl = ogImage;
+  }
 
   if (!imageUrl) {
     const twitterImage =
@@ -795,8 +1046,10 @@ async function fetchArticlePage(
         /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
       )?.[1] || null;
 
-    if (twitterImage)
-      imageUrl = twitterImage;
+    if (twitterImage) {
+      imageUrl =
+        twitterImage;
+    }
   }
 
   if (!imageUrl) {
@@ -805,7 +1058,10 @@ async function fetchArticlePage(
         /<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi
       ) || [];
 
-    for (const block of jsonLdMatches) {
+    for (
+      const block of
+      jsonLdMatches
+    ) {
       const jsonText =
         block
           .replace(
@@ -820,14 +1076,19 @@ async function fetchArticlePage(
 
       try {
         const data =
-          JSON.parse(jsonText);
+          JSON.parse(
+            jsonText
+          );
 
         const candidates =
           Array.isArray(data)
             ? data
             : [data];
 
-        for (const candidate of candidates) {
+        for (
+          const candidate of
+          candidates
+        ) {
           const image =
             candidate?.image;
 
@@ -835,7 +1096,8 @@ async function fetchArticlePage(
             typeof image ===
             "string"
           ) {
-            imageUrl = image;
+            imageUrl =
+              image;
             break;
           }
 
@@ -864,13 +1126,16 @@ async function fetchArticlePage(
               );
 
             if (first) {
-              imageUrl = first;
+              imageUrl =
+                first;
               break;
             }
           }
         }
 
-        if (imageUrl) break;
+        if (imageUrl) {
+          break;
+        }
       } catch {
         // Ignore invalid JSON-LD.
       }
@@ -885,7 +1150,9 @@ async function fetchArticlePage(
       /<article\b[^>]*>([\s\S]*?)<\/article>/i
     );
 
-  if (articleMatch?.[1]) {
+  if (
+    articleMatch?.[1]
+  ) {
     articleCandidates.push(
       articleMatch[1]
     );
@@ -907,9 +1174,14 @@ async function fetchArticlePage(
     /<div[^>]+id=["'][^"']*(?:article-body|article-content|post-content|entry-content|story-body|story-content)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
   ];
 
-  for (const pattern of commonContainers) {
+  for (
+    const pattern of
+    commonContainers
+  ) {
     const match =
-      html.match(pattern);
+      html.match(
+        pattern
+      );
 
     if (match?.[1]) {
       articleCandidates.push(
@@ -944,7 +1216,10 @@ async function fetchArticlePage(
         /<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi
       ) || [];
 
-    for (const block of jsonLdMatches) {
+    for (
+      const block of
+      jsonLdMatches
+    ) {
       const jsonText =
         block
           .replace(
@@ -959,14 +1234,19 @@ async function fetchArticlePage(
 
       try {
         const data =
-          JSON.parse(jsonText);
+          JSON.parse(
+            jsonText
+          );
 
         const candidates =
           Array.isArray(data)
             ? data
             : [data];
 
-        for (const candidate of candidates) {
+        for (
+          const candidate of
+          candidates
+        ) {
           if (
             typeof candidate?.articleBody ===
             "string"
@@ -980,7 +1260,9 @@ async function fetchArticlePage(
               wordCount(
                 candidateText
               ) >
-              wordCount(bestText)
+              wordCount(
+                bestText
+              )
             ) {
               bestText =
                 candidateText;
@@ -1018,7 +1300,9 @@ function buildSourceMaterial(
 
   let text =
     dedupeParagraphs(
-      textParts.join("\n\n")
+      textParts.join(
+        "\n\n"
+      )
     );
 
   text =
@@ -1027,7 +1311,9 @@ function buildSourceMaterial(
     );
 
   text =
-    removeAdvertising(text);
+    removeAdvertising(
+      text
+    );
 
   text =
     removeAuthorBiography(
@@ -1035,7 +1321,9 @@ function buildSourceMaterial(
     );
 
   text =
-    dedupeParagraphs(text);
+    dedupeParagraphs(
+      text
+    );
 
   const imageUrl =
     articlePageImage ||
@@ -1061,23 +1349,26 @@ function buildSourceMaterial(
         ? imageUrl
         : null,
     text:
-      normalizeWhitespace(text),
+      normalizeWhitespace(
+        text
+      ),
   };
 }
 
 function cleanFinalArticle(
   value: string
 ): string {
-  let text = value
-    .replace(
-      /^```(?:text|markdown)?/i,
-      ""
-    )
-    .replace(
-      /```$/i,
-      ""
-    )
-    .trim();
+  let text =
+    value
+      .replace(
+        /^```(?:text|markdown)?/i,
+        ""
+      )
+      .replace(
+        /```$/i,
+        ""
+      )
+      .trim();
 
   text =
     removeSourceBoilerplate(
@@ -1085,7 +1376,9 @@ function cleanFinalArticle(
     );
 
   text =
-    removeAdvertising(text);
+    removeAdvertising(
+      text
+    );
 
   text =
     removeAuthorBiography(
@@ -1093,7 +1386,9 @@ function cleanFinalArticle(
     );
 
   text =
-    dedupeParagraphs(text);
+    dedupeParagraphs(
+      text
+    );
 
   return normalizeWhitespace(
     text
@@ -1103,12 +1398,13 @@ function cleanFinalArticle(
 function textToHtml(
   value: string
 ): string {
-  const paragraphs = value
-    .split(/\n{2,}/)
-    .map((p) =>
-      normalizeWhitespace(p)
-    )
-    .filter(Boolean);
+  const paragraphs =
+    value
+      .split(/\n{2,}/)
+      .map((p) =>
+        normalizeWhitespace(p)
+      )
+      .filter(Boolean);
 
   return paragraphs
     .map((paragraph) => {
@@ -1163,7 +1459,9 @@ function containsForbiddenContent(
 
   return forbidden.some(
     (phrase) =>
-      lower.includes(phrase)
+      lower.includes(
+        phrase
+      )
   );
 }
 
@@ -1173,30 +1471,40 @@ function qualityScore(
   const words =
     wordCount(value);
 
-  if (words < 180)
+  if (words < 180) {
     return 0;
+  }
 
   let score = 50;
 
-  if (words >= 250)
+  if (words >= 250) {
     score += 10;
+  }
 
-  if (words >= 400)
+  if (words >= 400) {
     score += 10;
+  }
 
-  if (words >= 600)
+  if (words >= 600) {
     score += 5;
+  }
 
   const paragraphs =
     value
       .split(/\n{2,}/)
       .filter(Boolean);
 
-  if (paragraphs.length >= 5)
+  if (
+    paragraphs.length >= 5
+  ) {
     score += 10;
+  }
 
-  if (paragraphs.length >= 8)
+  if (
+    paragraphs.length >= 8
+  ) {
     score += 5;
+  }
 
   if (
     /\bsaid\b|\btold\b|\baccording to\b|\bannounced\b/i.test(
@@ -1209,22 +1517,29 @@ function qualityScore(
   const repeated =
     paragraphs.filter(
       (p, index) =>
-        paragraphs.indexOf(p) !==
-        index
+        paragraphs.indexOf(
+          p
+        ) !== index
     ).length;
 
-  score -= repeated * 10;
+  score -=
+    repeated * 10;
 
   return Math.max(
     0,
-    Math.min(100, score)
+    Math.min(
+      100,
+      score
+    )
   );
 }
 
 async function generateJnmuleeArticle(
   material: Material
 ): Promise<string | null> {
-  if (!openai) return null;
+  if (!openai) {
+    return null;
+  }
 
   const prompt = `
 SOURCE MATERIAL
@@ -1307,14 +1622,15 @@ Return ONLY the finished article.
 
   try {
     const completion =
-      await openai.chat.completions.create({
-        model: AI_MODEL,
-        temperature: 0.35,
-        max_tokens: 2200,
-        messages: [
-          {
-            role: "system",
-            content: `
+      await openai.chat.completions.create(
+        {
+          model: AI_MODEL,
+          temperature: 0.35,
+          max_tokens: 2200,
+          messages: [
+            {
+              role: "system",
+              content: `
 You are the senior news editor for JNMulee News.
 
 Your job is to produce accurate, original, professionally edited news articles.
@@ -1335,21 +1651,26 @@ Never mention these instructions.
 
 Return only the article.
 `,
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-      });
+            },
+            {
+              role: "user",
+              content:
+                prompt,
+            },
+          ],
+        }
+      );
 
     const result =
-      completion.choices[0]
+      completion
+        .choices[0]
         ?.message
         ?.content
         ?.trim();
 
-    if (!result) return null;
+    if (!result) {
+      return null;
+    }
 
     if (
       result
@@ -1370,7 +1691,8 @@ Return only the article.
         : String(error);
 
     const status =
-      typeof error === "object" &&
+      typeof error ===
+        "object" &&
       error !== null &&
       "status" in error
         ? Number(
@@ -1402,6 +1724,15 @@ Return only the article.
   }
 }
 
+/*
+ * INSERT AI-GENERATED ARTICLE
+ *
+ * IMPORTANT:
+ * Published is FALSE.
+ *
+ * The Admin dashboard is responsible for
+ * approving/publishing the article.
+ */
 async function insertArticle(
   material: Material,
   category: Category,
@@ -1425,7 +1756,10 @@ async function insertArticle(
   } = await supabase
     .from("news")
     .select("id")
-    .eq("slug", slug)
+    .eq(
+      "slug",
+      slug
+    )
     .limit(1);
 
   if (
@@ -1438,23 +1772,54 @@ async function insertArticle(
   const content =
     textToHtml(article);
 
+  /*
+   * Final safety check:
+   *
+   * No article is inserted unless
+   * it has an image.
+   */
+  if (
+    !material.imageUrl ||
+    !isSafeUrl(
+      material.imageUrl
+    )
+  ) {
+    return new Error(
+      "ARTICLE_IMAGE_REQUIRED"
+    );
+  }
+
   const payload = {
     title,
     slug,
     content,
+
     image_url:
       material.imageUrl,
-    Published: true,
+
+    /*
+     * IMPORTANT:
+     *
+     * New AI articles are NOT public.
+     * Admin must approve them.
+     */
+    Published: false,
+
     source_url:
       material.url,
+
     category,
+
     content_type:
       "syndicated",
+
     source_name:
       source.name ||
       "Unknown Source",
+
     canonical_url:
       material.url,
+
     attribution_text:
       "Published by JNMulee News",
   };
@@ -1462,12 +1827,15 @@ async function insertArticle(
   const { error } =
     await supabase
       .from("news")
-      .upsert(payload, {
-        onConflict:
-          "source_url",
-        ignoreDuplicates:
-          true,
-      });
+      .upsert(
+        payload,
+        {
+          onConflict:
+            "source_url",
+          ignoreDuplicates:
+            true,
+        }
+      );
 
   return error;
 }
@@ -1476,10 +1844,10 @@ export async function GET(
   request: Request
 ) {
   /*
-   * SECURITY:
-   * Authorization happens BEFORE manual detection.
-   * Public/unauthenticated visitors cannot trigger
-   * an import.
+   * SECURITY
+   *
+   * Authorization happens BEFORE
+   * any importing work.
    */
   const authorized =
     await authorizeRequest(
@@ -1487,10 +1855,11 @@ export async function GET(
     );
 
   if (!authorized) {
-    return Response.json(
+    return NextResponse.json(
       {
         success: false,
-        error: "Unauthorized",
+        error:
+          "Unauthorized",
       },
       {
         status: 401,
@@ -1506,7 +1875,9 @@ export async function GET(
     Date.now();
 
   const { searchParams } =
-    new URL(request.url);
+    new URL(
+      request.url
+    );
 
   const batchParam =
     searchParams.get(
@@ -1514,13 +1885,8 @@ export async function GET(
     );
 
   /*
-   * MANUAL IMPORT DETECTION
-   *
-   * Vercel Cron uses CRON_SECRET.
-   * Admin uses a Supabase access token.
-   *
-   * Cron = automatic
-   * Admin = manual
+   * Determine whether this is
+   * a Vercel Cron request.
    */
   const cronSecret =
     process.env.CRON_SECRET;
@@ -1535,6 +1901,10 @@ export async function GET(
     authorization ===
       `Bearer ${cronSecret}`;
 
+  /*
+   * If it is not Cron, it is treated
+   * as an authenticated admin request.
+   */
   const isManualImport =
     searchParams.get(
       "manual"
@@ -1566,14 +1936,35 @@ export async function GET(
   const stats = {
     sourcesProcessed: 0,
     feedItemsSeen: 0,
+
+    /*
+     * This now means:
+     * AI-generated articles successfully
+     * inserted into the database.
+     *
+     * They are NOT public yet.
+     */
     articlesPublished: 0,
+
+    articlesAddedForApproval: 0,
+
     articlesSkipped: 0,
+
     skippedNoImage: 0,
     skippedShortSource: 0,
     skippedDuplicate: 0,
     skippedPoorQuality: 0,
+
     articlePagesFetched: 0,
     aiGenerated: 0,
+
+    /*
+     * Kept for compatibility with
+     * your existing response structure.
+     *
+     * It will always remain 0 because
+     * importer no longer auto-publishes.
+     */
     manuallyPublished: 0,
   };
 
@@ -1583,6 +1974,9 @@ export async function GET(
     false;
 
   try {
+    /*
+     * LOAD ACTIVE SOURCES
+     */
     const {
       data: sources,
       error: sourcesError,
@@ -1591,10 +1985,16 @@ export async function GET(
       .select(
         "id,name,feed_url,active"
       )
-      .eq("active", true)
-      .order("id", {
-        ascending: true,
-      });
+      .eq(
+        "active",
+        true
+      )
+      .order(
+        "id",
+        {
+          ascending: true,
+        }
+      );
 
     if (sourcesError) {
       throw new Error(
@@ -1603,7 +2003,8 @@ export async function GET(
     }
 
     const allSources =
-      (sources || []) as SourceRow[];
+      (sources ||
+        []) as SourceRow[];
 
     const totalBatches =
       Math.max(
@@ -1615,72 +2016,19 @@ export async function GET(
       );
 
     /*
-     * MANUAL ADMIN IMPORT
+     * MANUAL IMPORT
      *
-     * Manual imports bypass the
-     * 50-minute scheduler interval.
+     * Manual import ONLY fetches and
+     * generates new stories.
      *
-     * Existing unpublished articles
-     * are immediately published.
+     * It DOES NOT publish pending stories.
      */
     if (isManualImport) {
-      const {
-        data: pendingNews,
-        error: pendingError,
-      } = await supabase
-        .from("news")
-        .select("id")
-        .eq(
-          "Published",
-          false
-        );
-
-      if (pendingError) {
-        throw new Error(
-          `Unable to load pending news: ${pendingError.message}`
-        );
-      }
-
-      const pendingIds =
-        (pendingNews || []).map(
-          (item) => item.id
-        );
-
-      if (
-        pendingIds.length > 0
-      ) {
-        const {
-          error: publishError,
-        } = await supabase
-          .from("news")
-          .update({
-            Published: true,
-          })
-          .in(
-            "id",
-            pendingIds
-          );
-
-        if (publishError) {
-          throw new Error(
-            `Unable to publish pending news: ${publishError.message}`
-          );
-        }
-
-        stats.manuallyPublished =
-          pendingIds.length;
-
-        stats.articlesPublished =
-          pendingIds.length;
-      }
-
       requestedBatch = 0;
     }
 
     /*
-     * 50-MINUTE SCHEDULER CHECK
-     *
-     * Only automatic requests use this check.
+     * AUTOMATIC SCHEDULER CHECK
      */
     if (
       !isManualBatch &&
@@ -1704,10 +2052,14 @@ export async function GET(
       }
 
       const batch =
-        Number(claimedBatch);
+        Number(
+          claimedBatch
+        );
 
-      if (batch < 0) {
-        return Response.json(
+      if (
+        batch < 0
+      ) {
+        return NextResponse.json(
           {
             success: true,
             skipped: true,
@@ -1753,7 +2105,7 @@ export async function GET(
       batchSources.length ===
       0
     ) {
-      return Response.json(
+      return NextResponse.json(
         {
           success: true,
           message:
@@ -1764,11 +2116,10 @@ export async function GET(
           totalBatches,
           sourceStart,
           sourcesProcessed: 0,
-          articlesPublished:
-            stats.articlesPublished,
-          manuallyPublished:
-            stats.manuallyPublished,
-          articlesSkipped: 0,
+          articlesAddedForApproval:
+            0,
+          articlesSkipped:
+            0,
           durationMs:
             Date.now() -
             startedAt,
@@ -1783,14 +2134,18 @@ export async function GET(
       );
     }
 
+    /*
+     * PROCESS SOURCES
+     */
     for (
       const source of
       batchSources
     ) {
       if (
         aiCreditsUnavailable
-      )
+      ) {
         break;
+      }
 
       stats.sourcesProcessed++;
 
@@ -1803,18 +2158,23 @@ export async function GET(
         errors.push(
           `${source.name || source.id}: invalid feed URL`
         );
+
         continue;
       }
 
       try {
+        /*
+         * FETCH RSS/ATOM FEED
+         */
         const feedXml =
           await fetchExternalText(
             source.feed_url,
             FEED_FETCH_TIMEOUT_MS
           );
 
-        if (!feedXml)
+        if (!feedXml) {
           continue;
+        }
 
         const items =
           parseFeed(
@@ -1827,13 +2187,18 @@ export async function GET(
         stats.feedItemsSeen +=
           items.length;
 
+        /*
+         * PROCESS EACH ARTICLE
+         */
         for (
-          const item of items
+          const item of
+          items
         ) {
           if (
             aiCreditsUnavailable
-          )
+          ) {
             break;
+          }
 
           try {
             if (
@@ -1846,18 +2211,24 @@ export async function GET(
               continue;
             }
 
+            /*
+             * DUPLICATE CHECK
+             */
             const {
               data: existing,
               error:
                 duplicateError,
-            } = await supabase
-              .from("news")
-              .select("id")
-              .eq(
-                "source_url",
-                item.link
-              )
-              .limit(1);
+            } =
+              await supabase
+                .from("news")
+                .select(
+                  "id"
+                )
+                .eq(
+                  "source_url",
+                  item.link
+                )
+                .limit(1);
 
             if (
               duplicateError
@@ -1879,6 +2250,9 @@ export async function GET(
               continue;
             }
 
+            /*
+             * FETCH FULL ARTICLE PAGE
+             */
             const articlePage =
               await fetchArticlePage(
                 item.link
@@ -1890,6 +2264,9 @@ export async function GET(
               stats.articlePagesFetched++;
             }
 
+            /*
+             * BUILD VERIFIED SOURCE MATERIAL
+             */
             const material =
               buildSourceMaterial(
                 item,
@@ -1897,6 +2274,9 @@ export async function GET(
                 articlePage.imageUrl
               );
 
+            /*
+             * IMAGE IS REQUIRED
+             */
             if (
               !material.imageUrl ||
               !isSafeUrl(
@@ -1908,6 +2288,9 @@ export async function GET(
               continue;
             }
 
+            /*
+             * SOURCE MUST HAVE ENOUGH MATERIAL
+             */
             if (
               wordCount(
                 material.text
@@ -1919,12 +2302,18 @@ export async function GET(
               continue;
             }
 
+            /*
+             * CATEGORY
+             */
             const category =
               classifyCategory(
                 material.title,
                 material.text
               );
 
+            /*
+             * OPENAI GENERATION
+             */
             const article =
               await generateJnmuleeArticle(
                 material
@@ -1937,6 +2326,9 @@ export async function GET(
 
             stats.aiGenerated++;
 
+            /*
+             * FINAL ARTICLE QUALITY CHECK
+             */
             const finalWords =
               wordCount(
                 article
@@ -1951,6 +2343,10 @@ export async function GET(
               continue;
             }
 
+            /*
+             * SOURCE/ATTRIBUTION
+             * PHRASE CHECK
+             */
             if (
               containsForbiddenContent(
                 article
@@ -1961,6 +2357,9 @@ export async function GET(
               continue;
             }
 
+            /*
+             * QUALITY SCORE
+             */
             const score =
               qualityScore(
                 article
@@ -1974,6 +2373,9 @@ export async function GET(
               continue;
             }
 
+            /*
+             * INSERT AS UNPUBLISHED
+             */
             const insertError =
               await insertArticle(
                 material,
@@ -1985,6 +2387,17 @@ export async function GET(
             if (
               insertError
             ) {
+              if (
+                insertError instanceof
+                Error &&
+                insertError.message ===
+                  "ARTICLE_IMAGE_REQUIRED"
+              ) {
+                stats.skippedNoImage++;
+                stats.articlesSkipped++;
+                continue;
+              }
+
               if (
                 insertError.code ===
                 "23505"
@@ -2002,7 +2415,13 @@ export async function GET(
               continue;
             }
 
+            /*
+             * Successfully added to Admin
+             * for approval.
+             */
             stats.articlesPublished++;
+
+            stats.articlesAddedForApproval++;
           } catch (
             error
           ) {
@@ -2020,6 +2439,7 @@ export async function GET(
             ) {
               aiCreditsUnavailable =
                 true;
+
               break;
             }
 
@@ -2044,45 +2464,85 @@ export async function GET(
     }
 
     /*
-     * IMPORTANT:
+     * IMPORTANT
      *
-     * Refresh the public pages AFTER all publishing
-     * operations have completed.
+     * New articles are unpublished,
+     * so we do NOT refresh public pages
+     * just because articles were imported.
      *
-     * This makes newly published articles appear
-     * immediately instead of waiting for the old
-     * Next.js cache to expire.
+     * The Admin publish action will call
+     * revalidation after approval.
      */
-    if (
-      stats.articlesPublished >
-      0
-    ) {
-      refreshPublishedPages();
-    }
 
-    return Response.json(
+    return NextResponse.json(
       {
         success: true,
+
         message:
           isManualImport
-            ? `Manual import completed. ${stats.manuallyPublished} pending article(s) were published and ${Math.max(
-                0,
-                stats.articlesPublished -
-                  stats.manuallyPublished
-              )} new article(s) were imported.`
-            : "JNMulee News batch completed. Articles were reconstructed in original JNMulee News wording and published only when they met the image and 180-word quality requirements.",
+            ? `Manual import completed. ${stats.articlesAddedForApproval} new AI-generated article(s) were added to Admin for approval.`
+            : `Batch completed. ${stats.articlesAddedForApproval} new AI-generated article(s) were added to Admin for approval.`,
+
         batch,
+
         totalSources:
           allSources.length,
+
         totalBatches,
+
         sourceStart,
+
         batchSourcesProcessed:
           batchSources.length,
+
+        /*
+         * Clear workflow status
+         */
+        articlesAddedForApproval:
+          stats.articlesAddedForApproval,
+
+        /*
+         * Kept for compatibility
+         */
+        articlesPublished:
+          0,
+
+        manuallyPublished:
+          0,
+
+        aiGenerated:
+          stats.aiGenerated,
+
         aiCreditsUnavailable,
-        ...stats,
+
+        sourcesProcessed:
+          stats.sourcesProcessed,
+
+        feedItemsSeen:
+          stats.feedItemsSeen,
+
+        articlesSkipped:
+          stats.articlesSkipped,
+
+        skippedNoImage:
+          stats.skippedNoImage,
+
+        skippedShortSource:
+          stats.skippedShortSource,
+
+        skippedDuplicate:
+          stats.skippedDuplicate,
+
+        skippedPoorQuality:
+          stats.skippedPoorQuality,
+
+        articlePagesFetched:
+          stats.articlePagesFetched,
+
         durationMs:
           Date.now() -
           startedAt,
+
         errors,
       },
       {
@@ -2096,19 +2556,24 @@ export async function GET(
   } catch (
     error
   ) {
-    return Response.json(
+    return NextResponse.json(
       {
         success: false,
+
         message:
           error instanceof
           Error
             ? error.message
             : String(error),
+
         ...stats,
+
         aiCreditsUnavailable,
+
         durationMs:
           Date.now() -
           startedAt,
+
         errors,
       },
       {
