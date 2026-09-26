@@ -2,12 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL!;
-
-const anonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 const serviceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -25,7 +23,7 @@ const adminClient = createClient(
 
 const authClient = createClient(
   supabaseUrl,
-  anonKey,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   {
     auth: {
       autoRefreshToken: false,
@@ -34,358 +32,168 @@ const authClient = createClient(
   }
 );
 
-type Permissions = {
-  can_import: boolean;
-  can_write: boolean;
-  can_publish: boolean;
-  can_manage_comments: boolean;
-};
-
-function cleanPermissions(
-  input: unknown
-): Permissions {
-  const value =
-    typeof input === "object" &&
-    input !== null
-      ? (input as Record<string, unknown>)
-      : {};
-
-  return {
-    can_import:
-      value.can_import === true,
-    can_write:
-      value.can_write === true,
-    can_publish:
-      value.can_publish === true,
-    can_manage_comments:
-      value.can_manage_comments === true,
-  };
-}
-
-function cleanName(
-  value: unknown
-): string {
-  return String(value || "")
-    .trim()
-    .slice(0, 100);
-}
-
-function cleanEmail(
-  value: unknown
-): string {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .slice(0, 254);
-}
-
-async function getAdmin(
-  request: Request
-) {
-  const authorization =
-    request.headers.get(
-      "authorization"
-    ) || "";
-
-  if (
-    !authorization.startsWith(
-      "Bearer "
-    )
-  ) {
-    return null;
-  }
-
-  const token =
-    authorization.slice(7).trim();
-
-  if (!token) {
-    return null;
-  }
-
-  const {
-    data,
-    error,
-  } =
-    await authClient.auth.getUser(
-      token
-    );
-
-  if (
-    error ||
-    !data.user
-  ) {
-    return null;
-  }
-
-  if (
-    data.user.app_metadata
-      ?.role !== "admin"
-  ) {
-    return null;
-  }
-
-  return data.user;
-}
-
 function unauthorized() {
   return NextResponse.json(
     {
-      error:
-        "Administrator authentication required.",
+      success: false,
+      error: "Unauthorized",
     },
-    { status: 401 }
+    {
+      status: 401,
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    }
   );
 }
-
-/* =========================
-   GET WORKERS
-========================= */
 
 export async function GET(
   request: Request
 ) {
-  const admin =
-    await getAdmin(request);
-
-  if (!admin) {
-    return unauthorized();
-  }
-
   try {
+    const authorization =
+      request.headers.get(
+        "authorization"
+      );
+
+    if (
+      !authorization?.startsWith(
+        "Bearer "
+      )
+    ) {
+      return unauthorized();
+    }
+
+    const accessToken =
+      authorization
+        .slice(7)
+        .trim();
+
+    if (!accessToken) {
+      return unauthorized();
+    }
+
+    /*
+     * Verify the actual Supabase user
+     * associated with the access token.
+     */
     const {
-      data,
-      error,
+      data: { user },
+      error: userError,
     } =
-      await adminClient.auth.admin.listUsers(
-        {
-          page: 1,
-          perPage: 100,
-        }
-      );
-
-    if (error) {
-      return NextResponse.json(
-        {
-          error:
-            error.message,
-        },
-        { status: 500 }
-      );
-    }
-
-    const workers =
-      data.users
-        .filter(
-          (user) =>
-            user.app_metadata
-              ?.role ===
-            "worker"
-        )
-        .map((user) => ({
-          id: user.id,
-          email:
-            user.email || "",
-          display_name:
-            user.app_metadata
-              ?.display_name ||
-            "",
-          permissions:
-            cleanPermissions(
-              user.app_metadata
-                ?.permissions
-            ),
-          active:
-            !user.banned_until ||
-            new Date(
-              user.banned_until
-            ) < new Date(),
-          created_at:
-            user.created_at,
-          last_sign_in_at:
-            user.last_sign_in_at ||
-            null,
-        }));
-
-    return NextResponse.json(
-      {
-        success: true,
-        workers,
-      },
-      {
-        headers: {
-          "Cache-Control":
-            "no-store",
-        },
-      }
-    );
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unable to load workers.",
-      },
-      { status: 500 }
-    );
-  }
-}
-
-/* =========================
-   CREATE WORKER
-========================= */
-
-export async function POST(
-  request: Request
-) {
-  const admin =
-    await getAdmin(request);
-
-  if (!admin) {
-    return unauthorized();
-  }
-
-  try {
-    const body =
-      await request.json();
-
-    const email =
-      cleanEmail(body.email);
-
-    const password =
-      String(
-        body.password || ""
-      );
-
-    const displayName =
-      cleanName(
-        body.display_name
-      );
-
-    const permissions =
-      cleanPermissions(
-        body.permissions
+      await authClient.auth.getUser(
+        accessToken
       );
 
     if (
-      !email ||
-      !displayName ||
-      !password
+      userError ||
+      !user
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "Name, email and password are required.",
-        },
-        { status: 400 }
-      );
+      return unauthorized();
     }
 
+    /*
+     * Only worker accounts may use this
+     * endpoint.
+     *
+     * Authorization comes from app_metadata,
+     * not user_metadata.
+     */
     if (
-      !email.includes("@") ||
-      email.length < 5
+      user.app_metadata?.role !==
+      "worker"
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "Enter a valid worker email address.",
-        },
-        { status: 400 }
-      );
+      return unauthorized();
     }
 
-    if (
-      password.length < 8
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Worker password must be at least 8 characters.",
-        },
-        { status: 400 }
-      );
-    }
-
-    if (
-      password.length > 128
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Worker password is too long.",
-        },
-        { status: 400 }
-      );
-    }
-
+    /*
+     * Retrieve ONLY this worker's profile.
+     */
     const {
-      data,
-      error,
-    } =
-      await adminClient.auth.admin.createUser(
-        {
-          email,
-          password,
-          email_confirm: true,
-          app_metadata: {
-            role: "worker",
-            display_name:
-              displayName,
-            permissions,
-          },
-        }
-      );
-
-    if (
-      error ||
-      !data.user
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            error?.message ||
-            "Worker account was not created.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const {
-      error:
-        profileError,
+      data: worker,
+      error: workerError,
     } =
       await adminClient
-        .from(
-          "worker_profiles"
+        .from("worker_profiles")
+        .select(
+          "user_id,display_name,permissions,active,created_at,updated_at"
         )
-        .upsert(
-          {
-            user_id:
-              data.user.id,
-            display_name:
-              displayName,
-            permissions,
-            active: true,
-            updated_at:
-              new Date().toISOString(),
-          },
-          {
-            onConflict:
-              "user_id",
-          }
-        );
+        .eq(
+          "user_id",
+          user.id
+        )
+        .maybeSingle();
 
-    if (profileError) {
-      await adminClient.auth.admin.deleteUser(
-        data.user.id
+    if (workerError) {
+      console.error(
+        "Worker profile lookup failed:",
+        workerError
       );
 
       return NextResponse.json(
         {
+          success: false,
           error:
-            profileError.message,
+            "Unable to load worker profile.",
         },
-        { status: 500 }
+        {
+          status: 500,
+          headers: {
+            "Cache-Control":
+              "no-store",
+          },
+        }
+      );
+    }
+
+    /*
+     * A worker must have a corresponding
+     * worker_profiles record.
+     */
+    if (!worker) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Worker profile not found.",
+        },
+        {
+          status: 404,
+          headers: {
+            "Cache-Control":
+              "no-store",
+          },
+        }
+      );
+    }
+
+    /*
+     * Disabled workers cannot use the
+     * worker dashboard.
+     */
+    if (
+      worker.active !== true
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Worker account is disabled.",
+          worker: {
+            display_name:
+              worker.display_name,
+            permissions:
+              worker.permissions || {},
+            active: false,
+          },
+        },
+        {
+          status: 403,
+          headers: {
+            "Cache-Control":
+              "no-store",
+          },
+        }
       );
     }
 
@@ -393,348 +201,47 @@ export async function POST(
       {
         success: true,
         worker: {
-          id: data.user.id,
-          email:
-            data.user.email ||
-            email,
+          user_id:
+            worker.user_id,
           display_name:
-            displayName,
-          permissions,
-          active: true,
+            worker.display_name,
+          permissions:
+            worker.permissions || {},
+          active:
+            worker.active,
+          created_at:
+            worker.created_at,
+          updated_at:
+            worker.updated_at,
         },
       },
-      { status: 201 }
+      {
+        status: 200,
+        headers: {
+          "Cache-Control":
+            "no-store",
+        },
+      }
     );
   } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unable to create worker.",
-      },
-      { status: 500 }
+    console.error(
+      "Worker profile API error:",
+      error
     );
-  }
-}
 
-/* =========================
-   UPDATE WORKER
-========================= */
-
-export async function PATCH(
-  request: Request
-) {
-  const admin =
-    await getAdmin(request);
-
-  if (!admin) {
-    return unauthorized();
-  }
-
-  try {
-    const body =
-      await request.json();
-
-    const id =
-      String(body.id || "").trim();
-
-    if (!id) {
-      return NextResponse.json(
-        {
-          error:
-            "Worker ID is required.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const {
-      data,
-      error:
-        lookupError,
-    } =
-      await adminClient.auth.admin.getUserById(
-        id
-      );
-
-    if (
-      lookupError ||
-      !data.user
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            lookupError?.message ||
-            "Worker not found.",
-        },
-        { status: 404 }
-      );
-    }
-
-    if (
-      data.user.app_metadata
-        ?.role !== "worker"
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "That account is not a worker.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const oldMetadata =
-      data.user.app_metadata ||
-      {};
-
-    const permissions =
-      cleanPermissions(
-        body.permissions ??
-          oldMetadata.permissions
-      );
-
-    const displayName =
-      cleanName(
-        body.display_name ??
-          oldMetadata.display_name
-      );
-
-    if (!displayName) {
-      return NextResponse.json(
-        {
-          error:
-            "Worker display name is required.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const active =
-      body.active !== false;
-
-    const {
-      data: updated,
-      error,
-    } =
-      await adminClient.auth.admin.updateUserById(
-        id,
-        {
-          app_metadata: {
-            ...oldMetadata,
-            role: "worker",
-            display_name:
-              displayName,
-            permissions,
-          },
-          ban_duration:
-            active
-              ? "none"
-              : "876000h",
-        }
-      );
-
-    if (error) {
-      return NextResponse.json(
-        {
-          error:
-            error.message,
-        },
-        { status: 400 }
-      );
-    }
-
-    if (!updated.user) {
-      return NextResponse.json(
-        {
-          error:
-            "Worker account could not be updated.",
-        },
-        { status: 500 }
-      );
-    }
-
-    const {
-      error:
-        profileError,
-    } =
-      await adminClient
-        .from(
-          "worker_profiles"
-        )
-        .upsert(
-          {
-            user_id: id,
-            display_name:
-              displayName,
-            permissions,
-            active,
-            updated_at:
-              new Date().toISOString(),
-          },
-          {
-            onConflict:
-              "user_id",
-          }
-        );
-
-    if (profileError) {
-      return NextResponse.json(
-        {
-          error:
-            `Worker updated, but profile synchronization failed: ${profileError.message}`,
-        },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      worker: {
-        id,
-        email:
-          updated.user.email ||
-          "",
-        display_name:
-          displayName,
-        permissions,
-        active,
-      },
-    });
-  } catch (error) {
     return NextResponse.json(
       {
+        success: false,
         error:
-          error instanceof Error
-            ? error.message
-            : "Unable to update worker.",
+          "Internal server error.",
       },
-      { status: 500 }
-    );
-  }
-}
-
-/* =========================
-   DELETE WORKER
-========================= */
-
-export async function DELETE(
-  request: Request
-) {
-  const admin =
-    await getAdmin(request);
-
-  if (!admin) {
-    return unauthorized();
-  }
-
-  try {
-    const body =
-      await request.json();
-
-    const id =
-      String(body.id || "").trim();
-
-    if (!id) {
-      return NextResponse.json(
-        {
-          error:
-            "Worker ID is required.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const {
-      data,
-      error:
-        lookupError,
-    } =
-      await adminClient.auth.admin.getUserById(
-        id
-      );
-
-    if (
-      lookupError ||
-      !data.user
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            lookupError?.message ||
-            "Worker not found.",
-        },
-        { status: 404 }
-      );
-    }
-
-    if (
-      data.user.app_metadata
-        ?.role !== "worker"
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Only worker accounts can be deleted here.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const {
-      error:
-        profileError,
-    } =
-      await adminClient
-        .from(
-          "worker_profiles"
-        )
-        .delete()
-        .eq(
-          "user_id",
-          id
-        );
-
-    if (profileError) {
-      return NextResponse.json(
-        {
-          error:
-            profileError.message,
-        },
-        { status: 500 }
-      );
-    }
-
-    const {
-      error,
-    } =
-      await adminClient.auth.admin.deleteUser(
-        id
-      );
-
-    if (error) {
-      return NextResponse.json(
-        {
-          error:
-            error.message,
-        },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-    });
-  } catch (error) {
-    return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unable to delete worker.",
-      },
-      { status: 500 }
+        status: 500,
+        headers: {
+          "Cache-Control":
+            "no-store",
+        },
+      }
     );
   }
 }
