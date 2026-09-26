@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 
 const supabase = createBrowserClient(
@@ -11,39 +10,36 @@ const supabase = createBrowserClient(
 );
 
 export default function AdminLoginPage() {
-  const router = useRouter();
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    let active = true;
+    let mounted = true;
 
-    async function checkSession() {
+    async function checkExistingSession() {
       try {
         const {
           data: { user },
         } = await supabase.auth.getUser();
 
-        if (!active) return;
+        if (!mounted) return;
 
         if (user?.app_metadata?.role === "admin") {
-          router.replace("/admin");
-          return;
+          window.location.replace("/admin");
         }
       } catch {
-        // Stay on login page if there is no valid session.
+        // Stay on login page.
       }
     }
 
-    checkSession();
+    checkExistingSession();
 
     return () => {
-      active = false;
+      mounted = false;
     };
-  }, [router]);
+  }, []);
 
   async function handleLogin(
     event: React.FormEvent<HTMLFormElement>
@@ -57,32 +53,35 @@ export default function AdminLoginPage() {
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanEmail || !password) {
-      setError("Enter your email and password.");
+      setError("Please enter your email and password.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const { data, error: signInError } =
+      const { data, error: loginError } =
         await supabase.auth.signInWithPassword({
           email: cleanEmail,
           password,
         });
 
-      if (signInError) {
-        setError(signInError.message);
+      if (loginError) {
+        setError(loginError.message);
         setLoading(false);
         return;
       }
 
-      if (!data.user) {
-        setError("Login was not completed.");
+      const user = data.user;
+
+      if (!user) {
+        setError("Login failed. Please try again.");
         setLoading(false);
         return;
       }
 
-      if (data.user.app_metadata?.role !== "admin") {
+      // Check the secure app_metadata admin role.
+      if (user.app_metadata?.role !== "admin") {
         await supabase.auth.signOut();
 
         setError(
@@ -93,8 +92,15 @@ export default function AdminLoginPage() {
         return;
       }
 
-      router.replace("/admin");
-      router.refresh();
+      /*
+       * Give Supabase a moment to finish writing the
+       * authentication cookies before navigating.
+       */
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      // Full browser navigation prevents the client-side
+      // router from creating an authentication redirect loop.
+      window.location.replace("/admin");
     } catch {
       setError("Unable to sign in. Please try again.");
       setLoading(false);
