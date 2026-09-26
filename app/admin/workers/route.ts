@@ -3,9 +3,14 @@ import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL!;
+
+const anonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+const serviceRoleKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 const adminClient = createClient(
   supabaseUrl,
@@ -36,28 +41,85 @@ type Permissions = {
   can_manage_comments: boolean;
 };
 
-async function getAdmin(request: Request) {
-  const authorization =
-    request.headers.get("authorization") || "";
+function cleanPermissions(
+  input: unknown
+): Permissions {
+  const value =
+    typeof input === "object" &&
+    input !== null
+      ? (input as Record<string, unknown>)
+      : {};
 
-  if (!authorization.startsWith("Bearer ")) {
+  return {
+    can_import:
+      value.can_import === true,
+    can_write:
+      value.can_write === true,
+    can_publish:
+      value.can_publish === true,
+    can_manage_comments:
+      value.can_manage_comments === true,
+  };
+}
+
+function cleanName(
+  value: unknown
+): string {
+  return String(value || "")
+    .trim()
+    .slice(0, 100);
+}
+
+function cleanEmail(
+  value: unknown
+): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .slice(0, 254);
+}
+
+async function getAdmin(
+  request: Request
+) {
+  const authorization =
+    request.headers.get(
+      "authorization"
+    ) || "";
+
+  if (
+    !authorization.startsWith(
+      "Bearer "
+    )
+  ) {
     return null;
   }
 
-  const token = authorization.slice(7);
+  const token =
+    authorization.slice(7).trim();
+
+  if (!token) {
+    return null;
+  }
 
   const {
     data,
     error,
-  } = await authClient.auth.getUser(token);
+  } =
+    await authClient.auth.getUser(
+      token
+    );
 
-  if (error || !data.user) {
+  if (
+    error ||
+    !data.user
+  ) {
     return null;
   }
 
   if (
-    data.user.app_metadata?.role !==
-    "admin"
+    data.user.app_metadata
+      ?.role !== "admin"
   ) {
     return null;
   }
@@ -65,75 +127,122 @@ async function getAdmin(request: Request) {
   return data.user;
 }
 
-export async function GET(request: Request) {
-  const admin = await getAdmin(request);
+function unauthorized() {
+  return NextResponse.json(
+    {
+      error:
+        "Administrator authentication required.",
+    },
+    { status: 401 }
+  );
+}
+
+/* =========================
+   GET WORKERS
+========================= */
+
+export async function GET(
+  request: Request
+) {
+  const admin =
+    await getAdmin(request);
 
   if (!admin) {
+    return unauthorized();
+  }
+
+  try {
+    const {
+      data,
+      error,
+    } =
+      await adminClient.auth.admin.listUsers(
+        {
+          page: 1,
+          perPage: 100,
+        }
+      );
+
+    if (error) {
+      return NextResponse.json(
+        {
+          error:
+            error.message,
+        },
+        { status: 500 }
+      );
+    }
+
+    const workers =
+      data.users
+        .filter(
+          (user) =>
+            user.app_metadata
+              ?.role ===
+            "worker"
+        )
+        .map((user) => ({
+          id: user.id,
+          email:
+            user.email || "",
+          display_name:
+            user.app_metadata
+              ?.display_name ||
+            "",
+          permissions:
+            cleanPermissions(
+              user.app_metadata
+                ?.permissions
+            ),
+          active:
+            !user.banned_until ||
+            new Date(
+              user.banned_until
+            ) < new Date(),
+          created_at:
+            user.created_at,
+          last_sign_in_at:
+            user.last_sign_in_at ||
+            null,
+        }));
+
+    return NextResponse.json(
+      {
+        success: true,
+        workers,
+      },
+      {
+        headers: {
+          "Cache-Control":
+            "no-store",
+        },
+      }
+    );
+  } catch (error) {
     return NextResponse.json(
       {
         error:
-          "Administrator authentication required.",
+          error instanceof Error
+            ? error.message
+            : "Unable to load workers.",
       },
-      { status: 401 }
-    );
-  }
-
-  const {
-    data,
-    error,
-  } =
-    await adminClient.auth.admin.listUsers({
-      page: 1,
-      perPage: 100,
-    });
-
-  if (error) {
-    return NextResponse.json(
-      { error: error.message },
       { status: 500 }
     );
   }
-
-  const workers = data.users
-    .filter(
-      (user) =>
-        user.app_metadata?.role ===
-        "worker"
-    )
-    .map((user) => ({
-      id: user.id,
-      email: user.email || "",
-      display_name:
-        user.app_metadata
-          ?.display_name || "",
-      permissions:
-        user.app_metadata
-          ?.permissions || {},
-      active: !user.banned_until,
-      created_at:
-        user.created_at,
-      last_sign_in_at:
-        user.last_sign_in_at,
-    }));
-
-  return NextResponse.json({
-    workers,
-  });
 }
+
+/* =========================
+   CREATE WORKER
+========================= */
 
 export async function POST(
   request: Request
 ) {
-  const admin = await getAdmin(request);
+  const admin =
+    await getAdmin(request);
 
   if (!admin) {
-    return NextResponse.json(
-      {
-        error:
-          "Administrator authentication required.",
-      },
-      { status: 401 }
-    );
+    return unauthorized();
   }
 
   try {
@@ -141,11 +250,7 @@ export async function POST(
       await request.json();
 
     const email =
-      String(
-        body.email || ""
-      )
-        .trim()
-        .toLowerCase();
+      cleanEmail(body.email);
 
     const password =
       String(
@@ -153,35 +258,19 @@ export async function POST(
       );
 
     const displayName =
-      String(
-        body.display_name || ""
-      ).trim();
+      cleanName(
+        body.display_name
+      );
 
-    const permissions: Permissions =
-      {
-        can_import: Boolean(
-          body.permissions
-            ?.can_import
-        ),
-        can_write: Boolean(
-          body.permissions
-            ?.can_write
-        ),
-        can_publish: Boolean(
-          body.permissions
-            ?.can_publish
-        ),
-        can_manage_comments:
-          Boolean(
-            body.permissions
-              ?.can_manage_comments
-          ),
-      };
+    const permissions =
+      cleanPermissions(
+        body.permissions
+      );
 
     if (
       !email ||
-      !password ||
-      !displayName
+      !displayName ||
+      !password
     ) {
       return NextResponse.json(
         {
@@ -192,11 +281,38 @@ export async function POST(
       );
     }
 
-    if (password.length < 8) {
+    if (
+      !email.includes("@") ||
+      email.length < 5
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Enter a valid worker email address.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (
+      password.length < 8
+    ) {
       return NextResponse.json(
         {
           error:
             "Worker password must be at least 8 characters.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (
+      password.length > 128
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Worker password is too long.",
         },
         { status: 400 }
       );
@@ -220,23 +336,17 @@ export async function POST(
         }
       );
 
-    if (error) {
+    if (
+      error ||
+      !data.user
+    ) {
       return NextResponse.json(
         {
           error:
-            error.message,
-        },
-        { status: 400 }
-      );
-    }
-
-    if (!data.user) {
-      return NextResponse.json(
-        {
-          error:
+            error?.message ||
             "Worker account was not created.",
         },
-        { status: 500 }
+        { status: 400 }
       );
     }
 
@@ -248,14 +358,22 @@ export async function POST(
         .from(
           "worker_profiles"
         )
-        .upsert({
-          user_id:
-            data.user.id,
-          display_name:
-            displayName,
-          permissions,
-          active: true,
-        });
+        .upsert(
+          {
+            user_id:
+              data.user.id,
+            display_name:
+              displayName,
+            permissions,
+            active: true,
+            updated_at:
+              new Date().toISOString(),
+          },
+          {
+            onConflict:
+              "user_id",
+          }
+        );
 
     if (profileError) {
       await adminClient.auth.admin.deleteUser(
@@ -271,17 +389,22 @@ export async function POST(
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      worker: {
-        id: data.user.id,
-        email:
-          data.user.email,
-        display_name:
-          displayName,
-        permissions,
+    return NextResponse.json(
+      {
+        success: true,
+        worker: {
+          id: data.user.id,
+          email:
+            data.user.email ||
+            email,
+          display_name:
+            displayName,
+          permissions,
+          active: true,
+        },
       },
-    });
+      { status: 201 }
+    );
   } catch (error) {
     return NextResponse.json(
       {
@@ -295,19 +418,18 @@ export async function POST(
   }
 }
 
+/* =========================
+   UPDATE WORKER
+========================= */
+
 export async function PATCH(
   request: Request
 ) {
-  const admin = await getAdmin(request);
+  const admin =
+    await getAdmin(request);
 
   if (!admin) {
-    return NextResponse.json(
-      {
-        error:
-          "Administrator authentication required.",
-      },
-      { status: 401 }
-    );
+    return unauthorized();
   }
 
   try {
@@ -315,7 +437,7 @@ export async function PATCH(
       await request.json();
 
     const id =
-      String(body.id || "");
+      String(body.id || "").trim();
 
     if (!id) {
       return NextResponse.json(
@@ -363,47 +485,44 @@ export async function PATCH(
       );
     }
 
-    const permissions: Permissions =
-      {
-        can_import: Boolean(
-          body.permissions
-            ?.can_import
-        ),
-        can_write: Boolean(
-          body.permissions
-            ?.can_write
-        ),
-        can_publish: Boolean(
-          body.permissions
-            ?.can_publish
-        ),
-        can_manage_comments:
-          Boolean(
-            body.permissions
-              ?.can_manage_comments
-          ),
-      };
+    const oldMetadata =
+      data.user.app_metadata ||
+      {};
+
+    const permissions =
+      cleanPermissions(
+        body.permissions ??
+          oldMetadata.permissions
+      );
 
     const displayName =
-      String(
-        body.display_name ||
-          data.user.app_metadata
-            ?.display_name ||
-          ""
-      ).trim();
+      cleanName(
+        body.display_name ??
+          oldMetadata.display_name
+      );
+
+    if (!displayName) {
+      return NextResponse.json(
+        {
+          error:
+            "Worker display name is required.",
+        },
+        { status: 400 }
+      );
+    }
 
     const active =
       body.active !== false;
 
     const {
+      data: updated,
       error,
     } =
       await adminClient.auth.admin.updateUserById(
         id,
         {
           app_metadata: {
-            ...data.user
-              .app_metadata,
+            ...oldMetadata,
             role: "worker",
             display_name:
               displayName,
@@ -426,20 +545,62 @@ export async function PATCH(
       );
     }
 
-    await adminClient
-      .from("worker_profiles")
-      .upsert({
-        user_id: id,
+    if (!updated.user) {
+      return NextResponse.json(
+        {
+          error:
+            "Worker account could not be updated.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const {
+      error:
+        profileError,
+    } =
+      await adminClient
+        .from(
+          "worker_profiles"
+        )
+        .upsert(
+          {
+            user_id: id,
+            display_name:
+              displayName,
+            permissions,
+            active,
+            updated_at:
+              new Date().toISOString(),
+          },
+          {
+            onConflict:
+              "user_id",
+          }
+        );
+
+    if (profileError) {
+      return NextResponse.json(
+        {
+          error:
+            `Worker updated, but profile synchronization failed: ${profileError.message}`,
+        },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      worker: {
+        id,
+        email:
+          updated.user.email ||
+          "",
         display_name:
           displayName,
         permissions,
         active,
-        updated_at:
-          new Date().toISOString(),
-      });
-
-    return NextResponse.json({
-      success: true,
+      },
     });
   } catch (error) {
     return NextResponse.json(
@@ -454,19 +615,18 @@ export async function PATCH(
   }
 }
 
+/* =========================
+   DELETE WORKER
+========================= */
+
 export async function DELETE(
   request: Request
 ) {
-  const admin = await getAdmin(request);
+  const admin =
+    await getAdmin(request);
 
   if (!admin) {
-    return NextResponse.json(
-      {
-        error:
-          "Administrator authentication required.",
-      },
-      { status: 401 }
-    );
+    return unauthorized();
   }
 
   try {
@@ -474,7 +634,7 @@ export async function DELETE(
       await request.json();
 
     const id =
-      String(body.id || "");
+      String(body.id || "").trim();
 
     if (!id) {
       return NextResponse.json(
@@ -523,6 +683,30 @@ export async function DELETE(
     }
 
     const {
+      error:
+        profileError,
+    } =
+      await adminClient
+        .from(
+          "worker_profiles"
+        )
+        .delete()
+        .eq(
+          "user_id",
+          id
+        );
+
+    if (profileError) {
+      return NextResponse.json(
+        {
+          error:
+            profileError.message,
+        },
+        { status: 500 }
+      );
+    }
+
+    const {
       error,
     } =
       await adminClient.auth.admin.deleteUser(
@@ -538,11 +722,6 @@ export async function DELETE(
         { status: 400 }
       );
     }
-
-    await adminClient
-      .from("worker_profiles")
-      .delete()
-      .eq("user_id", id);
 
     return NextResponse.json({
       success: true,
